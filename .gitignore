@@ -1,0 +1,15 @@
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+
+.env
+.env.*
+!.env.example
+/profiles/
+
+.idea/
+.vscode/
+*.swp
+.DS_Store
