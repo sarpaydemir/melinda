@@ -20,7 +20,7 @@ func settings(t *testing.T, doc string) *config.Settings {
 	if err := json.Unmarshal([]byte(doc), &m); err != nil {
 		t.Fatal(err)
 	}
-	s, err := config.Load(m, "agent", func(*config.Settings) error { return nil })
+	s, err := config.Load(m, "agent", nil, func(*config.Settings) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

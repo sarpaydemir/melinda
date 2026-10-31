@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 )
 
@@ -28,10 +30,10 @@ var sensitiveNames = []string{
 }
 
 // New returns a logger that writes text or JSON records at level or above to w. Text attributes with a
-// sensitive name are masked, and every occurrence of a secret value is masked in the message and in attribute
-// values; with secrets given, non-scalar attribute values are logged as text so that what is checked is what
-// is written.
-func New(w io.Writer, level slog.Level, json bool, secrets []string) *slog.Logger {
+// sensitive name are masked, and every occurrence of a value in secrets is masked in the message and in attribute
+// values; once secrets holds a value, non-scalar attribute values are logged as text so that what is checked is
+// what is written.
+func New(w io.Writer, level slog.Level, json bool, secrets *Secrets) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: level, ReplaceAttr: redactor(secrets)}
 	if json {
 		return slog.New(slog.NewJSONHandler(w, opts))
@@ -39,16 +41,49 @@ func New(w io.Writer, level slog.Level, json bool, secrets []string) *slog.Logge
 	return slog.New(slog.NewTextHandler(w, opts))
 }
 
-func redactor(secrets []string) func([]string, slog.Attr) slog.Attr {
-	secrets = slices.DeleteFunc(slices.Clone(secrets), func(s string) bool { return s == "" })
-	// Longest first, so a secret that contains another is masked whole.
-	slices.SortFunc(secrets, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
-	pairs := make([]string, 0, 2*len(secrets))
-	for _, s := range secrets {
-		pairs = append(pairs, s, redacted)
-	}
-	mask := strings.NewReplacer(pairs...)
+// Secrets is a set of secret values that can grow while loggers built with it are in use. The zero value is an
+// empty set; it is safe for concurrent use.
+type Secrets struct {
+	mu     sync.Mutex
+	values []string
+	mask   atomic.Pointer[strings.Replacer]
+}
 
+// minSecret is the length below which a value is not masked: placeholders such as "none" would garble every
+// record they occur in.
+const minSecret = 6
+
+// Add adds values to the set, ignoring those shorter than six characters.
+func (s *Secrets) Add(values ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.values)
+	for _, v := range values {
+		if utf8.RuneCountInString(v) >= minSecret && !slices.Contains(s.values, v) {
+			s.values = append(s.values, v)
+		}
+	}
+	if len(s.values) == n {
+		return
+	}
+	// Longest first, so a secret that contains another is masked whole.
+	slices.SortFunc(s.values, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
+	pairs := make([]string, 0, 2*len(s.values))
+	for _, v := range s.values {
+		pairs = append(pairs, v, redacted)
+	}
+	s.mask.Store(strings.NewReplacer(pairs...))
+}
+
+// replacer masks the values in the set; it is nil while the set is empty.
+func (s *Secrets) replacer() *strings.Replacer {
+	if s == nil {
+		return nil
+	}
+	return s.mask.Load()
+}
+
+func redactor(secrets *Secrets) func([]string, slog.Attr) slog.Attr {
 	return func(groups []string, a slog.Attr) slog.Attr {
 		kind := a.Value.Kind()
 		if kind != slog.KindString && kind != slog.KindAny {
@@ -60,7 +95,8 @@ func redactor(secrets []string) func([]string, slog.Attr) slog.Attr {
 			}
 			return a
 		}
-		if len(secrets) == 0 {
+		mask := secrets.replacer()
+		if mask == nil {
 			return a
 		}
 		text := a.Value.String()

@@ -22,9 +22,14 @@ func document(t *testing.T, s string) map[string]json.RawMessage {
 
 func noAdapters(*config.Settings) error { return nil }
 
+// secretKeys are the secret keys the built-in adapters declare.
+var secretKeys = []config.SecretKey{
+	{Key: "key"}, {Key: "mattermost_token"}, {Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true},
+}
+
 func settings(t *testing.T, s string) *config.Settings {
 	t.Helper()
-	got, err := config.Load(document(t, s), "agent", noAdapters)
+	got, err := config.Load(document(t, s), "agent", secretKeys, noAdapters)
 	if err != nil {
 		t.Fatalf("Load(%s): %v", s, err)
 	}
@@ -33,7 +38,7 @@ func settings(t *testing.T, s string) *config.Settings {
 
 func settingsErr(t *testing.T, s string) string {
 	t.Helper()
-	got, err := config.Load(document(t, s), "agent", noAdapters)
+	got, err := config.Load(document(t, s), "agent", secretKeys, noAdapters)
 	if err == nil {
 		t.Fatalf("Load(%s) = %+v, want an error", s, got)
 	}
@@ -383,7 +388,7 @@ func TestLoadReportsEveryProblemByOwner(t *testing.T) {
 		seen = s
 		return errors.Join(errors.New("chat: mattermost_token is required"), adapterErr)
 	}
-	_, err := config.Load(document(t, `{"temperature": "hot", "max_tool_calls": 1.5}`), "agent", validate)
+	_, err := config.Load(document(t, `{"temperature": "hot", "max_tool_calls": 1.5}`), "agent", nil, validate)
 	want := "invalid settings:\n" +
 		"core: model is required\n" +
 		"core: temperature: expected number\n" +
@@ -485,17 +490,21 @@ func TestReloadFailsLikeLoad(t *testing.T) {
 	}
 }
 
-func TestRedactedMasksSecretValues(t *testing.T) {
-	s := settings(t, `{
+func TestRedactedMasksTheDeclaredSecretKeys(t *testing.T) {
+	keys := append([]config.SecretKey{{Key: "chat_token"}, {Key: "empty_token"}, {Key: "null_token"}}, secretKeys...)
+	s, err := config.Load(document(t, `{
 		"model": "m", "key": "sk-1", "key_secret": "model-key", "mattermost_token": "tok",
 		"plane_api_key": "pk", "plane_api_secret": "plane", "chat_token": "ct", "chat_token_secret": "env:CT",
 		"empty_token": "", "empty_token_secret": "x", "null_token": null, "null_token_secret": "y",
-		"extra": [1, 1.0]
-	}`)
+		"extra": [1, 1.0], "undeclared": "u", "undeclared_secret": "x"
+	}`), "agent", keys, noAdapters)
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := `{"chat_token":"***","chat_token_secret":"env:CT","empty_token":"","empty_token_secret":"x",` +
 		`"extra":[1,1.0],"key":"***","key_secret":"model-key","mattermost_token":"***","model":"m",` +
 		`"null_token":null,"null_token_secret":"y","plane_api_key":"***",` +
-		`"plane_api_secret":"plane"}`
+		`"plane_api_secret":"plane","undeclared":"u","undeclared_secret":"x"}`
 	if got := string(s.Redacted()); got != want {
 		t.Errorf("\n got %s\nwant %s", got, want)
 	}

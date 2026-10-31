@@ -60,24 +60,25 @@ type Settings struct {
 	AssistantLabel  string  `json:"assistant_label"`
 
 	agentID string
+	secrets []SecretKey
 	doc     map[string]json.RawMessage
 }
 
 // Load builds a snapshot from a settings document whose secrets are resolved. The snapshot keeps doc, which the
-// caller must not modify afterwards. validate checks the selected adapters' settings; the error lists every core
-// problem and validate's error.
-func Load(doc map[string]json.RawMessage, agentID string, validate func(*Settings) error) (*Settings, error) {
-	s, problems := build(doc, agentID)
+// caller must not modify afterwards, and secrets, the keys Redacted masks. validate checks the selected adapters'
+// settings; the error lists every core problem and validate's error.
+func Load(doc map[string]json.RawMessage, agentID string, secrets []SecretKey, validate func(*Settings) error) (*Settings, error) {
+	s, problems := build(doc, agentID, secrets)
 	if err := check(s, problems, validate); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-// Reload builds the snapshot that follows s from a new document, as Load does, but keeps the namespacing and
-// adapter selection values of s. It returns the keys whose new values it ignored.
+// Reload builds the snapshot that follows s from a new document, as Load does, but keeps the secret keys,
+// namespacing, and adapter selection values of s. It returns the keys whose new values it ignored.
 func (s *Settings) Reload(doc map[string]json.RawMessage, validate func(*Settings) error) (*Settings, []string, error) {
-	next, problems := build(doc, s.agentID)
+	next, problems := build(doc, s.agentID, s.secrets)
 	var ignored []string
 	kept := s.fixed()
 	for i, f := range next.fixed() {
@@ -98,21 +99,12 @@ func (s *Settings) Decode(v any) error {
 	return errors.Join(s.decode(v)...)
 }
 
-// Redacted returns the document as JSON with the values of key, mattermost_token, plane_api_key, and every
-// <name> that has a <name>_secret key replaced by "***".
+// Redacted returns the document as JSON with the values of the secret keys replaced by "***".
 func (s *Settings) Redacted() []byte {
 	out := maps.Clone(s.doc)
-	mask := func(key string) {
-		if v, ok := out[key]; ok && string(v) != "null" && string(v) != `""` {
-			out[key] = json.RawMessage(`"***"`)
-		}
-	}
-	for _, key := range []string{"key", "mattermost_token", "plane_api_key"} {
-		mask(key)
-	}
-	for key := range s.doc {
-		if name, ok := strings.CutSuffix(key, "_secret"); ok {
-			mask(name)
+	for _, secret := range s.secrets {
+		if v, ok := out[secret.Key]; ok && string(v) != "null" && string(v) != `""` {
+			out[secret.Key] = json.RawMessage(`"***"`)
 		}
 	}
 	b, _ := json.Marshal(out) // a map of valid raw values always marshals
@@ -157,7 +149,7 @@ func (c *Channels) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func build(doc map[string]json.RawMessage, agentID string) (*Settings, []error) {
+func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) (*Settings, []error) {
 	s := &Settings{
 		Temperature:         "0.7",
 		ToolCallTemperature: "0.1",
@@ -180,6 +172,7 @@ func build(doc map[string]json.RawMessage, agentID string) (*Settings, []error) 
 		KBCollection:        agentID + "_public_kb",
 		AssistantLabel:      agentID,
 		agentID:             agentID,
+		secrets:             secrets,
 		doc:                 doc,
 	}
 	var problems []error

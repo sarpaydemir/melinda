@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/sarpaydemir/dost/internal/config"
@@ -42,15 +43,19 @@ func fails[T any](name string) func(*config.Settings) (T, error) {
 }
 
 func testTable() adapters {
+	secret := func(key string) []config.SecretKey { return []config.SecretKey{{Key: key}} }
 	return adapters{
 		platforms: map[string]platformAdapter{
-			"chatty": {open: fails[chat.Platform]("chatty"), tools: toolsNamed("chatty_search")},
+			"chatty": {open: fails[chat.Platform]("chatty"), tools: toolsNamed("chatty_search"), secrets: secret("chatty_token")},
 			"quiet":  {open: fails[chat.Platform]("quiet")},
 		},
-		models:    map[string]func(*config.Settings) (model.Provider, error){"compatible": fails[model.Provider]("compatible")},
-		searchers: map[string]func(*config.Settings) (web.Searcher, error){"meta": fails[web.Searcher]("meta")},
-		fetchers:  map[string]func(*config.Settings) (web.Fetcher, error){"direct": fails[web.Fetcher]("direct")},
-		tools:     []func(*config.Settings) []tool.Tool{toolsNamed("tracker_list", "tracker_create"), toolsNamed("notes")},
+		models:    map[string]entry[model.Provider]{"compatible": {open: fails[model.Provider]("compatible"), secrets: secret("key")}},
+		searchers: map[string]entry[web.Searcher]{"meta": {open: fails[web.Searcher]("meta"), secrets: secret("meta_key")}},
+		fetchers:  map[string]entry[web.Fetcher]{"direct": {open: fails[web.Fetcher]("direct"), secrets: secret("key")}},
+		tools: []toolSource{
+			{tools: toolsNamed("tracker_list", "tracker_create"), secrets: []config.SecretKey{{Key: "tracker_key", Ref: "tracker_secret", Overwrite: true}}},
+			{tools: toolsNamed("notes")},
+		},
 	}
 }
 
@@ -104,12 +109,37 @@ func TestChooseReportsEveryUnknownName(t *testing.T) {
 	}
 }
 
+func TestSecretKeysAreTheUnionOfEveryRegisteredAdapter(t *testing.T) {
+	want := []config.SecretKey{
+		{Key: "chatty_token"}, {Key: "key"}, {Key: "meta_key"}, {Key: "tracker_key", Ref: "tracker_secret", Overwrite: true},
+	}
+	if got := testTable().secretKeys(); !slices.Equal(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestBuiltinSecretKeysAreTheExistingDocumentKeys(t *testing.T) {
+	want := []config.SecretKey{
+		{Key: "key"}, {Key: "mattermost_token"}, {Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true},
+	}
+	if got := builtin(http.DefaultTransport).secretKeys(); !slices.Equal(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestChooseReportsAnAdapterWithoutAConstructor(t *testing.T) {
+	_, err := builtin(http.DefaultTransport).choose(names{platform: "mattermost", model: "openai", search: "searxng", fetch: "httpfetch"})
+	if err == nil || !strings.Contains(err.Error(), `model_provider: adapter "openai" is not available yet`) {
+		t.Errorf("got %v", err)
+	}
+}
+
 func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	doc := map[string]json.RawMessage{
 		"model": json.RawMessage(`"m"`), "mattermost_endpoint": json.RawMessage(`"https://chat.example"`),
 		"mattermost_token": json.RawMessage(`"t"`), "mattermost_bot_id": json.RawMessage(`"bot"`),
 	}
-	s, err := config.Load(doc, "agent", func(*config.Settings) error { return nil })
+	s, err := config.Load(doc, "agent", nil, func(*config.Settings) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

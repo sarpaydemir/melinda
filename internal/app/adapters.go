@@ -18,31 +18,74 @@ import (
 
 // adapters is the constructor table of the built-in adapters, keyed by the names the settings select them by.
 // Adding an adapter is one entry. Constructors build a value from one settings snapshot and do no I/O; an error
-// means the snapshot's settings for that adapter are invalid.
+// means the snapshot's settings for that adapter are invalid. Each entry declares the settings keys that hold its
+// secrets.
 type adapters struct {
 	platforms map[string]platformAdapter
-	models    map[string]func(*config.Settings) (model.Provider, error)
-	searchers map[string]func(*config.Settings) (web.Searcher, error)
-	fetchers  map[string]func(*config.Settings) (web.Fetcher, error)
+	models    map[string]entry[model.Provider]
+	searchers map[string]entry[web.Searcher]
+	fetchers  map[string]entry[web.Fetcher]
 	// tools are offered in this order after the platform's tools. Only the first source (Plane) contributes by
 	// default; every source added after it returns no tools until its own settings are present, so a deployment's
 	// tool set never changes on upgrade.
-	tools []func(*config.Settings) []tool.Tool
+	tools []toolSource
 }
 
 // builtin is the table of the adapters this binary ships; their HTTP requests go through transport.
 func builtin(transport http.RoundTripper) adapters {
 	return adapters{
 		platforms: map[string]platformAdapter{
-			"mattermost": {open: func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport) }},
+			"mattermost": {
+				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport) },
+				secrets: []config.SecretKey{{Key: "mattermost_token"}},
+			},
 		},
+		// Registered for their secret keys until their constructors exist.
+		models: map[string]entry[model.Provider]{"openai": {secrets: []config.SecretKey{{Key: "key"}}}},
+		tools:  []toolSource{{secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}}}},
 	}
+}
+
+// entry is an adapter's constructor and the settings keys that hold its secrets.
+type entry[T any] struct {
+	open    func(*config.Settings) (T, error)
+	secrets []config.SecretKey
 }
 
 // platformAdapter is a chat platform with the tools it contributes, which are offered only on that platform.
 type platformAdapter struct {
-	open  func(*config.Settings) (chat.Platform, error)
-	tools func(*config.Settings) []tool.Tool
+	open    func(*config.Settings) (chat.Platform, error)
+	tools   func(*config.Settings) []tool.Tool
+	secrets []config.SecretKey
+}
+
+// toolSource contributes tools on every platform.
+type toolSource struct {
+	tools   func(*config.Settings) []tool.Tool
+	secrets []config.SecretKey
+}
+
+// secretKeys are the secret keys of every registered adapter, selected or not, since the selection is read from
+// the document whose references they resolve.
+func (a adapters) secretKeys() []config.SecretKey {
+	var keys []config.SecretKey
+	for _, p := range a.platforms {
+		keys = append(keys, p.secrets...)
+	}
+	for _, e := range a.models {
+		keys = append(keys, e.secrets...)
+	}
+	for _, e := range a.searchers {
+		keys = append(keys, e.secrets...)
+	}
+	for _, e := range a.fetchers {
+		keys = append(keys, e.secrets...)
+	}
+	for _, src := range a.tools {
+		keys = append(keys, src.secrets...)
+	}
+	slices.SortFunc(keys, func(x, y config.SecretKey) int { return strings.Compare(x.Key, y.Key) })
+	return slices.Compact(keys)
 }
 
 // names are the adapter names a settings document selects.
@@ -64,15 +107,21 @@ type selected struct {
 // choose resolves the selected names, reporting every unknown name at once.
 func (a adapters) choose(n names) (selected, error) {
 	platform, errPlatform := pick(a.platforms, "chat_platform", n.platform)
-	s := selected{platform: platform.open}
-	var errModel, errSearch, errFetch error
-	s.model, errModel = pick(a.models, "model_provider", n.model)
-	s.search, errSearch = pick(a.searchers, "web_search", n.search)
-	s.fetch, errFetch = pick(a.fetchers, "web_fetch", n.fetch)
+	model, errModel := pick(a.models, "model_provider", n.model)
+	search, errSearch := pick(a.searchers, "web_search", n.search)
+	fetch, errFetch := pick(a.fetchers, "web_fetch", n.fetch)
+	if errModel == nil && model.open == nil {
+		errModel = fmt.Errorf("model_provider: adapter %q is not available yet", n.model)
+	}
+	s := selected{platform: platform.open, model: model.open, search: search.open, fetch: fetch.open}
 	if platform.tools != nil {
 		s.tools = append(s.tools, platform.tools)
 	}
-	s.tools = append(s.tools, a.tools...)
+	for _, src := range a.tools {
+		if src.tools != nil {
+			s.tools = append(s.tools, src.tools)
+		}
+	}
 	return s, errors.Join(errPlatform, errModel, errSearch, errFetch)
 }
 

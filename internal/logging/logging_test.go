@@ -4,16 +4,25 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sarpaydemir/dost/internal/logging"
 )
 
+func secretSet(values ...string) *logging.Secrets {
+	s := new(logging.Secrets)
+	s.Add(values...)
+	return s
+}
+
 func jsonLogger(secrets ...string) (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
-	return logging.New(&buf, slog.LevelDebug, true, secrets), &buf
+	return logging.New(&buf, slog.LevelDebug, true, secretSet(secrets...)), &buf
 }
 
 func decode(t *testing.T, buf *bytes.Buffer) map[string]any {
@@ -162,7 +171,7 @@ func TestSecretValuesInRenderedFormsAreMasked(t *testing.T) {
 		{"text marshaler in JSON", true, textMarshaler{"hunter2"}},
 	} {
 		var buf bytes.Buffer
-		logging.New(&buf, slog.LevelInfo, tc.json, []string{"hunter2"}).Info("m", "v", tc.value)
+		logging.New(&buf, slog.LevelInfo, tc.json, secretSet("hunter2")).Info("m", "v", tc.value)
 		if strings.Contains(buf.String(), "hunter2") {
 			t.Errorf("%s: secret leaked: %s", tc.name, buf.String())
 		}
@@ -176,6 +185,42 @@ func TestErrorsWithoutSecretsKeepTheirValue(t *testing.T) {
 	if rec["err"] != "boom" || rec["n"] != float64(3) {
 		t.Errorf("record = %v", rec)
 	}
+}
+
+func TestSecretsAddedAfterTheLoggerIsBuiltAreMasked(t *testing.T) {
+	secrets := secretSet("db-pass")
+	var buf bytes.Buffer
+	log := logging.New(&buf, slog.LevelInfo, true, secrets)
+	secrets.Add("sk-old", "")
+	secrets.Add("sk-old", "sk-new")
+	log.Info("rotated sk-old to sk-new", "err", errors.New("db-pass rejected"))
+	rec := decode(t, &buf)
+	if rec["msg"] != "rotated [REDACTED] to [REDACTED]" || rec["err"] != "[REDACTED] rejected" {
+		t.Errorf("record = %v", rec)
+	}
+}
+
+func TestSecretsShorterThanSixCharactersAreNotMasked(t *testing.T) {
+	log, buf := jsonLogger("x", "none", "12345", "123456")
+	log.Info("none of x 12345 123456")
+	if got := decode(t, buf)["msg"]; got != "none of x 12345 [REDACTED]" {
+		t.Errorf("msg = %q", got)
+	}
+}
+
+func TestSecretsAreSafeToAddWhileLogging(t *testing.T) {
+	secrets := new(logging.Secrets)
+	log := logging.New(io.Discard, slog.LevelInfo, false, secrets)
+	var wg sync.WaitGroup
+	for i := range 4 {
+		wg.Go(func() {
+			for j := range 50 {
+				secrets.Add(fmt.Sprintf("secret%d-%d", i, j))
+				log.Info("m", "v", fmt.Sprintf("secret%d-%d", i, j))
+			}
+		})
+	}
+	wg.Wait()
 }
 
 func TestClip(t *testing.T) {
