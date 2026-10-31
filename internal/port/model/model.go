@@ -20,9 +20,10 @@ type Request struct {
 	Model    string
 	Messages []Message
 	Tools    []ToolSpec
-	// Temperature keeps the number as written in the settings; empty omits it.
+	// Temperature keeps the number as written in the settings; empty uses the temperature setting.
 	Temperature json.Number
-	MaxTokens   int
+	// MaxTokens of 0 uses the max_tokens setting.
+	MaxTokens int
 }
 
 // Role is the author of a message.
@@ -60,8 +61,9 @@ type Part struct {
 
 // ToolCall is one call the model requested.
 type ToolCall struct {
-	ID        string
-	Name      string
+	ID   string
+	Name string
+	// Arguments is the arguments' JSON text as the model wrote it, which may be invalid, or {} when it gave none.
 	Arguments json.RawMessage
 }
 

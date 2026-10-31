@@ -6,9 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"slices"
-	"strings"
 	"testing"
 
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
@@ -122,15 +122,26 @@ func TestBuiltinSecretKeysAreTheExistingDocumentKeys(t *testing.T) {
 	want := []config.SecretKey{
 		{Key: "key"}, {Key: "mattermost_token"}, {Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true},
 	}
-	if got := builtin(http.DefaultTransport).secretKeys(); !slices.Equal(got, want) {
+	if got := builtin(http.DefaultTransport, clock.Real(), "dost/test").secretKeys(); !slices.Equal(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
 
-func TestChooseReportsAnAdapterWithoutAConstructor(t *testing.T) {
-	_, err := builtin(http.DefaultTransport).choose(names{platform: "mattermost", model: "openai", search: "searxng", fetch: "httpfetch"})
-	if err == nil || !strings.Contains(err.Error(), `model_provider: adapter "openai" is not available yet`) {
-		t.Errorf("got %v", err)
+func TestBuiltinModelProviderIsOpenAIByDefault(t *testing.T) {
+	doc := map[string]json.RawMessage{
+		"model": json.RawMessage(`"m"`), "api_base": json.RawMessage(`"https://models.example/v1"`),
+		"key": json.RawMessage(`"k"`),
+	}
+	s, err := config.Load(doc, "agent", nil, func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test").models[s.ModelProvider]
+	if !ok {
+		t.Fatalf("no model provider registered as %q", s.ModelProvider)
+	}
+	if _, err := e.open(s); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -143,7 +154,7 @@ func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, ok := builtin(http.DefaultTransport).platforms[s.ChatPlatform]
+	p, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test").platforms[s.ChatPlatform]
 	if !ok {
 		t.Fatalf("no platform registered as %q", s.ChatPlatform)
 	}

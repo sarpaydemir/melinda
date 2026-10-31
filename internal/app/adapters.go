@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
+	"github.com/sarpaydemir/dost/internal/adapters/openai"
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
@@ -31,8 +33,9 @@ type adapters struct {
 	tools []toolSource
 }
 
-// builtin is the table of the adapters this binary ships; their HTTP requests go through transport.
-func builtin(transport http.RoundTripper) adapters {
+// builtin is the table of the adapters this binary ships: their HTTP requests go through transport, clk times
+// their waits, and userAgent identifies them where they send one.
+func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string) adapters {
 	return adapters{
 		platforms: map[string]platformAdapter{
 			"mattermost": {
@@ -40,9 +43,14 @@ func builtin(transport http.RoundTripper) adapters {
 				secrets: []config.SecretKey{{Key: "mattermost_token"}},
 			},
 		},
-		// Registered for their secret keys until their constructors exist.
-		models: map[string]entry[model.Provider]{"openai": {secrets: []config.SecretKey{{Key: "key"}}}},
-		tools:  []toolSource{{secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}}}},
+		models: map[string]entry[model.Provider]{
+			"openai": {
+				open:    func(s *config.Settings) (model.Provider, error) { return openai.New(s, transport, clk, userAgent) },
+				secrets: []config.SecretKey{{Key: "key"}},
+			},
+		},
+		// Registered for its secret keys until its constructor exists.
+		tools: []toolSource{{secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}}}},
 	}
 }
 
@@ -110,9 +118,6 @@ func (a adapters) choose(n names) (selected, error) {
 	model, errModel := pick(a.models, "model_provider", n.model)
 	search, errSearch := pick(a.searchers, "web_search", n.search)
 	fetch, errFetch := pick(a.fetchers, "web_fetch", n.fetch)
-	if errModel == nil && model.open == nil {
-		errModel = fmt.Errorf("model_provider: adapter %q is not available yet", n.model)
-	}
 	s := selected{platform: platform.open, model: model.open, search: search.open, fetch: fetch.open}
 	if platform.tools != nil {
 		s.tools = append(s.tools, platform.tools)

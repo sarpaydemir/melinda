@@ -1,0 +1,1 @@
+{"model":"chat-model","messages":[{"role":"system","content":"You answer briefly.\nUse the user's language."},{"role":"user","content":"Şu <b>kod</b> & \"alıntı\" ne işe yarar?\tC:\\yol\u0001"},{"role":"assistant","content":"Bir örnek: a < b && c > d"},{"role":"user","content":"Satır ayırıcı, paragraf ayırıcı, düz metin \\u2028 ve emoji 🙂"}],"temperature":0.7,"max_tokens":4096}
