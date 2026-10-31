@@ -7,10 +7,10 @@ LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.d
 TEST_DB_IMAGE ?= pgvector/pgvector:pg17
 
 .DEFAULT_GOAL := help
-.PHONY: help check fmt fmt-check vet staticcheck test test-integration test-load vuln build image release release-dry-run tidy clean
+.PHONY: help check fmt fmt-check vet staticcheck test test-integration test-e2e test-load vuln build image release release-dry-run tidy clean
 
 help: ## List targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
+	@LC_ALL=C grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
 check: fmt-check vet staticcheck test ## All local quality gates; must pass before every PR
 
@@ -30,7 +30,8 @@ staticcheck: ## staticcheck (pinned in go.mod)
 test: ## Unit tests with the race detector
 	$(GO) test -race -count=1 ./...
 
-test-integration: ## Integration tests against a throwaway pgvector container (needs Docker)
+# with-test-db runs $(1) with DOST_TEST_DATABASE_URL naming a throwaway pgvector container.
+define with-test-db
 	@set -e; name="dost-test-$$$$-$$(date +%s)"; \
 	trap 'docker rm -f "$$name" >/dev/null 2>&1 || true' EXIT; \
 	trap 'exit 130' INT TERM HUP QUIT; \
@@ -41,8 +42,15 @@ test-integration: ## Integration tests against a throwaway pgvector container (n
 	ready=; for i in $$(seq 1 60); do \
 		docker exec "$$name" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && ready=1 && break; sleep 1; done; \
 	[ -n "$$ready" ] || { echo "test database did not become ready" >&2; exit 1; }; \
-	DOST_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$$port/postgres?sslmode=disable" \
-		$(GO) test -race -count=1 -tags=integration ./...
+	DOST_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$$port/postgres?sslmode=disable" $(1)
+endef
+
+test-integration: ## Integration tests against a throwaway pgvector container (needs Docker)
+	$(call with-test-db,$(GO) test -race -count=1 -tags=integration ./...)
+
+test-e2e: ## End-to-end scenarios: the race-enabled binary against fakes and a throwaway pgvector container (needs Docker)
+	@mkdir -p bin && $(GO) build -race -o bin/dost-e2e ./cmd/dost
+	$(call with-test-db,DOST_E2E_BINARY=$(CURDIR)/bin/dost-e2e $(GO) test -count=1 -timeout=5m -tags=e2e $(E2E_FLAGS) ./test/e2e/)
 
 test-load: ## Memory load test: worst-case concurrent replies under the default container memory limit
 	$(GO) test -count=1 -tags=load -run ContainerLimit -v ./internal/app/
