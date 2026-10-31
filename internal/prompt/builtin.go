@@ -10,6 +10,7 @@ func Builtin() []Entry {
 	entries := []Entry{
 		{ID: "system.base", Kind: KindRaw},
 		{ID: "system.persona_default", Kind: KindRaw},
+		{ID: "system.persona_section", Kind: KindFormat, Placeholders: []string{"persona"}},
 		{ID: "system.template", Kind: KindFormat, Placeholders: []string{"base_prompt", "persona", "tool_instructions",
 			"user_context", "public_knowledge", "long_term_memory", "file_context", "now"}},
 		{ID: "system.security", Kind: KindRaw},

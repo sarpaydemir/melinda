@@ -1,6 +1,5 @@
 {base_prompt}
 
-### PERSONA
 {persona}
 
 ### TOOLS
