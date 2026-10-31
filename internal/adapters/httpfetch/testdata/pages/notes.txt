@@ -1,0 +1,5 @@
+Plain notes
+
+  indented line
+math: a < b and c > d
+<title>looks like markup</title>

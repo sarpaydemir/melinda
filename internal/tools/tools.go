@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"slices"
 
 	"github.com/sarpaydemir/dost/internal/port/model"
@@ -17,6 +20,7 @@ import (
 type Set struct {
 	offered []tool.Tool
 	call    tool.Call
+	log     *slog.Logger
 }
 
 // Offer returns the tools offered to the model, in this order: the built-in knowledge tools, contributed, and the
@@ -27,7 +31,7 @@ func Offer(call tool.Call, enabled []string, b Builtin, contributed []tool.Tool)
 	knowledge, conversation := b.tools()
 	all := slices.Concat(knowledge, contributed, conversation)
 	if enabled == nil {
-		return Set{all, call}, nil
+		return Set{all, call, b.Log}, nil
 	}
 	var errs []error
 	for _, name := range enabled {
@@ -36,7 +40,7 @@ func Offer(call tool.Call, enabled []string, b Builtin, contributed []tool.Tool)
 		}
 	}
 	offered := slices.DeleteFunc(all, func(t tool.Tool) bool { return !slices.Contains(enabled, t.Name()) })
-	return Set{offered, call}, errors.Join(errs...)
+	return Set{offered, call, b.Log}, errors.Join(errs...)
 }
 
 // Specs are the offered tools as the model is offered them, each described by its catalog entry
@@ -50,14 +54,20 @@ func (s Set) Specs(c *prompt.Catalog) []model.ToolSpec {
 }
 
 // Execute runs the model's call of the offered tool named name with the JSON arguments args and returns the text
-// the model reads: the tool's result, or an error text for an unknown name or a failed call.
-func (s Set) Execute(ctx context.Context, name string, args json.RawMessage) string {
+// the model reads: the tool's result, or an error text for an unknown name or a failed or panicking call.
+func (s Set) Execute(ctx context.Context, name string, args json.RawMessage) (result string) {
 	i := slices.IndexFunc(s.offered, func(t tool.Tool) bool { return t.Name() == name })
 	if i < 0 {
 		return "Error: Unknown tool " + name
 	}
 	call := s.call
 	call.Args = args
+	defer func() {
+		if v := recover(); v != nil {
+			cmp.Or(s.log, slog.Default()).Error("tool call panicked", "tool", name, "panic", v, "stack", string(debug.Stack()))
+			result = fmt.Sprintf("Error: Could not execute %s: %v", name, v)
+		}
+	}()
 	out, err := s.offered[i].Call(ctx, call)
 	if err != nil {
 		return fmt.Sprintf("Error: Could not execute %s: %v", name, err)

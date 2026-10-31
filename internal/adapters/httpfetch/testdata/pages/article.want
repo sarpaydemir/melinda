@@ -1,0 +1,12 @@
+Title: Release notes for version 2.4
+URL: {url}
+
+Release notes for version 2.4
+Version 2.4
+This release adds offline sync and fixes the export bug.
+Highlights
+Offline sync for mobile clients
+Faster search indexing
+Upgrade with
+npm install app@2.4
+today.

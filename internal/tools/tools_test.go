@@ -1,11 +1,14 @@
 package tools_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -103,6 +106,34 @@ func TestExecuteTurnsEveryFailureIntoAResult(t *testing.T) {
 		if got := set.Execute(context.Background(), name, json.RawMessage(`{}`)); got != want {
 			t.Errorf("Execute(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+// broken is a contributed tool whose calls panic.
+type broken struct{}
+
+func (broken) Name() string { return "broken" }
+
+func (broken) Parameters() json.RawMessage {
+	return json.RawMessage(`{"type":"object","properties":{}}`)
+}
+
+func (broken) Call(context.Context, tool.Call) (string, error) {
+	panic(errors.New("parser state corrupted"))
+}
+
+func TestExecuteTurnsAPanickingCallIntoAFailureResult(t *testing.T) {
+	var logs bytes.Buffer
+	set, err := tools.Offer(tool.Call{}, nil, tools.Builtin{Log: slog.New(slog.NewTextHandler(&logs, nil))}, []tool.Tool{broken{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Error: Could not execute broken: parser state corrupted"
+	if got := set.Execute(context.Background(), "broken", json.RawMessage(`{"secret":"page text"}`)); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if l := logs.String(); !strings.Contains(l, "level=ERROR") || !strings.Contains(l, "tool=broken") || strings.Contains(l, "page text") {
+		t.Errorf("logs %q, want an error naming the tool without the arguments", l)
 	}
 }
 

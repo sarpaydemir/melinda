@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/sarpaydemir/dost/internal/adapters/httpfetch"
 	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
 	"github.com/sarpaydemir/dost/internal/adapters/openai"
 	"github.com/sarpaydemir/dost/internal/adapters/plane"
@@ -61,6 +62,10 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 			"searxng": {
 				open: func(s *config.Settings) (web.Searcher, error) { return searxng.New(s, searxngURL, transport) },
 			},
+		},
+		fetchers: map[string]entry[web.Fetcher]{
+			// Page fetches connect through the adapter's own guarded dialer, not transport.
+			"httpfetch": {open: httpfetch.New},
 		},
 		tools: []toolSource{{
 			tools:   func(*config.Settings, *prompt.Catalog) []tool.Tool { return plane.Tools() },

@@ -18,6 +18,7 @@ type Result struct {
 
 // Fetcher reads web pages. A value is built from one settings snapshot and is safe for concurrent use.
 type Fetcher interface {
-	// Fetch returns the page at url as readable text. A returned error's text is written for the model.
+	// Fetch returns the page at url as readable text, read from at most the first 5 MiB of its body. A returned
+	// error's text is written for the model.
 	Fetch(ctx context.Context, url string) (string, error)
 }

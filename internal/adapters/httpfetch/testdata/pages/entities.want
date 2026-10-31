@@ -1,0 +1,7 @@
+Title: Entities <> "quoted" 'single'
+URL: {url}
+
+Entities <> "quoted" 'single'
+Prices: 5 € & 10 $ — © 2026
+Indented with no-break spaces
+Numeric: AB😀 &unknownentity; &

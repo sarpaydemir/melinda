@@ -16,6 +16,8 @@ import (
 // Builtin is what the built-in tools work with while answering one message.
 type Builtin struct {
 	Search web.Searcher
+	// Fetch reads the pages visit_page visits.
+	Fetch web.Fetcher
 	// SearchLimit is the most results search_web reads.
 	SearchLimit int
 	// Knowledge returns the shared-knowledge entries nearest to a query, nearest first.
@@ -46,7 +48,7 @@ type Outbound interface {
 func (b Builtin) tools() (knowledge, conversation []tool.Tool) {
 	knowledge = []tool.Tool{
 		searchWeb{b},
-		declared{"visit_page", `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`},
+		visitPage{b},
 		searchKB{b},
 		declared{"generate_image", `{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}`},
 	}

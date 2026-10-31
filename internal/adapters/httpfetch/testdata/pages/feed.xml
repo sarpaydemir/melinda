@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Example feed</title><link>https://example.com/</link><description>Updates</description><item><title>First item</title><link>https://example.com/1</link><description><![CDATA[<p>Item <b>body</b></p>]]></description></item></channel></rss>

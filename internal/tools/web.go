@@ -50,3 +50,31 @@ func value(s *string) any {
 	}
 	return *s
 }
+
+// visitPage is visit_page: the text of a web page, or why it could not be read, clipped to 8000 code points.
+type visitPage struct{ b Builtin }
+
+func (visitPage) Name() string { return "visit_page" }
+
+func (visitPage) Parameters() json.RawMessage {
+	return json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`)
+}
+
+func (v visitPage) Call(ctx context.Context, c tool.Call) (string, error) {
+	args, err := c.Arguments()
+	if err != nil {
+		return "", err
+	}
+	url, err := args.String("url")
+	if err != nil {
+		return "", err
+	}
+	if url == "" {
+		return "Error: Missing URL", nil
+	}
+	text, err := v.b.Fetch.Fetch(ctx, url)
+	if err != nil {
+		text = err.Error()
+	}
+	return textfmt.Clip(text, 8000), nil
+}

@@ -172,6 +172,21 @@ func TestBuiltinModelProviderIsOpenAIByDefault(t *testing.T) {
 	}
 }
 
+func TestBuiltinPageFetcherIsHTTPFetchByDefault(t *testing.T) {
+	s, err := config.Load(map[string]json.RawMessage{"model": json.RawMessage(`"m"`)}, "agent", nil,
+		func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).fetchers[s.WebFetch]
+	if !ok {
+		t.Fatalf("no page fetcher registered as %q", s.WebFetch)
+	}
+	if _, err := e.open(s); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	doc := map[string]json.RawMessage{
 		"model": json.RawMessage(`"m"`), "mattermost_endpoint": json.RawMessage(`"https://chat.example"`),
