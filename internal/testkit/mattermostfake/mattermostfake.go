@@ -60,8 +60,8 @@ type Post struct {
 }
 
 // Fake is a Mattermost server as seen by one bot account. REST routes answer from the users, teams, channels,
-// and posts added to it, and posts created through the API are added too. Requests without the bot's bearer
-// token get 401.
+// and posts added to it, and posts created through the API are added too; files uploaded through the API are
+// served back. Requests without the bot's bearer token get 401.
 type Fake struct {
 	*testkit.Server
 	t       testing.TB
@@ -74,9 +74,26 @@ type Fake struct {
 	teams    []Team
 	channels []Channel
 	posts    []Post
+	files    map[string]file
 	lastID   int
 	lastMS   int64
 	ws       wsState
+}
+
+// file is an uploaded file.
+type file struct {
+	info fileInfo
+	data []byte
+}
+
+type fileInfo struct {
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	ChannelID string `json:"channel_id"`
+	Name      string `json:"name"`
+	Extension string `json:"extension"`
+	Size      int    `json:"size"`
+	MimeType  string `json:"mime_type"`
 }
 
 // startMS is the creation time, in Unix milliseconds, of the first post that gets one from the fake.
@@ -86,7 +103,8 @@ const startMS = 1767225600000 // 2026-01-01T00:00:00Z
 func New(t testing.TB, token string, bot User) *Fake {
 	f := &Fake{
 		Server: testkit.NewServer(t), t: t, token: token, bot: bot,
-		users: map[string]User{bot.ID: bot}, lastMS: startMS - 1, ws: wsState{conns: map[*websocket.Conn]struct{}{}},
+		users: map[string]User{bot.ID: bot}, files: map[string]file{}, lastMS: startMS - 1,
+		ws: wsState{conns: map[*websocket.Conn]struct{}{}},
 	}
 	f.Guard(func(r testkit.Request) (testkit.Response, bool) {
 		return appError(http.StatusUnauthorized, "api.context.session_expired.app_error"),
@@ -102,6 +120,8 @@ func New(t testing.TB, token string, bot User) *Fake {
 	f.On("POST", "/api/v4/posts").DefaultFunc(f.createPost)
 	f.On("POST", "/api/v4/posts/search").DefaultFunc(f.search)
 	f.On("POST", "/api/v4/files").DefaultFunc(f.uploadFiles)
+	f.On("GET", "/api/v4/files/{file_id}/info").DefaultFunc(f.fileInfo)
+	f.On("GET", "/api/v4/files/{file_id}").DefaultFunc(f.fileContent)
 	f.On("GET", wsPath).Default(testkit.Response{Handler: f.serveWS})
 	return f
 }
@@ -304,29 +324,42 @@ func (f *Fake) uploadFiles(r testkit.Request) testkit.Response {
 	if err != nil || len(m.Values["channel_id"]) == 0 {
 		return appError(http.StatusBadRequest, "api.file.upload_file.storage.app_error")
 	}
-	type fileInfo struct {
-		ID        string `json:"id"`
-		UserID    string `json:"user_id"`
-		ChannelID string `json:"channel_id"`
-		Name      string `json:"name"`
-		Extension string `json:"extension"`
-		Size      int    `json:"size"`
-		MimeType  string `json:"mime_type"`
-	}
 	infos := []fileInfo{}
 	f.mu.Lock()
 	for _, part := range m.Files {
 		if part.Field != "files" {
 			continue
 		}
-		infos = append(infos, fileInfo{
+		info := fileInfo{
 			ID: f.newID(), UserID: f.bot.ID, ChannelID: m.Values["channel_id"][0],
 			Name: part.Filename, Extension: strings.ToLower(strings.TrimPrefix(path.Ext(part.Filename), ".")),
 			Size: len(part.Data), MimeType: part.ContentType,
-		})
+		}
+		f.files[info.ID] = file{info: info, data: part.Data}
+		infos = append(infos, info)
 	}
 	f.mu.Unlock()
 	return testkit.JSON(http.StatusCreated, map[string]any{"file_infos": infos, "client_ids": []string{}})
+}
+
+func (f *Fake) fileInfo(r testkit.Request) testkit.Response {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	file, ok := f.files[r.Params["file_id"]]
+	if !ok {
+		return appError(http.StatusNotFound, "app.file_info.get.app_error")
+	}
+	return testkit.JSON(200, file.info)
+}
+
+func (f *Fake) fileContent(r testkit.Request) testkit.Response {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	file, ok := f.files[r.Params["file_id"]]
+	if !ok {
+		return appError(http.StatusNotFound, "app.file_info.get.app_error")
+	}
+	return testkit.Raw(200, file.info.MimeType, file.data)
 }
 
 func sortNewestFirst(posts []Post) []Post {

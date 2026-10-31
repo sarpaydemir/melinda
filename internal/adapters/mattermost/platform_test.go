@@ -1,0 +1,117 @@
+package mattermost_test
+
+import (
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
+	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/dost/internal/testkit/conformance"
+	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+)
+
+func settings(t *testing.T, doc string) *config.Settings {
+	t.Helper()
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(doc), &m); err != nil {
+		t.Fatal(err)
+	}
+	s, err := config.Load(m, "agent", func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func open(t *testing.T, mm *mattermostfake.Fake, username string) chat.Platform {
+	t.Helper()
+	doc, _ := json.Marshal(map[string]string{
+		"model": "m", "mattermost_endpoint": mm.URL(), "mattermost_token": token,
+		"mattermost_bot_id": bot.ID, "mattermost_bot_username": username,
+	})
+	p, err := mattermost.Open(settings(t, string(doc)), transport(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestOpenRequiresEndpointTokenAndBotID(t *testing.T) {
+	tests := []struct{ doc, want string }{
+		{`{"model":"m"}`, "mattermost_endpoint: required\nmattermost_token: required\nmattermost_bot_id: required"},
+		{`{"model":"m","mattermost_endpoint":"","mattermost_token":null,"mattermost_bot_id":"b"}`,
+			"mattermost_endpoint: required\nmattermost_token: required"},
+		{`{"model":"m","mattermost_endpoint":"https://chat.example","mattermost_token":"t","mattermost_bot_id":7}`,
+			"mattermost_bot_id: expected string"},
+	}
+	for _, tt := range tests {
+		_, err := mattermost.Open(settings(t, tt.doc), http.DefaultTransport)
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("Open(%s) error:\n%v\nwant:\n%s", tt.doc, err, tt.want)
+		}
+	}
+}
+
+func TestIdentityIsTheConfiguredAccountWithoutIO(t *testing.T) {
+	mm := newFake(t)
+	if got, want := open(t, mm, "").Identity(), (chat.User{ID: bot.ID}); got != want {
+		t.Errorf("without a username: %+v, want %+v", got, want)
+	}
+	if got, want := open(t, mm, "asistan").Identity(), (chat.User{ID: bot.ID, Username: "asistan"}); got != want {
+		t.Errorf("with a username: %+v, want %+v", got, want)
+	}
+	mm.AssertCalls(t)
+}
+
+func TestLookupsMapMattermostFields(t *testing.T) {
+	mm := newFake(t)
+	mm.On("GET", "/api/v4/users/{user_id}").Reply(testkit.JSON(200, map[string]any{
+		"id": ayse.ID, "username": "ayse", "first_name": "Ayşe", "last_name": "Yılmaz", "full_name": "Ayşe Y.",
+		"nickname": "ay", "position": "İK", "roles": "system_user",
+	}))
+	mm.On("GET", "/api/v4/files/{file_id}/info").Reply(testkit.JSON(200, map[string]any{
+		"id": file, "name": "Rapor.PDF", "extension": "pdf", "mime_type": "application/pdf", "size": 2048, "width": 0,
+	}))
+	p := open(t, mm, "")
+	u, err := p.User(t.Context(), ayse.ID)
+	if want := (chat.User{ID: ayse.ID, Username: "ayse", FirstName: "Ayşe", LastName: "Yılmaz", FullName: "Ayşe Y.",
+		Nickname: "ay", Position: "İK"}); err != nil || u != want {
+		t.Errorf("user = %+v, %v; want %+v", u, err, want)
+	}
+	a, err := p.Attachment(t.Context(), file)
+	if want := (chat.Attachment{Name: "Rapor.PDF", Extension: "pdf", MediaType: "application/pdf", Size: 2048}); err != nil || a != want {
+		t.Errorf("attachment = %+v, %v; want %+v", a, err, want)
+	}
+}
+
+func TestChatConformance(t *testing.T) {
+	conformance.Chat(t, func(t *testing.T) conformance.ChatHarness {
+		mm := newFake(t)
+		return conformance.ChatHarness{
+			Platform:     open(t, mm, ""),
+			Agent:        chat.User{ID: bot.ID, Username: bot.Username, FirstName: bot.FirstName, LastName: bot.LastName},
+			User:         chat.User{ID: ayse.ID, Username: ayse.Username, FirstName: ayse.FirstName, LastName: ayse.LastName, Nickname: ayse.Nickname, Position: ayse.Position},
+			Conversation: channel,
+			Sent: func() []chat.Outgoing {
+				var out []chat.Outgoing
+				for _, p := range mm.Posts(channel) {
+					out = append(out, chat.Outgoing{ConversationID: p.ChannelID, ThreadID: p.RootID, Text: p.Message, FileIDs: p.FileIDs})
+				}
+				return out
+			},
+			Requests: func() int { return len(mm.Requests()) },
+			Fail: func() {
+				mm.Guard(func(testkit.Request) (testkit.Response, bool) {
+					return testkit.Status(http.StatusInternalServerError), true
+				})
+			},
+			Stall: func() {
+				mm.Guard(func(testkit.Request) (testkit.Response, bool) { return testkit.Status(200).WithDelay(time.Hour), true })
+			},
+		}
+	})
+}

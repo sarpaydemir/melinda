@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"slices"
 	"strings"
 
+	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
@@ -26,6 +28,15 @@ type adapters struct {
 	// default; every source added after it returns no tools until its own settings are present, so a deployment's
 	// tool set never changes on upgrade.
 	tools []func(*config.Settings) []tool.Tool
+}
+
+// builtin is the table of the adapters this binary ships; their HTTP requests go through transport.
+func builtin(transport http.RoundTripper) adapters {
+	return adapters{
+		platforms: map[string]platformAdapter{
+			"mattermost": {open: func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport) }},
+		},
+	}
 }
 
 // platformAdapter is a chat platform with the tools it contributes, which are offered only on that platform.

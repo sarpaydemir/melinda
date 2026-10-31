@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"slices"
 	"strconv"
 	"strings"
@@ -210,4 +211,66 @@ func TestUploadFiles(t *testing.T) {
 	if err != nil || len(m.Files) != 1 || string(m.Files[0].Data) != "png-bytes" {
 		t.Errorf("recorded upload = %+v, %v", m, err)
 	}
+}
+
+func TestServesUploadedFiles(t *testing.T) {
+	mm := mattermostfake.New(t, token, bot)
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	_ = w.WriteField("channel_id", "c1")
+	h := textproto.MIMEHeader{}
+	h.Set("Content-Disposition", multipart.FileContentDisposition("files", "chart.png"))
+	h.Set("Content-Type", "image/png")
+	part, _ := w.CreatePart(h)
+	_, _ = part.Write([]byte("png-bytes"))
+	_ = w.Close()
+	var uploaded struct {
+		FileInfos []struct{ ID string } `json:"file_infos"`
+	}
+	if code := upload(t, mm, &body, w.FormDataContentType(), &uploaded); code != 201 || len(uploaded.FileInfos) != 1 {
+		t.Fatalf("upload: %d %+v", code, uploaded)
+	}
+	id := uploaded.FileInfos[0].ID
+
+	var info struct {
+		ID, Name, Extension string
+		MimeType            string `json:"mime_type"`
+		Size                int
+	}
+	if code := call(t, mm, "GET", "/api/v4/files/"+id+"/info", "", &info); code != 200 || info.ID != id ||
+		info.Name != "chart.png" || info.Extension != "png" || info.MimeType != "image/png" || info.Size != 9 {
+		t.Errorf("file info: %d %+v", code, info)
+	}
+	req, _ := http.NewRequest("GET", mm.URL()+"/api/v4/files/"+id, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || string(data) != "png-bytes" || resp.Header.Get("Content-Type") != "image/png" {
+		t.Errorf("file content: %d %q %s", resp.StatusCode, data, resp.Header.Get("Content-Type"))
+	}
+	for _, path := range []string{"/api/v4/files/missing/info", "/api/v4/files/missing"} {
+		if code := call(t, mm, "GET", path, "", nil); code != 404 {
+			t.Errorf("GET %s: status %d, want 404", path, code)
+		}
+	}
+}
+
+func upload(t *testing.T, mm *mattermostfake.Fake, body io.Reader, contentType string, out any) int {
+	t.Helper()
+	req, _ := http.NewRequest("POST", mm.URL()+"/api/v4/files", body)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -100,5 +101,27 @@ func TestChooseReportsEveryUnknownName(t *testing.T) {
 		`web_fetch: unknown adapter "telepathy" (available: direct)`
 	if err == nil || err.Error() != want {
 		t.Fatalf("got %v, want %q", err, want)
+	}
+}
+
+func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
+	doc := map[string]json.RawMessage{
+		"model": json.RawMessage(`"m"`), "mattermost_endpoint": json.RawMessage(`"https://chat.example"`),
+		"mattermost_token": json.RawMessage(`"t"`), "mattermost_bot_id": json.RawMessage(`"bot"`),
+	}
+	s, err := config.Load(doc, "agent", func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := builtin(http.DefaultTransport).platforms[s.ChatPlatform]
+	if !ok {
+		t.Fatalf("no platform registered as %q", s.ChatPlatform)
+	}
+	platform, err := p.open(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := platform.Identity(); got != (chat.User{ID: "bot"}) {
+		t.Errorf("identity = %+v", got)
 	}
 }
