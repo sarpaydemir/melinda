@@ -442,6 +442,25 @@ func TestWrongTypesNameTheKeyAndExpectedType(t *testing.T) {
 	}
 }
 
+func TestInvalidAutomationsAreReportedByPosition(t *testing.T) {
+	got := settingsErr(t, `{"model": "m", "automations": [
+		{"name": "ok", "pattern": "/go\\s+(.+)", "handler": "h", "args": {"what": 1}},
+		{"name": "open", "pattern": "/go (", "handler": "h"},
+		{"name": "boundary", "pattern": "\\bgo", "handler": "h"},
+		{"name": "group", "pattern": "/go\\s+(.+)", "handler": "h", "args": {"what": 1, "where": 2}}
+	]}`)
+	want := "invalid settings:\n" +
+		"core: automations[1]: error parsing regexp: missing closing ): `(?i)/go (`\n" +
+		`core: automations[2]: textfmt: pattern "\\bgo": word boundary \b is not supported` + "\n" +
+		`core: automations[3]: args["where"]: pattern has no group 2`
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if got := settingsErr(t, `{"model": "m", "automations": {}}`); got != "invalid settings:\ncore: automations: expected list of objects" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func TestLoadReportsEveryProblemByOwner(t *testing.T) {
 	var seen *config.Settings
 	adapterErr := errors.New("models: api_base is required")

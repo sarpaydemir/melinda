@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
+	"github.com/sarpaydemir/dost/internal/automation"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/files"
@@ -54,6 +56,8 @@ type Pipeline struct {
 	Learning interface {
 		Append(ctx context.Context, s *config.Settings, m chat.Message, reply string) error
 	}
+	// Handlers run the configured automations, by handler ID.
+	Handlers map[string]automation.Handler
 	// Prompts is the catalog that each run's settings override.
 	Prompts *prompt.Catalog
 	// Zone is the time zone of the time the system prompt shows.
@@ -63,8 +67,8 @@ type Pipeline struct {
 }
 
 // Answer answers j with one settings snapshot: it decodes the first buffered message with the combined text and
-// attachments, applies the gate again, loads the context, generates the reply, posts it, saves the turn,
-// extracts the author's facts, and queues the turn for learning.
+// attachments, applies the gate again, and runs the first matching automation in its place or loads the context,
+// generates the reply, posts it, saves the turn, extracts the author's facts, and queues the turn for learning.
 // beforeWrite is called before each write to the chat platform. Once posting has started, cancelling ctx no
 // longer stops the run.
 func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error {
@@ -99,6 +103,9 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 	if err != nil {
 		return fmt.Errorf("apply prompt overrides: %w", err)
 	}
+	if a, args, ok := automation.Match(s.Automations, m.Text); ok {
+		return p.automate(ctx, s, cat, m, a, args, &outbound{platform: platform, beforeWrite: beforeWrite}, log)
+	}
 	provider, err := p.Model(s)
 	if err != nil {
 		return fmt.Errorf("open model provider: %w", err)
@@ -116,7 +123,7 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 	}
 
 	ctx = context.WithoutCancel(ctx)
-	out := outbound{platform: platform, beforeWrite: beforeWrite}
+	out := &outbound{platform: platform, beforeWrite: beforeWrite}
 	if err := send(ctx, out, chat.Outgoing{ConversationID: m.ConversationID, ThreadID: routing.ReplyThread(m), Text: reply}, log); err != nil {
 		return fmt.Errorf("post reply: %w", err)
 	}
@@ -125,6 +132,28 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 		return fmt.Errorf("save turn: %w", err)
 	}
 	facts.Extract(ctx, m, reply, count)
+	if err := p.Learning.Append(ctx, s, m, reply); err != nil {
+		return fmt.Errorf("queue turn for learning: %w", err)
+	}
+	return nil
+}
+
+// automate runs the automation a in place of the reply: its handler posts, and the pipeline saves the handler's
+// reply and queues it for learning unless it is a failure reply. A handler error ends the run without saving.
+func (p *Pipeline) automate(ctx context.Context, s *config.Settings, cat *prompt.Catalog, m chat.Message,
+	a config.Automation, args map[string]string, out *outbound, log *slog.Logger) error {
+	log.Info("running automation", "automation", a.Name)
+	reply, err := p.Handlers[a.Handler](ctx, automation.Run{Message: m, Settings: s, Args: args, Chat: out})
+	if err != nil {
+		return fmt.Errorf("automation %s: %w", a.Name, err)
+	}
+	if llm.IsErrorReply(reply) {
+		return nil
+	}
+	ctx = context.WithoutCancel(ctx)
+	if _, err := p.save(ctx, cat, m, prompt.Context{}, reply); err != nil {
+		return fmt.Errorf("save turn: %w", err)
+	}
 	if err := p.Learning.Append(ctx, s, m, reply); err != nil {
 		return fmt.Errorf("queue turn for learning: %w", err)
 	}
@@ -188,21 +217,33 @@ func (p *Pipeline) save(ctx context.Context, cat *prompt.Catalog, m chat.Message
 	return count, nil
 }
 
-// outbound is a run's path to the chat platform: each write is preceded by beforeWrite.
+// outbound is a run's path to the chat platform: each write is preceded by beforeWrite. Until the first write, a
+// cancelled run writes nothing, so it keeps its in-flight record.
 type outbound struct {
 	platform    chat.Platform
 	beforeWrite func(context.Context) error
+	started     atomic.Bool
 }
 
-func (o outbound) Send(ctx context.Context, m chat.Outgoing) (string, error) {
-	if err := o.beforeWrite(ctx); err != nil {
+func (o *outbound) permit(ctx context.Context) error {
+	if !o.started.Load() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	o.started.Store(true)
+	return o.beforeWrite(ctx)
+}
+
+func (o *outbound) Send(ctx context.Context, m chat.Outgoing) (string, error) {
+	if err := o.permit(ctx); err != nil {
 		return "", err
 	}
 	return o.platform.Send(ctx, m)
 }
 
-func (o outbound) Upload(ctx context.Context, conversationID string, f chat.File) (string, error) {
-	if err := o.beforeWrite(ctx); err != nil {
+func (o *outbound) Upload(ctx context.Context, conversationID string, f chat.File) (string, error) {
+	if err := o.permit(ctx); err != nil {
 		return "", err
 	}
 	return o.platform.Upload(ctx, conversationID, f)
@@ -210,7 +251,7 @@ func (o outbound) Upload(ctx context.Context, conversationID string, f chat.File
 
 // send posts a reply, and posts it once more without its files when posting it with them fails, unless it timed
 // out: the post may exist. A failed post is logged, not returned; only a run that may not write fails.
-func send(ctx context.Context, out outbound, m chat.Outgoing, log *slog.Logger) error {
+func send(ctx context.Context, out *outbound, m chat.Outgoing, log *slog.Logger) error {
 	_, err := out.Send(ctx, m)
 	if err != nil && len(m.FileIDs) > 0 && !errors.Is(err, errTakenOver) && !errors.Is(err, context.DeadlineExceeded) {
 		log.Warn("reply with files not posted; posting it without them", "error", err)

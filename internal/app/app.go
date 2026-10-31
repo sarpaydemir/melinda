@@ -138,7 +138,7 @@ func conversation(ctx, work context.Context, env config.Env, cfg startup, sel se
 		Settings: cfg.settings, Platform: sel.platform, Model: sel.model, Identity: identity,
 		History:   memory.NewHistory(history.New(db, clk), clk, s.MemoryKeyPrefix),
 		Knowledge: vectors, Facts: vectors, Learning: kb.Batch{Store: store, Learn: kb.NewTrigger(), Log: named("pipeline")},
-		Prompts: cfg.prompts, Zone: env.Timezone, Clock: clk, Log: named("pipeline"),
+		Handlers: sel.handlers, Prompts: cfg.prompts, Zone: env.Timezone, Clock: clk, Log: named("pipeline"),
 	}
 	scheduler := pipeline.NewScheduler(ctx, work, pipe.Answer, runs, env.PipelineWorkers, env.PipelineRunTimeout, clk, named("pipeline"))
 	flusher := dispatch.NewFlusher(s.BufferPrefix, store, runs, lock, scheduler, clk, named("flusher"))

@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -74,6 +75,8 @@ type Settings struct {
 
 	// Prompts replaces the texts of prompt catalog entries, by ID.
 	Prompts map[string]string `json:"prompts"`
+	// Automations are checked against each answered message in order; none by default.
+	Automations []Automation `json:"automations"`
 
 	agentID string
 	secrets []SecretKey
@@ -168,6 +171,33 @@ func (c *Channels) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// Automation runs a built-in handler on the messages its pattern matches.
+type Automation struct {
+	Name    string `json:"name"`
+	Pattern string `json:"pattern"`
+	Handler string `json:"handler"`
+	// Args maps each handler argument to the number of the capture group that holds it.
+	Args map[string]int `json:"args"`
+	// Regexp is Pattern compiled to match case-insensitively, with Unicode-aware classes.
+	Regexp *regexp.Regexp `json:"-"`
+}
+
+func (a *Automation) compile() error {
+	p, err := textfmt.TranslatePattern(a.Pattern)
+	if err != nil {
+		return err
+	}
+	if a.Regexp, err = regexp.Compile("(?i)" + p); err != nil {
+		return err
+	}
+	for _, arg := range slices.Sorted(maps.Keys(a.Args)) {
+		if g := a.Args[arg]; g < 0 || g > a.Regexp.NumSubexp() {
+			return fmt.Errorf("args[%q]: pattern has no group %d", arg, g)
+		}
+	}
+	return nil
+}
+
 func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) (*Settings, []error) {
 	s := &Settings{
 		Temperature:            "0.7",
@@ -221,6 +251,11 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 	}
 	if s.ProgressUpdateMaxChars < 1 {
 		problems = append(problems, errors.New("progress_update_max_chars: must be positive"))
+	}
+	for i := range s.Automations {
+		if err := s.Automations[i].compile(); err != nil {
+			problems = append(problems, fmt.Errorf("automations[%d]: %w", i, err))
+		}
 	}
 	// A null entry would otherwise decode as empty text.
 	var prompts map[string]*string

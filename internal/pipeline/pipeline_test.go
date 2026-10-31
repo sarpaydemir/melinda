@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/sarpaydemir/dost/internal/automation"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/kb"
@@ -163,11 +165,13 @@ type historyFake struct {
 	mu     sync.Mutex
 	items  map[string][]json.RawMessage
 	writes []string // "<key> <turn>", in write order
+	reads  int
 }
 
 func (h *historyFake) Get(_ context.Context, key string, n int) ([]json.RawMessage, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.reads++
 	return textfmt.Tail(slices.Clone(h.items[key]), n), nil
 }
 
@@ -533,6 +537,110 @@ func TestUploadWaitsForTheRunsPermissionToWrite(t *testing.T) {
 	id, err := pipeline.Upload(t.Context(), c, allowWrites, "c1", chat.File{Name: "a.png"})
 	if err != nil || id != "file1" || !slices.Equal(c.uploads, []string{"c1/a.png"}) {
 		t.Errorf("Upload = %q, %v; platform uploads %q", id, err, c.uploads)
+	}
+}
+
+// automate configures one automation, "brand", whose handler is h.
+func (f *fixture) automate(t *testing.T, h automation.Handler) {
+	t.Helper()
+	doc := map[string]json.RawMessage{"model": json.RawMessage(`"chat-model"`), "automations": json.RawMessage(
+		`[{"name": "brand", "pattern": "/brand\\s+(.+)", "handler": "analyze", "args": {"name": 1}}]`)}
+	s, err := config.Load(doc, agentID, nil, func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.settings.s = s
+	f.p.Handlers = map[string]automation.Handler{"analyze": h}
+}
+
+func TestMatchedAutomationPostsThroughTheRunAndOnlyItsReplyIsSaved(t *testing.T) {
+	f := newFixture(t)
+	var got automation.Run
+	f.automate(t, func(ctx context.Context, r automation.Run) (string, error) {
+		got = r
+		_, err := r.Chat.Send(ctx, chat.Outgoing{ConversationID: r.Message.ConversationID, ThreadID: routing.ReplyThread(r.Message), Text: "Starting."})
+		return "Analysis of " + r.Args["name"], err
+	})
+	writes := 0
+	m := chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "@helper please /BRAND  Acme Co \nthanks", Kind: chat.Public}
+	if err := f.p.Answer(t.Context(), job("thread:p1:u1", m), func(context.Context) error { writes++; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got.Message.ID != "p1" || got.Settings != f.settings.s || !maps.Equal(got.Args, map[string]string{"name": "Acme Co"}) {
+		t.Errorf("handler got message %q, settings %p, args %q", got.Message.ID, got.Settings, got.Args)
+	}
+	want := []chat.Outgoing{{ConversationID: "c1", ThreadID: "p1", Text: "Starting."}}
+	if posts := f.chat.sent(); writes != 1 || !reflect.DeepEqual(posts, want) {
+		t.Errorf("posted %+v after %d write permissions, want %+v after 1", posts, writes, want)
+	}
+	if n := len(f.model.received()); n != 0 || f.history.reads != 0 {
+		t.Errorf("%d model requests and %d history reads, want no context and no reply", n, f.history.reads)
+	}
+	turn := `{"context_id":"p1","is_dm":false,"scope":"public","user_id":"u1"} {"assistant":"Analysis of Acme Co","user":"u1: @helper please /BRAND  Acme Co \nthanks"}`
+	if w := f.history.written(); !slices.Equal(w, []string{"u1 " + turn, "thread:p1 " + turn}) {
+		t.Errorf("history writes:\n%s", strings.Join(w, "\n"))
+	}
+	raw, _, _ := f.learning.Get(t.Context(), "agent:public_kb_batch")
+	var batch struct{ Messages []struct{ Message string } }
+	_ = json.Unmarshal(raw, &batch)
+	if want := "u1: @helper please /BRAND  Acme Co \nthanks\nagent: Analysis of Acme Co"; len(batch.Messages) != 1 || batch.Messages[0].Message != want {
+		t.Errorf("learning batch = %s, want one entry with %q", raw, want)
+	}
+}
+
+func TestAutomationCancelledBeforeItsFirstPostWritesNothingButOnceStartedKeepsPosting(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	var errs []error
+	f.automate(t, func(ctx context.Context, r automation.Run) (string, error) {
+		post := chat.Outgoing{ConversationID: "c1", Text: "step"}
+		if r.Args["name"] == "late" {
+			_, err := r.Chat.Send(ctx, post)
+			errs = append(errs, err)
+		}
+		cancel()
+		_, err := r.Chat.Send(ctx, post)
+		errs = append(errs, err)
+		return "", ctx.Err()
+	})
+	writes := 0
+	permit := func(context.Context) error { writes++; return nil }
+	m := chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "/brand early", Kind: chat.Direct}
+	if err := f.p.Answer(ctx, job("dm:u1", m), permit); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Answer = %v, want cancelled", err)
+	}
+	if writes != 0 || len(f.chat.sent()) != 0 || !errors.Is(errs[0], context.Canceled) {
+		t.Errorf("cancelled before posting: %d write permissions, posts %+v, Send error %v", writes, f.chat.sent(), errs[0])
+	}
+
+	ctx, cancel = context.WithCancel(t.Context())
+	defer cancel()
+	errs = nil
+	m.Text = "/brand late"
+	_ = f.p.Answer(ctx, job("dm:u1", m), permit)
+	if writes != 2 || len(f.chat.sent()) != 2 || errs[1] != nil {
+		t.Errorf("cancelled after posting: %d write permissions, %d posts, second Send error %v; want 2, 2, nil", writes, len(f.chat.sent()), errs[1])
+	}
+}
+
+func TestAutomationFailureReplyOrErrorSavesNothing(t *testing.T) {
+	broken := errors.New("search unavailable")
+	for _, tc := range []struct {
+		reply string
+		err   error
+	}{
+		{"Could not analyze [ERR_BRAND_ANALYSIS] timeout", nil},
+		{"", broken},
+	} {
+		f := newFixture(t)
+		f.automate(t, func(context.Context, automation.Run) (string, error) { return tc.reply, tc.err })
+		m := chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "/brand Acme", Kind: chat.Direct}
+		if err := f.p.Answer(t.Context(), job("dm:u1", m), allowWrites); !errors.Is(err, tc.err) {
+			t.Errorf("Answer = %v, want %v", err, tc.err)
+		}
+		if n := len(f.history.written()) + len(f.chat.sent()) + len(f.model.received()); n != 0 {
+			t.Errorf("reply %q, error %v: %d turns, posts, and model requests, want none", tc.reply, tc.err, n)
+		}
 	}
 }
 

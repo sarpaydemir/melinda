@@ -9,6 +9,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/sarpaydemir/dost/internal/automation"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -58,6 +59,10 @@ func testTable() adapters {
 		tools: []toolSource{
 			{tools: toolsNamed("tracker_list", "tracker_create"), secrets: []config.SecretKey{{Key: "tracker_key", Ref: "tracker_secret", Overwrite: true}}},
 			{tools: toolsNamed("notes")},
+		},
+		handlers: map[string]automation.Handler{
+			"summarize": func(context.Context, automation.Run) (string, error) { return "", nil },
+			"analyze":   func(context.Context, automation.Run) (string, error) { return "", nil },
 		},
 	}
 }
@@ -133,13 +138,15 @@ func TestValidateBuildsTheSelectedAdaptersAndReportsEveryProblem(t *testing.T) {
 		"model": json.RawMessage(`"m"`), "chat_platform": json.RawMessage(`"pigeon"`),
 		"model_provider": json.RawMessage(`"compatible"`), "web_search": json.RawMessage(`"meta"`),
 		"web_fetch": json.RawMessage(`"direct"`), "enabled_tools": json.RawMessage(`["search_web", "tracker_list", "teleport"]`),
+		"automations": json.RawMessage(`[{"pattern": "a", "handler": "analyze"}, {"pattern": "b", "handler": "translate"}]`),
 	}
 	s, err := config.Load(doc, "agent", nil, func(*config.Settings) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := `chat_platform: unknown adapter "pigeon" (available: chatty, quiet)` + "\ncompatible\nmeta\ndirect\n" +
-		`enabled_tools: unknown tool "teleport"`
+		`enabled_tools: unknown tool "teleport"` + "\n" +
+		`automations[1]: unknown handler "translate" (available: analyze, summarize)`
 	if err := testTable().validate(s); err == nil || err.Error() != want {
 		t.Errorf("validate = %v, want %q", err, want)
 	}

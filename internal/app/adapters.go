@@ -14,6 +14,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/adapters/openai"
 	"github.com/sarpaydemir/dost/internal/adapters/plane"
 	"github.com/sarpaydemir/dost/internal/adapters/searxng"
+	"github.com/sarpaydemir/dost/internal/automation"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -37,6 +38,8 @@ type adapters struct {
 	// default; every source added after it returns no tools until its own settings are present, so a deployment's
 	// tool set never changes on upgrade.
 	tools []toolSource
+	// handlers are the automation handlers, by the IDs the automations setting names them by.
+	handlers map[string]automation.Handler
 }
 
 // builtin is the table of the adapters this binary ships: their HTTP requests go through transport, clk times
@@ -146,7 +149,8 @@ type selected struct {
 	fetch    func(*config.Settings) (web.Fetcher, error)
 	// tools contribute tools in the order they are offered, after the built-in knowledge tools and before the
 	// built-in conversation tools.
-	tools []func(*config.Settings, *prompt.Catalog) []tool.Tool
+	tools    []func(*config.Settings, *prompt.Catalog) []tool.Tool
+	handlers map[string]automation.Handler
 }
 
 // contributed are the tools the selected adapters contribute with s and the catalog c of their texts, in the order
@@ -165,7 +169,7 @@ func (a adapters) choose(n names) (selected, error) {
 	model, errModel := pick(a.models, "model_provider", n.model)
 	search, errSearch := pick(a.searchers, "web_search", n.search)
 	fetch, errFetch := pick(a.fetchers, "web_fetch", n.fetch)
-	s := selected{platform: platform.open, model: model.open, search: search.open, fetch: fetch.open}
+	s := selected{platform: platform.open, model: model.open, search: search.open, fetch: fetch.open, handlers: a.handlers}
 	if platform.tools != nil {
 		s.tools = append(s.tools, platform.tools)
 	}
@@ -182,12 +186,19 @@ func selection(s *config.Settings) names {
 	return names{platform: s.ChatPlatform, model: s.ModelProvider, search: s.WebSearch, fetch: s.WebFetch}
 }
 
-// validate builds the adapters that s selects and checks that enabled_tools names only offered tools, reporting
-// every unknown name and invalid adapter setting at once.
+// validate builds the adapters that s selects and checks that enabled_tools names only offered tools and every
+// automation a registered handler, reporting every unknown name and invalid adapter setting at once.
 func (a adapters) validate(s *config.Settings) error {
 	sel, err := a.choose(selection(s))
 	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s, nil)) // only their names are read
-	return errors.Join(err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s), errTools)
+	errs := []error{err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s), errTools}
+	for i, auto := range s.Automations {
+		if a.handlers[auto.Handler] == nil {
+			errs = append(errs, fmt.Errorf("automations[%d]: unknown handler %q (available: %s)", i, auto.Handler,
+				strings.Join(slices.Sorted(maps.Keys(a.handlers)), ", ")))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // build returns the error of building an adapter with open, which is nil for an unknown name, reported by choose,
