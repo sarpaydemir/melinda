@@ -22,14 +22,18 @@ const (
 	debugClip = 4000
 )
 
-// Loader loads a message's context from the conversation history, the author's profile, and the attachments. Every
-// field is required.
+// Loader loads a message's context from the conversation history, the shared knowledge, the author's profile, and
+// the attachments. Every field is required.
 type Loader struct {
 	History interface {
 		Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 	}
 	Users interface {
 		User(ctx context.Context, id string) (chat.User, error)
+	}
+	// Knowledge finds the shared knowledge relevant to a message's text.
+	Knowledge interface {
+		Preload(ctx context.Context, text string) string
 	}
 	// Files describes the message's attachments: the file context and the file summary.
 	Files interface {
@@ -40,15 +44,17 @@ type Loader struct {
 	Log        *slog.Logger
 }
 
-// Load returns the context for m, with the newest items of the history its conversation reads. It fails only
-// when the history cannot be read.
+// Load returns the context for m: the newest items of the history its conversation reads, the shared knowledge
+// relevant to its text, its author, and its attachments. It fails only when the history cannot be read.
 func (l Loader) Load(ctx context.Context, m chat.Message) (prompt.Context, error) {
 	read, write := memory.HistoryKeys(m.AuthorID, routing.ContextID(m), m.Kind == chat.Direct)
 	items, err := l.History.Get(ctx, read, historyWindow)
 	if err != nil {
 		return prompt.Context{}, fmt.Errorf("read history %s: %w", read, err)
 	}
-	c := prompt.Context{History: items, UserID: m.AuthorID, UserContext: l.userContext(ctx, m.AuthorID)}
+	c := prompt.Context{History: items, UserID: m.AuthorID}
+	c.Knowledge = l.Knowledge.Preload(ctx, m.Text)
+	c.UserContext = l.userContext(ctx, m.AuthorID)
 	c.FileContext, c.FileSummary = l.Files.Describe(ctx, m)
 	if l.Log.Enabled(ctx, slog.LevelDebug) {
 		l.Log.DebugContext(ctx, "context loaded",

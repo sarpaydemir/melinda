@@ -44,6 +44,17 @@ func (u *users) User(_ context.Context, id string) (chat.User, error) {
 	return u.user, u.err
 }
 
+// knowledge answers every preload with the same text and records the texts it was asked about.
+type knowledge struct {
+	text  string
+	asked []string
+}
+
+func (k *knowledge) Preload(_ context.Context, text string) string {
+	k.asked = append(k.asked, text)
+	return k.text
+}
+
 type historyReader interface {
 	Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 }
@@ -60,7 +71,8 @@ func (a *attachments) Describe(_ context.Context, m chat.Message) (string, strin
 }
 
 func loader(h historyReader, u *users, log *slog.Logger) pipeline.Loader {
-	return pipeline.Loader{History: h, Users: u, Files: &attachments{}, UserPrefix: userPrefix, Log: log}
+	return pipeline.Loader{History: h, Users: u, Knowledge: &knowledge{}, Files: &attachments{}, UserPrefix: userPrefix,
+		Log: log}
 }
 
 var discard = slog.New(slog.DiscardHandler)
@@ -154,6 +166,22 @@ func TestLoadReadsTheConversationHistory(t *testing.T) {
 				t.Errorf("Load = %+v\nwant %+v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestLoadAddsTheSharedKnowledgeForTheMessageText(t *testing.T) {
+	for _, kind := range []chat.Kind{chat.Direct, chat.Public, chat.Private} {
+		k := &knowledge{text: "- Deploys run on Tuesdays."}
+		l := loader(history{}, &users{}, discard)
+		l.Knowledge = k
+		got, err := l.Load(context.Background(), chat.Message{ID: "p1", AuthorID: "u1", Kind: kind, Text: "when do we deploy?"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Knowledge != k.text || !reflect.DeepEqual(k.asked, []string{"when do we deploy?"}) {
+			t.Errorf("kind %d: Knowledge = %q after asking about %q; want %q for the message text", kind, got.Knowledge,
+				k.asked, k.text)
+		}
 	}
 }
 

@@ -45,6 +45,16 @@ func TestDecodeKeepsOrderAndNumberKinds(t *testing.T) {
 	}
 }
 
+func TestObjectGetReturnsAMemberValueOrNil(t *testing.T) {
+	o := textfmt.Object{{Key: "a", Value: int64(1)}, {Key: "b", Value: nil}}
+	if got := o.Get("a"); got != int64(1) {
+		t.Errorf("Get(a) = %v, want 1", got)
+	}
+	if got := o.Get("c"); got != nil {
+		t.Errorf("Get(c) = %v, want nil", got)
+	}
+}
+
 func TestDecodeOverflowingFloatsBecomeInfinityOrZero(t *testing.T) {
 	tests := map[string]float64{`1e400`: math.Inf(1), `-1e400`: math.Inf(-1), `1e-400`: 0}
 	for in, want := range tests {

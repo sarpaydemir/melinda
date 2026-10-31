@@ -19,6 +19,16 @@ type Member struct {
 	Value any
 }
 
+// Get returns the value of the member key, or nil when o has none.
+func (o Object) Get(key string) any {
+	for _, m := range o {
+		if m.Key == key {
+			return m.Value
+		}
+	}
+	return nil
+}
+
 const (
 	maxDepth     = 10000
 	maxIntDigits = 4300

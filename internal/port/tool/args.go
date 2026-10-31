@@ -28,7 +28,7 @@ func (c Call) Arguments() (Args, error) {
 // A truthy value that is not a string is an error.
 func (a Args) String(keys ...string) (string, error) {
 	for _, key := range keys {
-		v := a.value(key)
+		v := a.members.Get(key)
 		if !textfmt.Truthy(v) {
 			continue
 		}
@@ -42,16 +42,7 @@ func (a Args) String(keys ...string) (string, error) {
 }
 
 // Int returns the value of key converted by textfmt.Int, or def.
-func (a Args) Int(key string, def int) int { return textfmt.Int(a.value(key), def) }
-
-func (a Args) value(key string) any {
-	for _, m := range a.members {
-		if m.Key == key {
-			return m.Value
-		}
-	}
-	return nil
-}
+func (a Args) Int(key string, def int) int { return textfmt.Int(a.members.Get(key), def) }
 
 // typeError is the established error text for using method on a value of v's type.
 func typeError(v any, method string) error {
