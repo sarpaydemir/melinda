@@ -181,12 +181,15 @@ func (d *Dispatcher) write(changes []kv.Change) error {
 	}
 }
 
+// marker is the stored last-seen marker: the creation time, in Unix milliseconds, of the newest message read.
+type marker struct {
+	CreateAt *float64 `json:"create_at"`
+}
+
 // advance moves the last-seen marker under key forward to createAt; it never moves back.
 func advance(key string, createAt int64) kv.Change {
 	return kv.Change{Key: key, Fn: func(cur json.RawMessage) (json.RawMessage, error) {
-		var v struct {
-			CreateAt *float64 `json:"create_at"`
-		}
+		var v marker
 		if json.Unmarshal(cur, &v) == nil && v.CreateAt != nil && float64(createAt) <= *v.CreateAt {
 			return cur, nil
 		}

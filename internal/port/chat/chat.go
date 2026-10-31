@@ -15,8 +15,8 @@ type Platform interface {
 	// inbound event to deliver in arrival order. It returns the error that ended the session, or nil after ctx is
 	// cancelled.
 	Listen(ctx context.Context, connected func(), deliver Deliver) error
-	// Replay passes to deliver every message created after the given time that an intake session may have
-	// missed, oldest first within each conversation.
+	// Replay passes to deliver, once each, the messages created after the given time that an intake session may
+	// have missed, oldest first within each conversation. It returns early with the error of deliver.
 	Replay(ctx context.Context, after time.Time, deliver Deliver) error
 	// Decode reads an event passed to deliver, or a Message.Payload. It reports false for events that are not
 	// messages, and does no I/O.

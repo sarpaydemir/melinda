@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,7 @@ func TestDefaultToolsAreTheEstablishedArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	table := builtin(http.DefaultTransport, clock.Real(), "dost/test")
+	table := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler))
 	sel, err := table.choose(selection(s))
 	if err != nil {
 		t.Fatal(err)

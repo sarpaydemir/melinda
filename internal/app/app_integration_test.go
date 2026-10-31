@@ -61,7 +61,9 @@ func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) 
 	chatServer := mattermostfake.New(t, "chat-token", mattermostfake.User{ID: "reported-id", Username: "agent"})
 	table := workingTable()
 	table.platforms = map[string]platformAdapter{"mattermost": {
-		open: func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, http.DefaultTransport) },
+		open: func(s *config.Settings) (chat.Platform, error) {
+			return mattermost.Open(s, http.DefaultTransport, slog.New(slog.DiscardHandler))
+		},
 	}}
 	addr := freeAddr(t)
 	env := environment(t, "DOST_DATABASE_URL="+testdb.New(t), "DOST_HTTP_ADDR="+addr,

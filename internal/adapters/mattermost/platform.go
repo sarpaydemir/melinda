@@ -3,8 +3,8 @@ package mattermost
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -22,10 +22,11 @@ type settings struct {
 type platform struct {
 	client   *Client
 	identity chat.User
+	log      *slog.Logger
 }
 
 // Open builds the platform from a settings snapshot; its requests go through transport.
-func Open(s *config.Settings, transport http.RoundTripper) (chat.Platform, error) {
+func Open(s *config.Settings, transport http.RoundTripper, log *slog.Logger) (chat.Platform, error) {
 	var c settings
 	if err := s.Decode(&c); err != nil {
 		return nil, err
@@ -44,16 +45,12 @@ func Open(s *config.Settings, transport http.RoundTripper) (chat.Platform, error
 	return &platform{
 		client:   NewClient(c.Endpoint, c.Token, transport),
 		identity: chat.User{ID: c.BotID, Username: c.BotUsername},
+		log:      log,
 	}, nil
 }
 
 // Listen is not supported yet.
 func (p *platform) Listen(context.Context, func(), chat.Deliver) error { return errors.ErrUnsupported }
-
-// Replay is not supported yet.
-func (p *platform) Replay(context.Context, time.Time, chat.Deliver) error {
-	return errors.ErrUnsupported
-}
 
 func (p *platform) Identity() chat.User { return p.identity }
 

@@ -31,8 +31,9 @@ type ChatHarness struct {
 	Fail func()
 	// Stall makes the fake hold every later request until its caller gives up.
 	Stall func()
-	// Event returns the event the platform delivers when User writes text in a conversation of kind: in the
-	// thread rooted at thread, or at the conversation root when thread is "".
+	// Event has User write text in a conversation of kind, in the thread rooted at thread or at the conversation
+	// root when thread is "", and returns the event the platform delivers for it. Each message is created after
+	// the ones before it.
 	Event func(kind chat.Kind, thread, text string) json.RawMessage
 	// SystemEvents are events for messages that are not a person's, such as a deleted message or a join notice.
 	SystemEvents []json.RawMessage
@@ -172,6 +173,39 @@ func Chat(t *testing.T, newHarness func(*testing.T) ChatHarness) {
 		}
 	})
 
+	t.Run("ReplayDeliversEachLaterMessageOnceOldestFirst", func(t *testing.T) {
+		h := newHarness(t)
+		seen := decode(t, h.Platform, h.Event(chat.Public, "", "seen"))
+		var want []chat.Message
+		for _, kind := range []chat.Kind{chat.Public, chat.Direct, chat.Private} {
+			root := decode(t, h.Platform, h.Event(kind, "", "missed"))
+			want = append(want, root, decode(t, h.Platform, h.Event(kind, root.ID, "missed reply")))
+		}
+		want = append(want, decode(t, h.Platform, h.Event(chat.Public, seen.ID, "late reply")))
+		var got []chat.Message
+		err := h.Platform.Replay(t.Context(), seen.Created, func(_ context.Context, ev json.RawMessage) error {
+			got = append(got, decode(t, h.Platform, ev))
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if g, w := idsByConversation(got), idsByConversation(want); !reflect.DeepEqual(g, w) {
+			t.Errorf("replayed %v, want %v", g, w)
+		}
+		live := map[string]chat.Message{}
+		for _, m := range want {
+			m.Payload = nil
+			live[m.ID] = m
+		}
+		for _, m := range got {
+			m.Payload = nil
+			if !reflect.DeepEqual(m, live[m.ID]) {
+				t.Errorf("replayed %+v, want the facts of the live event %+v", m, live[m.ID])
+			}
+		}
+	})
+
 	t.Run("FailuresAreErrors", func(t *testing.T) {
 		h := newHarness(t)
 		fileID, err := h.Platform.Upload(t.Context(), h.Conversation, image)
@@ -220,7 +254,16 @@ func decode(t *testing.T, p chat.Platform, ev json.RawMessage) chat.Message {
 	return m
 }
 
-// calls makes every lookup and write that does I/O and returns their errors by method name.
+// idsByConversation lists message IDs per conversation in the order given.
+func idsByConversation(ms []chat.Message) map[string][]string {
+	ids := map[string][]string{}
+	for _, m := range ms {
+		ids[m.ConversationID] = append(ids[m.ConversationID], m.ID)
+	}
+	return ids
+}
+
+// calls makes every call that does I/O and returns their errors by method name.
 func calls(ctx context.Context, h ChatHarness, fileID string) map[string]error {
 	p := h.Platform
 	errs := map[string]error{}
@@ -230,5 +273,6 @@ func calls(ctx context.Context, h ChatHarness, fileID string) map[string]error {
 	_, errs["Download"] = p.Download(ctx, fileID, 1<<20)
 	_, errs["Send"] = p.Send(ctx, chat.Outgoing{ConversationID: h.Conversation, Text: "hello"})
 	_, errs["Upload"] = p.Upload(ctx, h.Conversation, chat.File{Name: "a.txt", MediaType: "text/plain", Data: []byte("a")})
+	errs["Replay"] = p.Replay(ctx, time.UnixMilli(0), func(context.Context, json.RawMessage) error { return nil })
 	return errs
 }

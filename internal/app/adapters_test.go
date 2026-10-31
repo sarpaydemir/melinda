@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"testing"
@@ -146,7 +147,7 @@ func TestBuiltinSecretKeysAreTheExistingDocumentKeys(t *testing.T) {
 	want := []config.SecretKey{
 		{Key: "key"}, {Key: "mattermost_token"}, {Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true},
 	}
-	if got := builtin(http.DefaultTransport, clock.Real(), "dost/test").secretKeys(); !slices.Equal(got, want) {
+	if got := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).secretKeys(); !slices.Equal(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
@@ -160,7 +161,7 @@ func TestBuiltinModelProviderIsOpenAIByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test").models[s.ModelProvider]
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).models[s.ModelProvider]
 	if !ok {
 		t.Fatalf("no model provider registered as %q", s.ModelProvider)
 	}
@@ -178,7 +179,7 @@ func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test").platforms[s.ChatPlatform]
+	p, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).platforms[s.ChatPlatform]
 	if !ok {
 		t.Fatalf("no platform registered as %q", s.ChatPlatform)
 	}

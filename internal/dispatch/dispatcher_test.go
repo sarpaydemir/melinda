@@ -39,11 +39,20 @@ var start = time.Date(2026, 10, 31, 10, 0, 0, 123456000, time.UTC)
 
 var uuid4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
-// platform decodes events that are JSON-encoded messages.
+// platform decodes events that are JSON-encoded messages and replays with its replay function.
 type platform struct {
 	chat.Platform
 	configured, reported chat.User
 	lookups              atomic.Int32
+	replay               func(ctx context.Context, after time.Time, deliver chat.Deliver) error
+	replays              atomic.Int32
+	replayed             testkit.Notifier
+}
+
+func (p *platform) Replay(ctx context.Context, after time.Time, deliver chat.Deliver) error {
+	defer p.replayed.Notify()
+	defer p.replays.Add(1)
+	return p.replay(ctx, after, deliver)
 }
 
 func (p *platform) Decode(event json.RawMessage) (chat.Message, bool) {
@@ -110,6 +119,7 @@ type fixture struct {
 	clk      *fakeclock.Clock
 	timers   *timerLog
 	logs     *bytes.Buffer
+	log      *slog.Logger
 	d        *dispatch.Dispatcher
 }
 
@@ -148,11 +158,11 @@ func newFixture(t *testing.T) *fixture {
 
 // use replaces the dispatcher with one on s.
 func (f *fixture) use(s store) {
-	log := slog.New(slog.NewTextHandler(f.logs, nil))
+	f.log = slog.New(slog.NewTextHandler(f.logs, nil))
 	open := func(*config.Settings) (chat.Platform, error) { return f.platform, nil }
-	identity := routing.NewIdentity(&kvtest.Memory{}, "agent:bot_identity", f.clk, log)
+	identity := routing.NewIdentity(&kvtest.Memory{}, "agent:bot_identity", f.clk, f.log)
 	f.store = s
-	f.d = dispatch.NewDispatcher(f.t.Context(), f.settings, open, identity, s, f.flusher, f.timers, log)
+	f.d = dispatch.NewDispatcher(f.t.Context(), f.settings, open, identity, s, f.flusher, f.timers, f.log)
 }
 
 // enqueue queues the messages, failing the test if the queue stays full.
@@ -200,7 +210,7 @@ func (f *fixture) wait(done <-chan error) {
 			f.t.Fatalf("Run = %v", err)
 		}
 	case <-timeout.C:
-		f.t.Fatal("Run did not return after its queue emptied")
+		f.t.Fatal("Run did not return")
 	}
 }
 

@@ -2,6 +2,7 @@ package mattermost_test
 
 import (
 	"encoding/json"
+	"log/slog"
 	"maps"
 	"net/http"
 	"reflect"
@@ -15,7 +16,7 @@ import (
 // decoder returns the platform for decoding only; it never reaches a server.
 func decoder(t testing.TB) chat.Platform {
 	t.Helper()
-	p, err := mattermost.Open(settings(t, `{"model":"m","mattermost_endpoint":"https://chat.example","mattermost_token":"t","mattermost_bot_id":"b"}`), http.DefaultTransport)
+	p, err := mattermost.Open(settings(t, `{"model":"m","mattermost_endpoint":"https://chat.example","mattermost_token":"t","mattermost_bot_id":"b"}`), http.DefaultTransport, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}

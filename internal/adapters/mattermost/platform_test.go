@@ -2,6 +2,7 @@ package mattermost_test
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -29,11 +30,16 @@ func settings(t testing.TB, doc string) *config.Settings {
 
 func open(t *testing.T, mm *mattermostfake.Fake, username string) chat.Platform {
 	t.Helper()
+	return openLogging(t, mm, username, slog.New(slog.DiscardHandler))
+}
+
+func openLogging(t *testing.T, mm *mattermostfake.Fake, username string, log *slog.Logger) chat.Platform {
+	t.Helper()
 	doc, _ := json.Marshal(map[string]string{
 		"model": "m", "mattermost_endpoint": mm.URL(), "mattermost_token": token,
 		"mattermost_bot_id": bot.ID, "mattermost_bot_username": username,
 	})
-	p, err := mattermost.Open(settings(t, string(doc)), transport(t))
+	p, err := mattermost.Open(settings(t, string(doc)), transport(t), log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +55,7 @@ func TestOpenRequiresEndpointTokenAndBotID(t *testing.T) {
 			"mattermost_bot_id: expected string"},
 	}
 	for _, tt := range tests {
-		_, err := mattermost.Open(settings(t, tt.doc), http.DefaultTransport)
+		_, err := mattermost.Open(settings(t, tt.doc), http.DefaultTransport, slog.New(slog.DiscardHandler))
 		if err == nil || err.Error() != tt.want {
 			t.Errorf("Open(%s) error:\n%v\nwant:\n%s", tt.doc, err, tt.want)
 		}

@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
@@ -37,12 +38,12 @@ type adapters struct {
 }
 
 // builtin is the table of the adapters this binary ships: their HTTP requests go through transport, clk times
-// their waits, and userAgent identifies them where they send one.
-func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string) adapters {
+// their waits, userAgent identifies them where they send one, and they log to log.
+func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string, log *slog.Logger) adapters {
 	return adapters{
 		platforms: map[string]platformAdapter{
 			"mattermost": {
-				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport) },
+				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport, log) },
 				tools:   func(*config.Settings) []tool.Tool { return mattermost.Tools() },
 				prompts: mattermost.Prompts(),
 				secrets: []config.SecretKey{{Key: "mattermost_token"}},
