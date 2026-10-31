@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/clock"
@@ -73,12 +74,17 @@ func settings(t *testing.T, doc string) *config.Settings {
 // open builds the adapter for the API at base; fields are more members of the settings document.
 func open(t *testing.T, base string, fields ...string) (model.Provider, *instantClock) {
 	t.Helper()
+	return openVia(t, http.DefaultTransport, base, fields...)
+}
+
+func openVia(t *testing.T, rt http.RoundTripper, base string, fields ...string) (model.Provider, *instantClock) {
+	t.Helper()
 	doc := fmt.Sprintf(`{"model":"m","api_base":%q,"key":%q`, base, key)
 	for _, f := range fields {
 		doc += "," + f
 	}
 	clk := &instantClock{}
-	p, err := New(settings(t, doc+"}"), http.DefaultTransport, clk, "dost/1.2.3", slog.New(slog.DiscardHandler))
+	p, err := New(settings(t, doc+"}"), rt, clk, "dost/1.2.3", slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -613,17 +619,23 @@ func TestChatReportsWhyTheModelStopped(t *testing.T) {
 }
 
 type step struct {
-	after time.Duration
+	after time.Duration // never waits until the client gives up
 	part  string
 }
+
+const never time.Duration = -1
 
 // paced answers by writing each step's part after its delay and flushing it; the first flush sends the headers.
 func paced(fake *openaifake.Fake, steps ...step) testkit.Response {
 	return testkit.Response{Handler: func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		for _, s := range steps {
+			var due <-chan time.Time
+			if s.after != never {
+				due = time.After(s.after)
+			}
 			select {
-			case <-time.After(s.after):
+			case <-due:
 			case <-r.Context().Done():
 				return
 			case <-fake.Context().Done():
@@ -644,9 +656,9 @@ func TestTimeoutBoundsEachPhaseOfAnAttempt(t *testing.T) {
 		answer  []step
 		waits   []time.Duration
 	}{
-		{"headers never come", "0.05", []step{{time.Hour, ""}}, []time.Duration{time.Second}},
+		{"headers never come", "0.05", []step{{never, ""}}, []time.Duration{time.Second}},
 		{"the body stalls", "0.05",
-			[]step{{0, `{"choices":[{"message":`}, {time.Hour, `{"content":"late"}}]}`}}, []time.Duration{time.Second}},
+			[]step{{0, `{"choices":[{"message":`}, {never, `{"content":"late"}}]}`}}, []time.Duration{time.Second}},
 		{"headers and body each come within the timeout", "0.25",
 			[]step{{150 * time.Millisecond, ""}, {150 * time.Millisecond, `{"choices":[{"message":{"content":"in time"}}]}`}}, nil},
 		{"a steady body outlasts the timeout", "0.5",
@@ -654,16 +666,21 @@ func TestTimeoutBoundsEachPhaseOfAnAttempt(t *testing.T) {
 				{200 * time.Millisecond, `{"content":"in time"`}, {200 * time.Millisecond, `}}]}`}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fake := openaifake.New(t)
-			fake.Chat().Reply(paced(fake, tc.answer...), openaifake.Text("in time"))
-			p, clk := open(t, fake.URL(), `"request_timeout":`+tc.timeout)
-			resp, err := p.Chat(context.Background(), ask)
-			if err != nil || resp.Message.Content != "in time" {
-				t.Fatalf("got %q, %v; want in time", resp.Message.Content, err)
-			}
-			if got := clk.Waits(); !slices.Equal(got, tc.waits) {
-				t.Errorf("waits %v, want %v", got, tc.waits)
-			}
+			// The bubble's clock paces the answer and runs the timeout, so a loaded machine cannot skew one against
+			// the other.
+			synctest.Test(t, func(t *testing.T) {
+				srv, rt := testkit.NewPipeServer(t)
+				fake := &openaifake.Fake{Server: srv}
+				fake.Chat().Reply(paced(fake, tc.answer...), openaifake.Text("in time"))
+				p, clk := openVia(t, rt, fake.URL(), `"request_timeout":`+tc.timeout)
+				resp, err := p.Chat(context.Background(), ask)
+				if err != nil || resp.Message.Content != "in time" {
+					t.Fatalf("got %q, %v; want in time", resp.Message.Content, err)
+				}
+				if got := clk.Waits(); !slices.Equal(got, tc.waits) {
+					t.Errorf("waits %v, want %v", got, tc.waits)
+				}
+			})
 		})
 	}
 }

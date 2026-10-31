@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/testkit"
@@ -136,31 +137,32 @@ func TestImageAcceptsAnyJSONContentType(t *testing.T) {
 }
 
 func TestImageTimeoutIsTwoMinutesWhateverTheRequestTimeout(t *testing.T) {
-	fake := openaifake.New(t)
-	fake.Chat().Reply(openaifake.Completion(openaifake.Images("data:image/png;base64,QUJD")).WithDelay(200 * time.Millisecond))
-	fake.Chat().Default(paced(fake, step{time.Hour, ""}))
-	p, clk := open(t, fake.URL(), `"request_timeout":0.05`)
-	if got := p.(*provider).imageTimeout; got != 2*time.Minute {
-		t.Errorf("image timeout %v, want 2m", got)
-	}
-	p.(*provider).imageTimeout = time.Second
-	if img, err := p.Image(context.Background(), "img-1", "a cat"); err != nil || string(img.Data) != "ABC" {
-		t.Errorf("answer slower than the request timeout: got %q, %v; want ABC", img.Data, err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if _, err := p.Image(ctx, "img-1", "a cat"); err == nil || err.Error() != "Timeout" || ctx.Err() != nil {
-		t.Errorf("answer that never comes: got %v (context: %v), want Timeout after the image timeout", err, ctx.Err())
-	}
-	if n, waits := len(fake.Requests()), clk.Waits(); n != 2 || len(waits) != 0 {
-		t.Errorf("%d attempts and waits %v, want one attempt per image", n, waits)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		srv, rt := testkit.NewPipeServer(t)
+		fake := &openaifake.Fake{Server: srv}
+		fake.Chat().Reply(openaifake.Completion(openaifake.Images("data:image/png;base64,QUJD")).WithDelay(119 * time.Second))
+		fake.Chat().Default(paced(fake, step{never, ""}))
+		p, clk := openVia(t, rt, fake.URL(), `"request_timeout":0.05`)
+		if img, err := p.Image(context.Background(), "img-1", "a cat"); err != nil || string(img.Data) != "ABC" {
+			t.Errorf("answer slower than the request timeout: got %q, %v; want ABC", img.Data, err)
+		}
+		start := time.Now()
+		if _, err := p.Image(context.Background(), "img-1", "a cat"); err == nil || err.Error() != "Timeout" {
+			t.Errorf("answer that never comes: got %v, want Timeout", err)
+		}
+		if waited := time.Since(start); waited != 2*time.Minute {
+			t.Errorf("answer that never comes: timed out after %v, want 2m", waited)
+		}
+		if n, waits := len(fake.Requests()), clk.Waits(); n != 2 || len(waits) != 0 {
+			t.Errorf("%d attempts and waits %v, want one attempt per image", n, waits)
+		}
+	})
 }
 
 func TestImageRequestFailuresLeaveTheAPIAddressToTheLog(t *testing.T) {
 	fake := openaifake.New(t)
 	fake.Chat().Reply(testkit.ConnReset())
-	fake.Chat().Default(paced(fake, step{time.Hour, ""}))
+	fake.Chat().Default(paced(fake, step{never, ""}))
 	var logs bytes.Buffer
 	doc := fmt.Sprintf(`{"model":"m","api_base":%q,"key":%q}`, fake.URL(), key)
 	p, err := New(settings(t, doc), http.DefaultTransport, &instantClock{}, "dost/1.2.3", slog.New(slog.NewTextHandler(&logs, nil)))

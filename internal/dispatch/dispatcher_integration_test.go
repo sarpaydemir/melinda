@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sarpaydemir/dost/internal/clock"
@@ -54,6 +55,8 @@ func TestAppendsRacingTakesLoseAndRepeatNoMessage(t *testing.T) {
 		}
 	}
 	stop, stopped := make(chan struct{}), make(chan struct{})
+	stopTaking := sync.OnceFunc(func() { close(stop); <-stopped })
+	defer stopTaking() // a failed wait must not leave take reporting after the test ends
 	go func() {
 		defer close(stopped)
 		for {
@@ -74,8 +77,7 @@ func TestAppendsRacingTakesLoseAndRepeatNoMessage(t *testing.T) {
 		f.enqueue(msg(id, "user-a", "hi", direct))
 	}
 	f.flusher.await(t, n)
-	close(stop)
-	<-stopped
+	stopTaking()
 	take()
 	cancel()
 	f.wait(done)

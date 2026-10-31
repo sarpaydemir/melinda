@@ -2,9 +2,11 @@ package testkit
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -31,12 +33,70 @@ type Server struct {
 
 // NewServer starts a server with no routes.
 func NewServer(t testing.TB) *Server {
+	s := newServer(t)
+	s.srv.Start()
+	return s
+}
+
+// NewPipeServer starts a server with no routes that is reached through the returned transport over in-memory
+// pipes instead of TCP, so it can run in a synctest bubble.
+func NewPipeServer(t testing.TB) (*Server, http.RoundTripper) {
+	s := newServer(t)
+	l := &pipeListener{conns: make(chan net.Conn), closed: make(chan struct{})}
+	s.srv.Listener = l
+	s.srv.Start()
+	tr := &http.Transport{DialContext: l.dial}
+	t.Cleanup(tr.CloseIdleConnections)
+	return s, tr
+}
+
+func newServer(t testing.TB) *Server {
 	s := &Server{t: t}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.srv = httptest.NewServer(http.HandlerFunc(s.serve))
+	s.srv = httptest.NewUnstartedServer(http.HandlerFunc(s.serve))
 	t.Cleanup(s.close)
 	return s
 }
+
+// pipeListener accepts the server ends of the pipes its dial creates.
+type pipeListener struct {
+	conns     chan net.Conn
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func (l *pipeListener) dial(ctx context.Context, _, _ string) (net.Conn, error) {
+	client, server := net.Pipe()
+	select {
+	case l.conns <- server:
+		return client, nil
+	case <-l.closed:
+	case <-ctx.Done():
+	}
+	_, _ = client.Close(), server.Close()
+	return nil, cmp.Or(ctx.Err(), net.ErrClosed)
+}
+
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.conns:
+		return c, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *pipeListener) Close() error {
+	l.closeOnce.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *pipeListener) Addr() net.Addr { return pipeAddr{} }
+
+type pipeAddr struct{}
+
+func (pipeAddr) Network() string { return "pipe" }
+func (pipeAddr) String() string  { return "pipe" }
 
 // URL is the base URL of the server, without a trailing slash.
 func (s *Server) URL() string { return s.srv.URL }

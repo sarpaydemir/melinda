@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-// AwaitTimeout bounds every wait in the test kit, so a missing event fails the test instead of hanging it.
-const AwaitTimeout = 10 * time.Second
+// AwaitTimeout bounds every wait in the test kit, so a missing event fails the test instead of hanging it. It sits
+// far above what a loaded machine needs: 200 racing appends to Postgres have taken 19 s at load 75.
+const AwaitTimeout = 60 * time.Second
 
 // Notifier wakes goroutines that wait for shared state to change. The zero value is ready to use.
 type Notifier struct {
