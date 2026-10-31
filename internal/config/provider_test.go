@@ -137,6 +137,17 @@ func sources(t *testing.T, doc string) map[string]config.Env {
 	}
 }
 
+func TestSettingsSourceNamesTheFirstConfiguredSource(t *testing.T) {
+	for source, env := range sources(t, `{"model": "m"}`) {
+		if got := env.SettingsSource(); got != source {
+			t.Errorf("SettingsSource() = %q, want %q", got, source)
+		}
+	}
+	if got := load(t).SettingsSource(); got != "" {
+		t.Errorf("SettingsSource() without a source = %q, want empty", got)
+	}
+}
+
 func TestEverySourceAcceptsAnObjectOrAStringHoldingOne(t *testing.T) {
 	const object = `{"model": "m", "admin_ids": "u1"}`
 	quoted, _ := json.Marshal(object)

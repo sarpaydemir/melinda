@@ -26,22 +26,20 @@ type SecretKey struct {
 
 // read returns the settings document from the first configured source, with its secret references resolved.
 func (p *Provider) read(ctx context.Context) (map[string]json.RawMessage, error) {
-	var source string
+	source := p.env.SettingsSource()
 	var raw []byte
 	var err error
 	local := true
-	switch {
-	case p.env.SettingsFile != "":
-		source = "DOST_SETTINGS_FILE"
-		raw, err = os.ReadFile(p.env.SettingsFile)
-	case p.env.SettingsJSON != "":
-		source, raw = "DOST_SETTINGS_JSON", []byte(p.env.SettingsJSON)
-	case p.env.PrefectAPIURL != "":
-		local = false
-		source = fmt.Sprintf("Prefect variable %q", p.env.PrefectVariable)
-		raw, err = p.variable(ctx)
-	default:
+	switch source {
+	case "":
 		return nil, errors.New("no settings source: set DOST_SETTINGS_FILE, DOST_SETTINGS_JSON, or DOST_PREFECT_API_URL")
+	case "DOST_SETTINGS_FILE":
+		raw, err = os.ReadFile(p.env.SettingsFile)
+	case "DOST_SETTINGS_JSON":
+		raw = []byte(p.env.SettingsJSON)
+	default:
+		local = false
+		raw, err = p.variable(ctx)
 	}
 	var doc map[string]json.RawMessage
 	if err == nil {

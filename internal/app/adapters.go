@@ -130,10 +130,32 @@ func (a adapters) choose(n names) (selected, error) {
 	return s, errors.Join(errPlatform, errModel, errSearch, errFetch)
 }
 
-// pick returns the entry registered under name, the value of the settings key.
+// selection is the adapter names that s selects.
+func selection(s *config.Settings) names {
+	return names{platform: s.ChatPlatform, model: s.ModelProvider, search: s.WebSearch, fetch: s.WebFetch}
+}
+
+// validate builds the adapters that s selects, reporting every unknown name and invalid adapter setting at once.
+func (a adapters) validate(s *config.Settings) error {
+	sel, err := a.choose(selection(s))
+	return errors.Join(err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s))
+}
+
+// build returns the error of building an adapter with open, which is nil for an unknown name, reported by choose,
+// and for a kind with no registered adapters.
+func build[T any](open func(*config.Settings) (T, error), s *config.Settings) error {
+	if open == nil {
+		return nil
+	}
+	_, err := open(s)
+	return err
+}
+
+// pick returns the entry registered under name, the value of the settings key. While no adapter of a kind is
+// registered, any name is accepted and the entry is empty.
 func pick[T any](table map[string]T, key, name string) (T, error) {
 	v, ok := table[name]
-	if !ok {
+	if !ok && len(table) > 0 {
 		return v, fmt.Errorf("%s: unknown adapter %q (available: %s)", key, name, strings.Join(slices.Sorted(maps.Keys(table)), ", "))
 	}
 	return v, nil

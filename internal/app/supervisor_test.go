@@ -331,6 +331,35 @@ func TestSupervisorShutdownTimeoutKeepsFailures(t *testing.T) {
 	})
 }
 
+func TestSupervisorShutdownTimeoutReportsAnEarlyExitOfAComponentNotYetStopped(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rec := &recorder{}
+		s := newSupervisor(10 * time.Second)
+		exit := make(chan struct{})
+		a := &fake{name: "a", rec: rec, run: func(context.Context) error {
+			<-exit
+			return nil
+		}}
+		b := &fake{name: "b", rec: rec, run: func(ctx context.Context) error {
+			<-ctx.Done()
+			<-s.WorkContext().Done()
+			return nil
+		}}
+		ctx, cancel := context.WithCancel(t.Context())
+		wait := run(ctx, s, a, b)
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		close(exit)
+
+		err := wait()
+		if !errors.Is(err, app.ErrShutdownTimeout) {
+			t.Fatalf("Run = %v, want a shutdown timeout", err)
+		}
+		assertComponentError(t, err, "a", "shutdown timeout after 10s while stopping b\na: exited before shutdown")
+	})
+}
+
 func TestSupervisorShutdownTimeoutCancelsWork(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rec := &recorder{}

@@ -94,6 +94,20 @@ func LoadEnv(environ []string) (Env, error) {
 	return env, nil
 }
 
+// SettingsSource names the source the settings document is read from: the first of DOST_SETTINGS_FILE,
+// DOST_SETTINGS_JSON, and the Prefect variable that is configured. It is empty when none is.
+func (e Env) SettingsSource() string {
+	switch {
+	case e.SettingsFile != "":
+		return "DOST_SETTINGS_FILE"
+	case e.SettingsJSON != "":
+		return "DOST_SETTINGS_JSON"
+	case e.PrefectAPIURL != "":
+		return fmt.Sprintf("Prefect variable %q", e.PrefectVariable)
+	}
+	return ""
+}
+
 // Secrets returns the secret values in the environment, for masking in logs.
 func (e Env) Secrets() []string {
 	out := []string{e.DBPassword, e.PrefectAPIKey, e.PrefectAPIAuthString}

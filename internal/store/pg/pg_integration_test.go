@@ -163,6 +163,23 @@ func TestOpenReportsEveryMismatchInOneError(t *testing.T) {
 	}
 }
 
+func TestVerifyReportsAMissingSchemaAndCreatesNothing(t *testing.T) {
+	dsn := testdb.New(t)
+	err := Verify(context.Background(), dsn, clock.Real(), slog.New(slog.DiscardHandler))
+	want := "database schema does not match: chat_sessions is missing; key_value_store is missing; " +
+		"langchain_pg_collection is missing; langchain_pg_embedding is missing"
+	if err == nil || err.Error() != want {
+		t.Errorf("Verify = %v, want %q", err, want)
+	}
+	conn := dial(t, dsn)
+	if got := queryStrings(t, conn, `SELECT relname::text FROM pg_class WHERE relnamespace = 'public'::regnamespace`); len(got) > 0 {
+		t.Errorf("Verify created %q", got)
+	}
+	if got := queryStrings(t, conn, `SELECT extname::text FROM pg_extension WHERE extname = 'vector'`); len(got) > 0 {
+		t.Error("Verify created the vector extension")
+	}
+}
+
 func TestWithTx(t *testing.T) {
 	dsn := testdb.New(t)
 	execSQL(t, dsn, `

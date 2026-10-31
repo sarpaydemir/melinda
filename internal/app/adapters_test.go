@@ -109,12 +109,37 @@ func TestChooseReportsEveryUnknownName(t *testing.T) {
 	}
 }
 
+func TestChooseAcceptsAnyNameForAKindWithoutAdapters(t *testing.T) {
+	table := testTable()
+	table.searchers, table.fetchers = nil, nil
+	s, err := table.choose(names{platform: "quiet", model: "compatible", search: "searxng", fetch: "anything"})
+	if err != nil || s.search != nil || s.fetch != nil {
+		t.Errorf("choose = %+v, %v; want no searcher, no fetcher, and no error", s, err)
+	}
+}
+
 func TestSecretKeysAreTheUnionOfEveryRegisteredAdapter(t *testing.T) {
 	want := []config.SecretKey{
 		{Key: "chatty_token"}, {Key: "key"}, {Key: "meta_key"}, {Key: "tracker_key", Ref: "tracker_secret", Overwrite: true},
 	}
 	if got := testTable().secretKeys(); !slices.Equal(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestValidateBuildsTheSelectedAdaptersAndReportsEveryProblem(t *testing.T) {
+	doc := map[string]json.RawMessage{
+		"model": json.RawMessage(`"m"`), "chat_platform": json.RawMessage(`"pigeon"`),
+		"model_provider": json.RawMessage(`"compatible"`), "web_search": json.RawMessage(`"meta"`),
+		"web_fetch": json.RawMessage(`"direct"`),
+	}
+	s, err := config.Load(doc, "agent", nil, func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `chat_platform: unknown adapter "pigeon" (available: chatty, quiet)` + "\ncompatible\nmeta\ndirect"
+	if err := testTable().validate(s); err == nil || err.Error() != want {
+		t.Errorf("validate = %v, want %q", err, want)
 	}
 }
 

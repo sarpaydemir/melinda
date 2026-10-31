@@ -152,6 +152,10 @@ func verify(ctx context.Context, conn *pgx.Conn) error {
 		}); err != nil {
 			return fmt.Errorf("read columns of %s: %w", t.name, err)
 		}
+		if len(cols) == 0 {
+			problems = append(problems, t.name+" is missing")
+			continue
+		}
 		for _, c := range t.columns {
 			got, ok := cols[c.name]
 			switch {

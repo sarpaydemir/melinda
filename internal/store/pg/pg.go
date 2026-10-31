@@ -55,13 +55,9 @@ func DSN(env config.Env) (string, error) {
 
 // Open connects to dsn, retrying for up to a minute, prepares and verifies the schema, and returns the pool.
 func Open(ctx context.Context, dsn string, clk clock.Clock, log *slog.Logger) (*DB, error) {
-	cfg, err := poolConfig(dsn)
+	cfg, conn, err := connectTo(ctx, dsn, clk, log)
 	if err != nil {
 		return nil, err
-	}
-	conn, err := connect(ctx, cfg.ConnConfig, clk, log)
-	if err != nil {
-		return nil, fmt.Errorf("connect to database: %w", err)
 	}
 	defer conn.Close(context.Background())
 	if err := prepare(ctx, conn); err != nil {
@@ -72,6 +68,30 @@ func Open(ctx context.Context, dsn string, clk clock.Clock, log *slog.Logger) (*
 		return nil, err
 	}
 	return &DB{pool: pool}, nil
+}
+
+// Verify connects to dsn as Open does and reports every way the schema differs from what dost reads and writes,
+// without changing anything.
+func Verify(ctx context.Context, dsn string, clk clock.Clock, log *slog.Logger) error {
+	_, conn, err := connectTo(ctx, dsn, clk, log)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(context.Background())
+	return verify(ctx, conn)
+}
+
+// connectTo parses dsn and makes the first connection, retrying for up to a minute.
+func connectTo(ctx context.Context, dsn string, clk clock.Clock, log *slog.Logger) (*pgxpool.Config, *pgx.Conn, error) {
+	cfg, err := poolConfig(dsn)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := connect(ctx, cfg.ConnConfig, clk, log)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect to database: %w", err)
+	}
+	return cfg, conn, nil
 }
 
 // poolConfig parses dsn and bounds each connection attempt when dsn sets no connect_timeout.
@@ -106,6 +126,9 @@ func connect(ctx context.Context, cfg *pgx.ConnConfig, clk clock.Clock, log *slo
 		backoff = min(2*backoff, 10*time.Second)
 	}
 }
+
+// Ping reports whether the database answers.
+func (db *DB) Ping(ctx context.Context) error { return db.pool.Ping(ctx) }
 
 // Close closes every connection in the pool.
 func (db *DB) Close() { db.pool.Close() }
