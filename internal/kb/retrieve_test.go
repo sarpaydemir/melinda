@@ -244,6 +244,55 @@ func TestPreloadLogsTheQueryAtDebug(t *testing.T) {
 	}
 }
 
+func TestSearchReturnsTheNearestEntriesWithoutRecencyRanking(t *testing.T) {
+	p := &provider{vector: queryVector()}
+	nearest := []vector.Hit{
+		hit("Deploys run on Tuesdays.", `{"type": "public_kb"}`, 0.10),
+		hit("The release checklist changed in June.", `{"type": "public_kb", "source_create_at_max": 1781600000000}`, 0.13),
+	}
+	st := &store{hits: nearest}
+
+	got, err := retriever(settings(), p, st, discard).Search(context.Background(), "release notes", 3)
+
+	if err != nil || !reflect.DeepEqual(got, nearest) {
+		t.Errorf("Search = %+v, %v; want the entries in search order", got, err)
+	}
+	if want := []string{"embed: release notes"}; !reflect.DeepEqual(p.embedded, want) || len(p.requests) != 0 {
+		t.Errorf("embedded %q after %d model requests, want %q and no requests", p.embedded, len(p.requests), want)
+	}
+	wantSearch := []search{{"agent_public_kb", queryVector(), map[string]string{"type": "public_kb"}, 3}}
+	if !reflect.DeepEqual(st.searches, wantSearch) {
+		t.Errorf("searches = %+v, want %+v", st.searches, wantSearch)
+	}
+}
+
+func TestSearchReportsWhyItFoundNothing(t *testing.T) {
+	refused := errors.New("connection refused")
+	noModel := settings()
+	noModel.EmbeddingModel = ""
+	cases := []struct {
+		name     string
+		settings *config.Settings
+		vector   []float32
+		err      error
+		want     error
+		searches int
+	}{
+		{"no embedding model", noModel, queryVector(), nil, ErrNoEmbeddingModel, 0},
+		{"no query embedding", settings(), nil, nil, ErrNotEmbedded, 0},
+		{"a failed search", settings(), queryVector(), refused, refused, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := &store{err: c.err}
+			got, err := retriever(c.settings, &provider{vector: c.vector}, st, discard).Search(context.Background(), "q", 4)
+			if got != nil || !errors.Is(err, c.want) || len(st.searches) != c.searches {
+				t.Errorf("Search = %+v, %v after %d searches; want %v after %d", got, err, len(st.searches), c.want, c.searches)
+			}
+		})
+	}
+}
+
 func TestRerankPrefersRecentEntriesAmongNearEqualMatches(t *testing.T) {
 	fresh := `{"timestamp": "2026-06-17T12:00:00+00:00"}`
 	cases := []struct {

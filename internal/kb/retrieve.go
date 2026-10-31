@@ -3,6 +3,7 @@ package kb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"math"
 	"slices"
@@ -20,15 +21,22 @@ import (
 const (
 	// entryType is the metadata type of a shared-knowledge entry.
 	entryType = "public_kb"
-	// preloadEntries is how many entries a reply's prompt shows.
-	preloadEntries = 4
+	// Entries is how many entries a reply's prompt shows, and how many a knowledge search tool returns by default.
+	Entries = 4
 	// candidates is how many of the nearest entries the recency ranking chooses from.
-	candidates = 5 * preloadEntries
+	candidates = 5 * Entries
 	// msEpochAbove marks epoch numbers in milliseconds; smaller ones are seconds.
 	msEpochAbove = 10_000_000_000
 	// firstSecond and lastSecond bound the epoch seconds of the years 1 to 9999.
 	firstSecond = -62135596800
 	lastSecond  = 253402300799
+)
+
+var (
+	// ErrNoEmbeddingModel reports a search while no embedding model is set.
+	ErrNoEmbeddingModel = errors.New("no embedding model is set")
+	// ErrNotEmbedded reports a search whose query could not be embedded.
+	ErrNotEmbedded = errors.New("the query could not be embedded")
 )
 
 // Retriever finds the shared knowledge relevant to a message, with one settings snapshot. Every field is required.
@@ -66,19 +74,15 @@ func (r Retriever) Preload(ctx context.Context, text string) string {
 	if query == "" {
 		return ""
 	}
-	vec := llm.Embed(ctx, r.Embedder, s, r.Log, query)
-	if vec == nil {
-		return ""
-	}
-	hits, err := r.Store.Search(ctx, s.KBCollection, vec, map[string]string{"type": entryType}, candidates)
+	hits, err := r.Search(ctx, query, candidates)
 	if err != nil {
-		if ctx.Err() == nil {
+		if !errors.Is(err, ErrNotEmbedded) && ctx.Err() == nil {
 			r.Log.ErrorContext(ctx, "knowledge search failed", "collection", s.KBCollection, "error", err)
 		}
 		return ""
 	}
 	var lines []string
-	for _, h := range rerank(hits, r.Clock.Now(), preloadEntries) {
+	for _, h := range rerank(hits, r.Clock.Now(), Entries) {
 		doc := textfmt.Str(nil) // an entry without a document shows as None
 		if h.Document != nil {
 			doc = *h.Document
@@ -86,6 +90,20 @@ func (r Retriever) Preload(ctx context.Context, text string) string {
 		lines = append(lines, "- "+doc)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Search returns the limit entries nearest to query, nearest first. Without an embedding model or a query
+// embedding it fails with ErrNoEmbeddingModel or ErrNotEmbedded.
+func (r Retriever) Search(ctx context.Context, query string, limit int) ([]vector.Hit, error) {
+	s := r.Settings
+	if s.EmbeddingModel == "" {
+		return nil, ErrNoEmbeddingModel
+	}
+	vec := llm.Embed(ctx, r.Embedder, s, r.Log, query)
+	if vec == nil {
+		return nil, ErrNotEmbedded
+	}
+	return r.Store.Search(ctx, s.KBCollection, vec, map[string]string{"type": entryType}, limit)
 }
 
 // searchQuery reads the query from the model's answer: an object's truthy query member, or a string other than
