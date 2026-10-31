@@ -9,10 +9,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/sarpaydemir/dost/internal/store/kv"
 )
 
-// Memory is an in-memory Store; the zero value is empty and ready to use. Update holds the store's lock while
-// fn runs, so fn must not call the store.
+// Memory is an in-memory Store; the zero value is empty and ready to use. Update and UpdateAll hold the store's
+// lock while their functions run, so those must not call the store.
 type Memory struct {
 	mu     sync.Mutex
 	values map[string]json.RawMessage
@@ -37,28 +39,40 @@ func (m *Memory) Set(ctx context.Context, key string, value json.RawMessage) err
 		return err
 	}
 	defer m.mu.Unlock()
-	return m.put(key, value)
+	return m.put(map[string]json.RawMessage{key: value})
 }
 
-// Update replaces the value under key with fn's result; fn receives seed ({} when nil) when the key is missing
-// or holds JSON null. An error from fn is returned and nothing is written.
+// Update applies one change.
 func (m *Memory) Update(ctx context.Context, key string, seed json.RawMessage, fn func(json.RawMessage) (json.RawMessage, error)) error {
-	if seed == nil {
-		seed = json.RawMessage(`{}`)
-	}
+	return m.UpdateAll(ctx, kv.Change{Key: key, Seed: seed, Fn: fn})
+}
+
+// UpdateAll applies the changes in order as one write; each Fn receives its Seed ({} when nil) when the key is
+// missing or holds JSON null. An error from any Fn is returned and nothing is written.
+func (m *Memory) UpdateAll(ctx context.Context, changes ...kv.Change) error {
 	if err := m.lock(ctx); err != nil {
 		return err
 	}
 	defer m.mu.Unlock()
-	cur, ok := m.values[key]
-	if !ok || isNull(cur) {
-		cur = seed
+	next := map[string]json.RawMessage{}
+	for _, c := range changes {
+		cur, ok := next[c.Key]
+		if !ok {
+			cur, ok = m.values[c.Key]
+		}
+		if !ok || isNull(cur) {
+			cur = c.Seed
+			if cur == nil {
+				cur = json.RawMessage(`{}`)
+			}
+		}
+		v, err := c.Fn(slices.Clone(cur))
+		if err != nil {
+			return err
+		}
+		next[c.Key] = v
 	}
-	next, err := fn(slices.Clone(cur))
-	if err != nil {
-		return err
-	}
-	return m.put(key, next)
+	return m.put(next)
 }
 
 // DeleteIf removes key if pred holds for its value and returns the removed value.
@@ -99,15 +113,19 @@ func (m *Memory) lock(ctx context.Context) error {
 	return nil
 }
 
-// put stores a copy of value; the caller holds the lock.
-func (m *Memory) put(key string, value json.RawMessage) error {
-	if !json.Valid(value) {
-		return fmt.Errorf("value for %q is not valid JSON", key)
+// put stores a copy of every value, or none when one is not valid JSON; the caller holds the lock.
+func (m *Memory) put(values map[string]json.RawMessage) error {
+	for key, v := range values {
+		if !json.Valid(v) {
+			return fmt.Errorf("value for %q is not valid JSON", key)
+		}
 	}
 	if m.values == nil {
 		m.values = map[string]json.RawMessage{}
 	}
-	m.values[key] = slices.Clone(value)
+	for key, v := range values {
+		m.values[key] = slices.Clone(v)
+	}
 	return nil
 }
 

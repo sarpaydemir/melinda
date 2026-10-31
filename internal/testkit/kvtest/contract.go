@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/sarpaydemir/dost/internal/store/kv"
 	"github.com/sarpaydemir/dost/internal/testkit"
 )
 
@@ -18,6 +19,7 @@ type Store interface {
 	Get(ctx context.Context, key string) (json.RawMessage, bool, error)
 	Set(ctx context.Context, key string, value json.RawMessage) error
 	Update(ctx context.Context, key string, seed json.RawMessage, fn func(json.RawMessage) (json.RawMessage, error)) error
+	UpdateAll(ctx context.Context, changes ...kv.Change) error
 	DeleteIf(ctx context.Context, key string, pred func(json.RawMessage) bool) (json.RawMessage, bool, error)
 	List(ctx context.Context, prefix string) (map[string]json.RawMessage, error)
 }
@@ -134,6 +136,32 @@ func Contract(t *testing.T, open func(t *testing.T) Store) {
 			assertValue(t, s, "k", `{"counter": 1}`)
 			assertValue(t, s, "new", "")
 		}},
+		{"update all applies each change to its own key", func(t *testing.T, s Store) {
+			mustSet(t, s, "a", `{"counter": 1}`)
+			if err := s.UpdateAll(t.Context(),
+				kv.Change{Key: "a", Fn: increment},
+				kv.Change{Key: "b", Seed: json.RawMessage(`{"counter": 5}`), Fn: increment},
+			); err != nil {
+				t.Fatalf("UpdateAll: %v", err)
+			}
+			assertValue(t, s, "a", `{"counter": 2}`)
+			assertValue(t, s, "b", `{"counter": 6}`)
+		}},
+		{"an update all with one failing change writes nothing", func(t *testing.T, s Store) {
+			mustSet(t, s, "a", `{"counter": 1}`)
+			failure := errors.New("updater failed")
+			fail := func(json.RawMessage) (json.RawMessage, error) { return nil, failure }
+			for _, changes := range [][]kv.Change{
+				{{Key: "a", Fn: increment}, {Key: "new", Fn: fail}},
+				{{Key: "new", Fn: increment}, {Key: "a", Fn: fail}},
+			} {
+				if err := s.UpdateAll(t.Context(), changes...); !errors.Is(err, failure) {
+					t.Errorf("UpdateAll = %v, want the updater's error", err)
+				}
+			}
+			assertValue(t, s, "a", `{"counter": 1}`)
+			assertValue(t, s, "new", "")
+		}},
 		{"a value that is not JSON is rejected", func(t *testing.T, s Store) {
 			mustSet(t, s, "k", `{"counter": 1}`)
 			if err := s.Set(t.Context(), "k", json.RawMessage(`{"counter":`)); err == nil {
@@ -186,6 +214,9 @@ func Contract(t *testing.T, open func(t *testing.T) Store) {
 				"Get":    func() error { _, _, err := s.Get(ctx, "k"); return err },
 				"Set":    func() error { return s.Set(ctx, "k", v) },
 				"Update": func() error { return s.Update(ctx, "k", nil, increment) },
+				"UpdateAll": func() error {
+					return s.UpdateAll(ctx, kv.Change{Key: "k", Fn: increment})
+				},
 				"DeleteIf": func() error {
 					_, _, err := s.DeleteIf(ctx, "k", func(json.RawMessage) bool { return true })
 					return err

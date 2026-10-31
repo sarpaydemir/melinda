@@ -7,12 +7,15 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/testkit/golden"
 	"github.com/sarpaydemir/dost/internal/testkit/testdb"
@@ -177,6 +180,49 @@ func TestVerifyReportsAMissingSchemaAndCreatesNothing(t *testing.T) {
 	}
 	if got := queryStrings(t, conn, `SELECT extname::text FROM pg_extension WHERE extname = 'vector'`); len(got) > 0 {
 		t.Error("Verify created the vector extension")
+	}
+}
+
+func TestRejectedOnlyForStatementsTheServerRefuses(t *testing.T) {
+	dsn := testdb.New(t)
+	ctx := context.Background()
+	cases := []struct {
+		name   string
+		change func(*url.URL)
+		sql    string
+		code   string
+		want   bool
+	}{
+		{"password rotated", func(u *url.URL) { u.User = url.UserPassword(u.User.Username(), "rotated") },
+			"SELECT 1", "28P01", false},
+		{"database not there during a failover", func(u *url.URL) { u.Path = "/dost_missing_database" },
+			"SELECT 1", "3D000", false},
+		{"server turned read-only by a failover", func(u *url.URL) { u.RawQuery += "&default_transaction_read_only=on" },
+			"CREATE TABLE written (n integer)", "25006", false},
+		{"statement the server refuses", func(*url.URL) {}, "SELECT 1/0", "22012", true},
+	}
+	for _, c := range cases {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.change(u)
+		pool, err := pgxpool.New(ctx, u.String())
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		err = (&DB{pool: pool}).WithTx(ctx, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, c.sql)
+			return err
+		})
+		pool.Close()
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != c.code {
+			t.Errorf("%s: error %v, want SQLSTATE %s", c.name, err, c.code)
+		}
+		if got := Rejected(err); got != c.want {
+			t.Errorf("%s: Rejected = %v, want %v", c.name, got, c.want)
+		}
 	}
 }
 

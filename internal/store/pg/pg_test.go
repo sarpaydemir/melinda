@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
 )
@@ -208,6 +209,28 @@ func TestOpenStopsRetryingWhenTheContextEnds(t *testing.T) {
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Errorf("Open error = %v, want context.Canceled", err)
+	}
+}
+
+func TestRejectedSeparatesRefusedStatementsFromAnUnavailableDatabase(t *testing.T) {
+	cases := []struct {
+		err  error
+		want bool
+	}{
+		{&pgconn.PgError{Code: "22P05"}, true},                          // untranslatable character
+		{fmt.Errorf("write: %w", &pgconn.PgError{Code: "23505"}), true}, // unique violation
+		{&pgconn.PgError{Code: "08006"}, false},                         // connection failure
+		{&pgconn.PgError{Code: "40P01"}, false},                         // deadlock detected
+		{&pgconn.PgError{Code: "53300"}, false},                         // too many connections
+		{&pgconn.PgError{Code: "57P01"}, false},                         // admin shutdown
+		{&pgconn.PgError{Code: "58030"}, false},                         // I/O error
+		{&net.OpError{Op: "dial", Err: errors.New("connection refused")}, false},
+		{context.DeadlineExceeded, false},
+	}
+	for _, c := range cases {
+		if got := Rejected(c.err); got != c.want {
+			t.Errorf("Rejected(%v) = %v, want %v", c.err, got, c.want)
+		}
 	}
 }
 

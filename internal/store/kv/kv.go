@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/sarpaydemir/dost/internal/clock"
@@ -50,39 +51,61 @@ func (s *Store) Set(ctx context.Context, key string, value json.RawMessage) erro
 	})
 }
 
-// Update replaces the value under key with fn's result in one transaction that holds the row lock while fn runs.
-// A missing key is first created with seed ({} when nil); fn also receives seed when the stored value is JSON
-// null. The result is always written. An error from fn is returned and nothing is written.
+// Change is an update of the value under Key to Fn's result. A missing key is first created with Seed ({} when
+// nil); Fn also receives Seed when the stored value is JSON null.
+type Change struct {
+	Key  string
+	Seed json.RawMessage
+	Fn   func(json.RawMessage) (json.RawMessage, error)
+}
+
+// Update applies one Change.
 func (s *Store) Update(ctx context.Context, key string, seed json.RawMessage, fn func(json.RawMessage) (json.RawMessage, error)) error {
+	return s.UpdateAll(ctx, Change{Key: key, Seed: seed, Fn: fn})
+}
+
+// UpdateAll applies the changes in order in one transaction, holding each row's lock from its Fn until the commit.
+// Every result is written. An error from any Fn is returned and nothing is written.
+func (s *Store) UpdateAll(ctx context.Context, changes ...Change) error {
+	now := s.clk.Now()
+	return s.db.WithTx(ctx, func(tx pgx.Tx) error {
+		for _, c := range changes {
+			if err := update(ctx, tx, c, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func update(ctx context.Context, tx pgx.Tx, c Change, now time.Time) error {
+	seed := c.Seed
 	if seed == nil {
 		seed = json.RawMessage(`{}`)
 	}
-	now := s.clk.Now()
-	return s.db.WithTx(ctx, func(tx pgx.Tx) error {
-		var cur json.RawMessage
-		for {
-			if _, err := tx.Exec(ctx, insertSQL+`ON CONFLICT (key) DO NOTHING`, key, seed, now); err != nil {
-				return err
-			}
-			err := tx.QueryRow(ctx, lockSQL, key).Scan(&cur)
-			if err == nil {
-				break
-			}
-			if !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			// A concurrent delete removed the row between the insert and the lock.
-		}
-		if isNull(cur) {
-			cur = seed
-		}
-		next, err := fn(cur)
-		if err != nil {
+	var cur json.RawMessage
+	for {
+		if _, err := tx.Exec(ctx, insertSQL+`ON CONFLICT (key) DO NOTHING`, c.Key, seed, now); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE key_value_store SET value = $2, updated_at = $3 WHERE key = $1`, key, next, now)
+		err := tx.QueryRow(ctx, lockSQL, c.Key).Scan(&cur)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		// A concurrent delete removed the row between the insert and the lock.
+	}
+	if isNull(cur) {
+		cur = seed
+	}
+	next, err := c.Fn(cur)
+	if err != nil {
 		return err
-	})
+	}
+	_, err = tx.Exec(ctx, `UPDATE key_value_store SET value = $2, updated_at = $3 WHERE key = $1`, c.Key, next, now)
+	return err
 }
 
 // DeleteIf removes key if pred holds for its value, holding the row lock while pred runs, and returns the

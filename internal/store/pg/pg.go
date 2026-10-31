@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
@@ -137,4 +138,19 @@ func (db *DB) Close() { db.pool.Close() }
 // returns an error or panics.
 func (db *DB) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return pgx.BeginTxFunc(ctx, db.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
+}
+
+// Rejected reports whether err is the database refusing a statement for a reason retrying does not change, as
+// opposed to a failed or lost connection, a shutdown, a server that turned read-only in a failover, a conflict
+// with another transaction, or a lack of resources.
+func Rejected(err error) bool {
+	var e *pgconn.PgError
+	if errors.As(err, new(*pgconn.ConnectError)) || !errors.As(err, &e) || e.Code == "25006" {
+		return false
+	}
+	switch e.Code[:min(2, len(e.Code))] {
+	case "08", "40", "53", "57", "58":
+		return false
+	}
+	return true
 }
