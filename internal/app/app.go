@@ -12,11 +12,18 @@ import (
 
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/dost/internal/dispatch"
+	"github.com/sarpaydemir/dost/internal/gateway"
 	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/dost/internal/memory"
+	"github.com/sarpaydemir/dost/internal/pipeline"
 	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/routing"
+	"github.com/sarpaydemir/dost/internal/store/history"
+	"github.com/sarpaydemir/dost/internal/store/journal"
 	"github.com/sarpaydemir/dost/internal/store/kv"
 	"github.com/sarpaydemir/dost/internal/store/pg"
+	"github.com/sarpaydemir/dost/internal/store/vector"
 )
 
 // Run starts the agent that env describes and runs it until ctx is cancelled or a component fails. It returns
@@ -46,6 +53,8 @@ type startup struct {
 	components []string
 	dsn        string
 	settings   *config.Provider
+	// prompts is the catalog before the settings' overrides.
+	prompts *prompt.Catalog
 }
 
 // load validates the environment and loads the prompt catalog and the settings, reporting every problem at once.
@@ -55,9 +64,10 @@ func load(env config.Env, table adapters, clk clock.Clock, secrets *logging.Secr
 	}
 	components, errComponents := enable(env.Components)
 	dsn, errDSN := pg.DSN(env)
-	_, errPrompts := prompt.Load(table.prompts(), env.PromptsDir)
+	prompts, errPrompts := prompt.Load(table.prompts(), env.PromptsDir)
 	settings, errSettings := config.NewProvider(env, table.secretKeys(), validator(table), secrets, clk, log)
-	return startup{components: components, dsn: dsn, settings: settings}, errors.Join(errComponents, errDSN, errPrompts, errSettings)
+	return startup{components: components, dsn: dsn, settings: settings, prompts: prompts},
+		errors.Join(errComponents, errDSN, errPrompts, errSettings)
 }
 
 // validator checks each settings snapshot: the selected adapters build from it and its prompts overrides apply to
@@ -94,20 +104,54 @@ func run(ctx context.Context, env config.Env, version string, table adapters, cl
 	if err != nil {
 		return err
 	}
-	identity := routing.NewIdentity(kv.New(db, clk), s.BotIdentityKey, clk, log)
+	store := kv.New(db, clk)
+	identity := routing.NewIdentity(store, s.BotIdentityKey, clk, log)
 	identity.Verify(ctx, platform)
 
 	sup := NewSupervisor(log, clk, env.ShutdownTimeout)
+	lock := db.NewLock(env.AgentID, clk, log)
 	var components []Component
 	if env.HTTPAddr != "" {
 		components = append(components, newHealth(env.HTTPAddr, db.Ping, sup.NotReady, log.With(logging.KeyComponent, "http")))
 	}
+	components = append(components, conversation(ctx, sup.WorkContext(), env, cfg, sel, db, store, identity, lock, clk, log)...)
 	err = sup.Run(ctx, components...)
 	if !errors.Is(err, ErrShutdownTimeout) {
-		// After a shutdown timeout components may still hold connections, and Close would wait for them.
+		// After a shutdown timeout components may still hold connections, and closing would wait for them; the
+		// process exit frees them.
+		lock.Release()
 		db.Close()
 	}
 	return err
+}
+
+// conversation returns the selected conversation components in start order. Runs and other in-flight work derive
+// from work. From the moment ctx ends, no pipeline run starts and the flusher takes no buffer.
+func conversation(ctx, work context.Context, env config.Env, cfg startup, sel selected, db *pg.DB, store *kv.Store,
+	identity *routing.Identity, lock *pg.Lock, clk clock.Clock, log *slog.Logger) []Component {
+	s := cfg.settings.Current(ctx)
+	named := func(name string) *slog.Logger { return log.With(logging.KeyComponent, name) }
+	runs := journal.New(db, env.AgentID, clk)
+	pipe := &pipeline.Pipeline{
+		Settings: cfg.settings, Platform: sel.platform, Model: sel.model, Identity: identity,
+		History:   memory.NewHistory(history.New(db, clk), clk, s.MemoryKeyPrefix),
+		Knowledge: vector.New(db), Prompts: cfg.prompts, Zone: env.Timezone, Clock: clk, Log: named("pipeline"),
+	}
+	scheduler := pipeline.NewScheduler(ctx, work, pipe.Answer, runs, env.PipelineWorkers, env.PipelineRunTimeout, clk, named("pipeline"))
+	flusher := dispatch.NewFlusher(s.BufferPrefix, store, runs, lock, scheduler, clk, named("flusher"))
+	dispatcher := dispatch.NewDispatcher(work, cfg.settings, sel.platform, identity, store, flusher, clk, named("dispatcher"))
+	recovery := dispatch.NewRecovery(dispatcher, store, named("recovery"))
+	built := map[string]Component{
+		"pipeline": scheduler, "flusher": flusher, "dispatcher": dispatcher, "recovery": recovery,
+		"gateway": gateway.New(cfg.settings, sel.platform, dispatcher.Enqueue, recovery.Trigger, clk, named("gateway")),
+	}
+	var out []Component
+	for _, name := range cfg.components {
+		if c, ok := built[name]; ok {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func check(ctx context.Context, env config.Env, verifyDB bool, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) (string, error) {
