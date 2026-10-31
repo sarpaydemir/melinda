@@ -134,6 +134,16 @@ func (db *DB) Ping(ctx context.Context) error { return db.pool.Ping(ctx) }
 // Close closes every connection in the pool.
 func (db *DB) Close() { db.pool.Close() }
 
+// Exec runs one statement outside an explicit transaction.
+func (db *DB) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return db.pool.Exec(ctx, sql, args...)
+}
+
+// Query runs one query outside an explicit transaction.
+func (db *DB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return db.pool.Query(ctx, sql, args...)
+}
+
 // WithTx runs fn in a READ COMMITTED transaction that commits when fn returns nil and rolls back when it
 // returns an error or panics.
 func (db *DB) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
