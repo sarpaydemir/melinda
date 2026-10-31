@@ -62,6 +62,8 @@ type Settings struct {
 	// FileMaxCount and FileMaxBytes bound the attachments of one message: how many are read and the size of each.
 	FileMaxCount int   `json:"file_max_count"`
 	FileMaxBytes int64 `json:"file_max_bytes"`
+	// SearchResultLimit is the most web search results the search_web tool reads.
+	SearchResultLimit int `json:"search_result_limit"`
 
 	// Prompts replaces the texts of prompt catalog entries, by ID.
 	Prompts map[string]string `json:"prompts"`
@@ -183,6 +185,7 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 		AssistantLabel:      agentID,
 		FileMaxCount:        5,
 		FileMaxBytes:        20 << 20,
+		SearchResultLimit:   5,
 		agentID:             agentID,
 		secrets:             secrets,
 		doc:                 doc,
@@ -200,6 +203,9 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 	}
 	if s.FileMaxBytes < 1 {
 		problems = append(problems, errors.New("file_max_bytes: must be positive"))
+	}
+	if s.SearchResultLimit < 1 {
+		problems = append(problems, errors.New("search_result_limit: must be positive"))
 	}
 	// A null entry would otherwise decode as empty text.
 	var prompts map[string]*string

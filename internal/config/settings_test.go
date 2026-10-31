@@ -82,6 +82,7 @@ func defaults() config.Settings {
 		AssistantLabel:      "agent",
 		FileMaxCount:        5,
 		FileMaxBytes:        20971520,
+		SearchResultLimit:   5,
 	}
 }
 
@@ -177,7 +178,7 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"model_provider": null, "web_search": null, "web_fetch": null, "debounce_seconds": null,
 		"buffer_prefix": null, "last_seen_key": null, "bot_identity_key": null, "memory_key_prefix": null,
 		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
-		"file_max_count": null, "file_max_bytes": null, "prompts": null
+		"file_max_count": null, "file_max_bytes": null, "search_result_limit": null, "prompts": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
@@ -253,10 +254,11 @@ func TestToolLimitsFallBackWhenZero(t *testing.T) {
 	}
 }
 
-func TestAttachmentLimitsAreSettings(t *testing.T) {
-	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000}`)
-	if s.FileMaxCount != 2 || s.FileMaxBytes != 1000 {
-		t.Errorf("got %d files of %d bytes, want 2 of 1000", s.FileMaxCount, s.FileMaxBytes)
+func TestLimitsAreSettings(t *testing.T) {
+	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000, "search_result_limit": 8}`)
+	if s.FileMaxCount != 2 || s.FileMaxBytes != 1000 || s.SearchResultLimit != 8 {
+		t.Errorf("got %d files of %d bytes and %d search results, want 2 of 1000 and 8",
+			s.FileMaxCount, s.FileMaxBytes, s.SearchResultLimit)
 	}
 }
 
@@ -419,6 +421,7 @@ func TestWrongTypesNameTheKeyAndExpectedType(t *testing.T) {
 		{`"file_max_count": 0`, "file_max_count: must be positive"},
 		{`"file_max_bytes": 1.5`, "file_max_bytes: expected integer"},
 		{`"file_max_bytes": -1`, "file_max_bytes: must be positive"},
+		{`"search_result_limit": 0`, "search_result_limit: must be positive"},
 		{`"prompts": ["x"]`, "prompts: expected object of strings"},
 		{`"prompts": {"error.generic": 1}`, "prompts: expected object of strings"},
 		{`"prompts": {"error.generic": null}`, "prompts: expected object of strings"},

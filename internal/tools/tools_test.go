@@ -70,7 +70,7 @@ func TestOfferOrdersToolsAndKeepsTheOrderWhenFiltering(t *testing.T) {
 			[]string{"search_web", "tracker_create", "send_progress_update"}},
 		{"none enabled", []string{}, nil},
 	} {
-		set, err := tools.Offer(tool.Call{}, c.enabled, contributed)
+		set, err := tools.Offer(tool.Call{}, c.enabled, tools.Builtin{}, contributed)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
@@ -81,7 +81,7 @@ func TestOfferOrdersToolsAndKeepsTheOrderWhenFiltering(t *testing.T) {
 }
 
 func TestOfferRejectsEnabledNamesOfNoOfferedTool(t *testing.T) {
-	_, err := tools.Offer(tool.Call{}, []string{"search_web", "teleport", "Search_Web"}, contributed)
+	_, err := tools.Offer(tool.Call{}, []string{"search_web", "teleport", "Search_Web"}, tools.Builtin{}, contributed)
 	want := `enabled_tools: unknown tool "teleport"` + "\n" + `enabled_tools: unknown tool "Search_Web"`
 	if err == nil || err.Error() != want {
 		t.Errorf("Offer = %v, want %q", err, want)
@@ -90,7 +90,7 @@ func TestOfferRejectsEnabledNamesOfNoOfferedTool(t *testing.T) {
 
 func TestExecuteTurnsEveryFailureIntoAResult(t *testing.T) {
 	failing := tracker{name: "tracker_fail", err: errors.New("tracker is down")}
-	set, err := tools.Offer(tool.Call{}, []string{"tracker_list", "tracker_fail"}, append(contributed, failing))
+	set, err := tools.Offer(tool.Call{}, []string{"tracker_list", "tracker_fail"}, tools.Builtin{}, append(contributed, failing))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestConcurrentRepliesEachCallWithTheirOwnContext(t *testing.T) {
 				Direct:         reply%2 == 0,
 				Requester:      func(context.Context) string { return "Ada " + user },
 			}
-			set, err := tools.Offer(call, nil, contributed)
+			set, err := tools.Offer(call, nil, tools.Builtin{}, contributed)
 			if err != nil {
 				t.Error(err)
 				return

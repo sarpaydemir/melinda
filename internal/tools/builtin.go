@@ -4,14 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 
 	"github.com/sarpaydemir/dost/internal/port/tool"
+	"github.com/sarpaydemir/dost/internal/port/web"
 )
 
-// builtin returns the built-in tools offered before the contributed ones and those offered after them.
-func builtin() (knowledge, conversation []tool.Tool) {
+// Builtin is what the built-in tools work with while answering one message.
+type Builtin struct {
+	Search web.Searcher
+	// SearchLimit is the most results search_web reads.
+	SearchLimit int
+	Log         *slog.Logger
+}
+
+// tools returns the built-in tools offered before the contributed ones and those offered after them.
+func (b Builtin) tools() (knowledge, conversation []tool.Tool) {
 	knowledge = []tool.Tool{
-		declared{"search_web", `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`},
+		searchWeb{b},
 		declared{"visit_page", `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`},
 		declared{"search_public_kb", `{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"}},"required":["query"]}`},
 		declared{"generate_image", `{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}`},

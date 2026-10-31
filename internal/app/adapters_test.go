@@ -15,6 +15,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/port/model"
 	"github.com/sarpaydemir/dost/internal/port/tool"
 	"github.com/sarpaydemir/dost/internal/port/web"
+	"github.com/sarpaydemir/dost/internal/testkit/searxngfake"
 )
 
 type namedTool string
@@ -147,7 +148,7 @@ func TestBuiltinSecretKeysAreTheExistingDocumentKeys(t *testing.T) {
 	want := []config.SecretKey{
 		{Key: "key"}, {Key: "mattermost_token"}, {Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true},
 	}
-	if got := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).secretKeys(); !slices.Equal(got, want) {
+	if got := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).secretKeys(); !slices.Equal(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
@@ -161,7 +162,7 @@ func TestBuiltinModelProviderIsOpenAIByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).models[s.ModelProvider]
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).models[s.ModelProvider]
 	if !ok {
 		t.Fatalf("no model provider registered as %q", s.ModelProvider)
 	}
@@ -179,7 +180,7 @@ func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).platforms[s.ChatPlatform]
+	p, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).platforms[s.ChatPlatform]
 	if !ok {
 		t.Fatalf("no platform registered as %q", s.ChatPlatform)
 	}
@@ -189,5 +190,26 @@ func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	}
 	if got := platform.Identity(); got != (chat.User{ID: "bot"}) {
 		t.Errorf("identity = %+v", got)
+	}
+}
+
+func TestBuiltinWebSearchIsSearXNGByDefaultAtTheConfiguredAddress(t *testing.T) {
+	fake := searxngfake.New(t)
+	fake.Search().Reply(searxngfake.Results(searxngfake.Result{Title: "Go", URL: "https://go.dev"}))
+	s, err := config.Load(map[string]json.RawMessage{"model": json.RawMessage(`"m"`)}, "agent", nil,
+		func(*config.Settings) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", fake.URL(), slog.New(slog.DiscardHandler)).searchers[s.WebSearch]
+	if !ok {
+		t.Fatalf("no web search registered as %q", s.WebSearch)
+	}
+	searcher, err := e.open(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results, err := searcher.Search(t.Context(), "golang", 5); err != nil || len(results) != 1 {
+		t.Errorf("search = %d results, %v; want the instance's one", len(results), err)
 	}
 }

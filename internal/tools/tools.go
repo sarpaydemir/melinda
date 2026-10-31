@@ -20,10 +20,11 @@ type Set struct {
 }
 
 // Offer returns the tools offered to the model, in this order: the built-in knowledge tools, contributed, and the
-// built-in conversation tools. With enabled not nil, only the tools it names are offered, in the same order; a
-// name of no such tool is an error. Each call of a tool gets call with the call's arguments.
-func Offer(call tool.Call, enabled []string, contributed []tool.Tool) (Set, error) {
-	knowledge, conversation := builtin()
+// built-in conversation tools; the built-in tools work with b. With enabled not nil, only the tools it names are
+// offered, in the same order; a name of no such tool is an error. Each call of a tool gets call with the call's
+// arguments.
+func Offer(call tool.Call, enabled []string, b Builtin, contributed []tool.Tool) (Set, error) {
+	knowledge, conversation := b.tools()
 	all := slices.Concat(knowledge, contributed, conversation)
 	if enabled == nil {
 		return Set{all, call}, nil

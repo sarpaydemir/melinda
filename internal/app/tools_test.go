@@ -31,12 +31,12 @@ func TestDefaultToolsAreTheEstablishedArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	table := builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler))
+	table := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler))
 	sel, err := table.choose(selection(s))
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := tools.Offer(tool.Call{}, s.EnabledTools, sel.contributed(s))
+	set, err := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s))
 	if err != nil {
 		t.Fatal(err)
 	}

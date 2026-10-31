@@ -216,7 +216,7 @@ func TestCompatProfileRendersItsFixtures(t *testing.T) {
 	if dir == "" {
 		t.Skip("DOST_COMPAT_PROFILE is not set")
 	}
-	c, err := prompt.Load(builtin(http.DefaultTransport, clock.Real(), "dost/test", slog.New(slog.DiscardHandler)).prompts(), filepath.Join(dir, "prompts"))
+	c, err := prompt.Load(builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).prompts(), filepath.Join(dir, "prompts"))
 	if err != nil {
 		t.Fatal(err)
 	}

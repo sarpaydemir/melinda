@@ -23,14 +23,14 @@ import (
 // before contacting the chat platform when the configuration is invalid or the database cannot be prepared.
 func Run(ctx context.Context, env config.Env, version string, secrets *logging.Secrets, log *slog.Logger) error {
 	clk := clock.Real()
-	return run(ctx, env, version, builtin(http.DefaultTransport, clk, "dost/"+version, log), clk, secrets, log)
+	return run(ctx, env, version, builtin(http.DefaultTransport, clk, "dost/"+version, env.SearXNGURL, log), clk, secrets, log)
 }
 
 // Check validates the configuration as Run does and, with db, also verifies the database schema without changing
 // it. It returns a summary of the configuration with secrets masked.
 func Check(ctx context.Context, env config.Env, version string, db bool, secrets *logging.Secrets, log *slog.Logger) (string, error) {
 	clk := clock.Real()
-	return check(ctx, env, db, builtin(http.DefaultTransport, clk, "dost/"+version, log), clk, secrets, log)
+	return check(ctx, env, db, builtin(http.DefaultTransport, clk, "dost/"+version, env.SearXNGURL, log), clk, secrets, log)
 }
 
 // ExportPrompts writes the effective prompt catalog to dir, one <id>.txt file per entry: the defaults, the profile
@@ -38,7 +38,7 @@ func Check(ctx context.Context, env config.Env, version string, db bool, secrets
 // writes nothing when any of those files exists.
 func ExportPrompts(ctx context.Context, env config.Env, version, dir string, force bool, secrets *logging.Secrets, log *slog.Logger) error {
 	clk := clock.Real()
-	return exportPrompts(ctx, env, dir, force, builtin(http.DefaultTransport, clk, "dost/"+version, log), clk, secrets, log)
+	return exportPrompts(ctx, env, dir, force, builtin(http.DefaultTransport, clk, "dost/"+version, env.SearXNGURL, log), clk, secrets, log)
 }
 
 // startup is the validated configuration that Run and Check start from.

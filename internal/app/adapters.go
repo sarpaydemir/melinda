@@ -12,6 +12,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
 	"github.com/sarpaydemir/dost/internal/adapters/openai"
 	"github.com/sarpaydemir/dost/internal/adapters/plane"
+	"github.com/sarpaydemir/dost/internal/adapters/searxng"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -38,8 +39,9 @@ type adapters struct {
 }
 
 // builtin is the table of the adapters this binary ships: their HTTP requests go through transport, clk times
-// their waits, userAgent identifies them where they send one, and they log to log.
-func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string, log *slog.Logger) adapters {
+// their waits, userAgent identifies them where they send one, searxngURL is the address of the SearXNG instance,
+// and they log to log.
+func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL string, log *slog.Logger) adapters {
 	return adapters{
 		platforms: map[string]platformAdapter{
 			"mattermost": {
@@ -53,6 +55,11 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string, log
 			"openai": {
 				open:    func(s *config.Settings) (model.Provider, error) { return openai.New(s, transport, clk, userAgent) },
 				secrets: []config.SecretKey{{Key: "key"}},
+			},
+		},
+		searchers: map[string]entry[web.Searcher]{
+			"searxng": {
+				open: func(s *config.Settings) (web.Searcher, error) { return searxng.New(s, searxngURL, transport) },
 			},
 		},
 		tools: []toolSource{{
@@ -173,7 +180,7 @@ func selection(s *config.Settings) names {
 // every unknown name and invalid adapter setting at once.
 func (a adapters) validate(s *config.Settings) error {
 	sel, err := a.choose(selection(s))
-	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, sel.contributed(s))
+	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s))
 	return errors.Join(err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s), errTools)
 }
 
