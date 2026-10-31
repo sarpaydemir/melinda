@@ -3,9 +3,11 @@ package mattermost
 import (
 	"cmp"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
 // post is the part of a Mattermost post that routing reads.
@@ -53,13 +55,27 @@ func (*platform) Decode(event json.RawMessage) (chat.Message, bool) {
 	if kind == chat.Direct {
 		replyRootID = ""
 	}
-	for key, v := range map[string]any{
-		"channel_type": channelType, "post_id": p.ID, "is_dm": kind == chat.Direct, "is_thread": p.RootID != "",
-		"scope": scope, "root_id": p.RootID, "context_id": contextID, "reply_root_id": replyRootID,
-	} {
-		fields[key] = encode(v)
+	stored, _ := textfmt.Decode([]byte(encoded), false)
+	members, ok := stored.(textfmt.Object)
+	if !ok {
+		return chat.Message{}, false
 	}
-	data["post"] = encode(string(encode(fields)))
+	for _, f := range []textfmt.Member{
+		{Key: "post_id", Value: p.ID}, {Key: "channel_type", Value: channelType}, {Key: "is_dm", Value: kind == chat.Direct},
+		{Key: "is_thread", Value: p.RootID != ""}, {Key: "scope", Value: scope}, {Key: "root_id", Value: p.RootID},
+		{Key: "reply_root_id", Value: replyRootID}, {Key: "context_id", Value: contextID},
+	} {
+		if i := slices.IndexFunc(members, func(m textfmt.Member) bool { return m.Key == f.Key }); i >= 0 {
+			members[i].Value = f.Value
+		} else {
+			members = append(members, f)
+		}
+	}
+	post, err := textfmt.EncodeASCII(members)
+	if err != nil { // a number too large for a float
+		return chat.Message{}, false
+	}
+	data["post"] = encode(string(post))
 	frame["data"] = encode(data)
 
 	var created time.Time
@@ -73,7 +89,7 @@ func (*platform) Decode(event json.RawMessage) (chat.Message, bool) {
 	}, true
 }
 
-// encode marshals a string, a bool, or a map of values decoded from JSON, none of which can fail.
+// encode marshals a string or a map of values decoded from JSON, neither of which can fail.
 func encode(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b

@@ -240,6 +240,25 @@ func TestDecodeReadsAStoredPayload(t *testing.T) {
 	}
 }
 
+func TestDecodeStoresThePostInReceivedOrderWithRoutingFieldsAppended(t *testing.T) {
+	tests := []struct{ name, channelType, post, want string }{
+		{"channel post", "O",
+			`{"id":"p2","create_at":1793448001000,"update_at":1793448001000,"delete_at":0,"user_id":"u1","channel_id":"c1","root_id":"","message":"@İlke capital","type":""}`,
+			`{"id": "p2", "create_at": 1793448001000, "update_at": 1793448001000, "delete_at": 0, "user_id": "u1", "channel_id": "c1", "root_id": "", "message": "@\u0130lke capital", "type": "", "post_id": "p2", "channel_type": "O", "is_dm": false, "is_thread": false, "scope": "public", "reply_root_id": "p2", "context_id": "p2"}`},
+		{"thread post carrying its own channel type", "P",
+			`{"id":"p2","root_id":"r1","message":"Merhaba İlke 😀","props":{"x":[1,{}]},"channel_type":"O"}`,
+			`{"id": "p2", "root_id": "r1", "message": "Merhaba \u0130lke \ud83d\ude00", "props": {"x": [1, {}]}, "channel_type": "P", "post_id": "p2", "is_dm": false, "is_thread": true, "scope": "public", "reply_root_id": "r1", "context_id": "r1"}`},
+	}
+	p := decoder(t)
+	for _, tt := range tests {
+		ev, _ := json.Marshal(map[string]any{"data": map[string]any{"channel_type": tt.channelType, "post": tt.post}})
+		var stored struct{ Data struct{ Post string } }
+		if err := json.Unmarshal(decode(t, p, ev).Payload, &stored); err != nil || stored.Data.Post != tt.want {
+			t.Errorf("%s: payload post = %s, %v\nwant %s", tt.name, stored.Data.Post, err, tt.want)
+		}
+	}
+}
+
 func TestDecodeReportsNoMessageWithoutAPostObject(t *testing.T) {
 	events := []string{
 		`{"data":null}`,
@@ -261,6 +280,7 @@ func TestDecodeReportsNoMessageWithoutAPostObject(t *testing.T) {
 		`{"data":{"post":"{\"id\":\"p1\",\"message\":5}"}}`,
 		`{"data":{"post":"{\"id\":\"p1\",\"create_at\":\"soon\"}"}}`,
 		`{"data":{"post":"{\"id\":\"p1\",\"file_ids\":\"f1\"}"}}`,
+		`{"data":{"post":"{\"id\":\"p1\",\"props\":{\"n\":1e999}}"}}`,
 	}
 	p := decoder(t)
 	for _, ev := range events {

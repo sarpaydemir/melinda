@@ -57,7 +57,7 @@
             },
             "data": {
               "channel_type": "O",
-              "post": "{\"channel_id\":\"ch100000000000000000000000\",\"channel_type\":\"O\",\"context_id\":\"p1000000000000000000000000\",\"create_at\":1793448000000,\"delete_at\":0,\"id\":\"p1000000000000000000000000\",\"is_dm\":false,\"is_thread\":false,\"message\":\"hello everyone\",\"post_id\":\"p1000000000000000000000000\",\"reply_root_id\":\"p1000000000000000000000000\",\"root_id\":\"\",\"scope\":\"public\",\"type\":\"\",\"update_at\":1793448000000,\"user_id\":\"u1000000000000000000000000\"}"
+              "post": "{\"id\": \"p1000000000000000000000000\", \"create_at\": 1793448000000, \"update_at\": 1793448000000, \"delete_at\": 0, \"user_id\": \"u1000000000000000000000000\", \"channel_id\": \"ch100000000000000000000000\", \"root_id\": \"\", \"message\": \"hello everyone\", \"type\": \"\", \"post_id\": \"p1000000000000000000000000\", \"channel_type\": \"O\", \"is_dm\": false, \"is_thread\": false, \"scope\": \"public\", \"reply_root_id\": \"p1000000000000000000000000\", \"context_id\": \"p1000000000000000000000000\"}"
             },
             "event": "posted",
             "seq": 1

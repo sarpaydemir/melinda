@@ -45,7 +45,7 @@
             },
             "data": {
               "channel_type": "D",
-              "post": "{\"channel_id\":\"dm100000000000000000000000\",\"channel_type\":\"D\",\"context_id\":\"p1000000000000000000000000\",\"create_at\":1793448000000,\"delete_at\":0,\"id\":\"p1000000000000000000000000\",\"is_dm\":true,\"is_thread\":false,\"message\":\"write a lot\",\"post_id\":\"p1000000000000000000000000\",\"reply_root_id\":\"\",\"root_id\":\"\",\"scope\":\"private\",\"type\":\"\",\"update_at\":1793448000000,\"user_id\":\"u1000000000000000000000000\"}"
+              "post": "{\"id\": \"p1000000000000000000000000\", \"create_at\": 1793448000000, \"update_at\": 1793448000000, \"delete_at\": 0, \"user_id\": \"u1000000000000000000000000\", \"channel_id\": \"dm100000000000000000000000\", \"root_id\": \"\", \"message\": \"write a lot\", \"type\": \"\", \"post_id\": \"p1000000000000000000000000\", \"channel_type\": \"D\", \"is_dm\": true, \"is_thread\": false, \"scope\": \"private\", \"reply_root_id\": \"\", \"context_id\": \"p1000000000000000000000000\"}"
             },
             "event": "posted",
             "seq": 1
