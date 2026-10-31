@@ -84,6 +84,9 @@ func (f failure) Error() string { return string(f) }
 
 var errBlocked = errors.New("non-public address")
 
+// parsing lets one page be parsed at a time, across fetchers: a page's parse tree can take 80 times its size.
+var parsing = make(chan struct{}, 1)
+
 // Fetch returns "Title: <title>\nURL: <url>\n\n<text>" for the page at pageURL, which is fetched over https unless
 // it starts with http. The title has at most 8000 code points and the text 5000; a failure text quotes at most
 // maxQuote code points of anything the server sent.
@@ -94,6 +97,12 @@ func (f *fetcher) Fetch(ctx context.Context, pageURL string) (string, error) {
 	page, err := f.get(ctx, pageURL)
 	if err != nil {
 		return "", err
+	}
+	select {
+	case parsing <- struct{}{}:
+		defer func() { <-parsing }()
+	case <-ctx.Done():
+		return "", failed(ctx.Err(), pageURL, true)
 	}
 	title, text := extract(page)
 	if text == "" {

@@ -180,6 +180,39 @@ func TestFailureTexts(t *testing.T) {
 	}
 }
 
+func TestPagesAreReadOneAtATime(t *testing.T) {
+	site := webfake.New(t, map[string]testkit.Response{"/": webfake.HTML("<title>T</title><p>x</p>")})
+	url := site.URL() + "/"
+	f := open(t, true)
+	parsing <- struct{}{} // another page is being read
+	done := make(chan string)
+	go func() { done <- fetch(f, url) }()
+	select {
+	case got := <-done:
+		t.Fatalf("Fetch returned %q while another page was read", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	<-parsing
+	if got, want := <-done, "Title: T\nURL: "+url+"\n\nT\nx"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestWaitToReadAPageEndsWithTheReply(t *testing.T) {
+	site := webfake.New(t, map[string]testkit.Response{"/": webfake.HTML("<title>T</title><p>x</p>")})
+	url := site.URL() + "/"
+	parsing <- struct{}{}
+	defer func() { <-parsing }()
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := open(t, true).Fetch(ctx, url); err == nil || err.Error() != "Error: Timeout accessing "+url {
+		t.Errorf("Fetch = %v, want the timeout failure", err)
+	}
+	if n := len(site.Requests()); n != 1 {
+		t.Errorf("%d requests, want 1", n)
+	}
+}
+
 func TestANameThatDoesNotResolveCannotBeConnectedTo(t *testing.T) {
 	f := newFetcher(&net.Dialer{Resolver: resolver(t)}, phase)
 	if got, want := fetch(f, "http://nonexistent.invalid/"), "Error: Cannot connect to http://nonexistent.invalid/"; got != want {

@@ -28,25 +28,19 @@ const (
 	// maxSharedStrings is as many as fit in one entry in the shortest form applications write.
 	maxSharedStrings = maxEntry / len("<si><t/></si>")
 	maxErrorText     = 200 // code points of an extraction error's text
+	// extractionMemory is the most memory one extraction holds at once, measured on workbooks built to reach the
+	// limits above.
+	extractionMemory = 160 << 20
 )
 
 var errLimit = errors.New("document exceeds the extraction limits")
-
-// extracting lets one extraction run at a time, so concurrent replies do not multiply its worst case.
-var extracting = make(chan struct{}, 1)
 
 // officeText extracts the text of a .docx, .xlsx or .xlsm attachment, for when the vision model cannot read the
 // file itself. Other files, and documents without text, give "".
 func officeText(ctx context.Context, f File) (string, error) {
 	ext := extension(f.Attachment)
-	if ext != ".docx" && ext != ".xlsx" && ext != ".xlsm" {
+	if !extractable(ext) {
 		return "", nil
-	}
-	select {
-	case extracting <- struct{}{}:
-		defer func() { <-extracting }()
-	case <-ctx.Done():
-		return "", ctx.Err()
 	}
 	text, err := extract(ctx, ext, f.Data)
 	if err != nil {
@@ -54,6 +48,8 @@ func officeText(ctx context.Context, f File) (string, error) {
 	}
 	return text, nil
 }
+
+func extractable(ext string) bool { return ext == ".docx" || ext == ".xlsx" || ext == ".xlsm" }
 
 func extract(ctx context.Context, ext string, data []byte) (string, error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))

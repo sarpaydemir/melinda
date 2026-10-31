@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 	"unicode/utf8"
 
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -386,21 +385,6 @@ func TestExtractionStopsWhenTheContextEnds(t *testing.T) {
 		if got, err := extract(ctx, tc.ext, data); !errors.Is(err, context.Canceled) {
 			t.Errorf("%s: extract = %q, %v; want the context's error", tc.entry, got, err)
 		}
-	}
-}
-
-func TestOfficeTextWaitsForTheRunningExtraction(t *testing.T) {
-	data := zipped(t, nil, "word/document.xml", "<a>x</a>")
-	extracting <- struct{}{}
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-	defer cancel()
-	_, err := officeText(ctx, office("a.docx", data))
-	<-extracting
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("officeText while another runs = %v, want the context's error", err)
-	}
-	if got, err := officeText(t.Context(), office("a.docx", data)); got != "x" || err != nil {
-		t.Errorf("officeText after it finished = %q, %v; want x", got, err)
 	}
 }
 

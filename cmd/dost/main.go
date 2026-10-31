@@ -77,6 +77,9 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
+		if limit := limitMemory(environ, os.DirFS("/sys/fs/cgroup")); limit > 0 {
+			log.Info("GOMEMLIMIT set from the container memory limit", "bytes", limit)
+		}
 		err = app.Run(ctx, env, version, secrets, log)
 		if err != nil {
 			log.Error("dost stopped", "err", err)

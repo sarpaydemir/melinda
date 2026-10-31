@@ -1,7 +1,9 @@
 package openai
 
 import (
+	"bytes"
 	"cmp"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -79,7 +81,9 @@ type function struct {
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
+// body is the request's JSON. Each file's data is encoded straight into it, so the body is the only copy made.
 func (p *provider) body(r model.Request) ([]byte, error) {
+	f := files{mark: rand.Text()}
 	req := request{
 		Model:       r.Model,
 		Messages:    make([]any, 0, len(r.Messages)),
@@ -87,7 +91,7 @@ func (p *provider) body(r model.Request) ([]byte, error) {
 		MaxTokens:   cmp.Or(r.MaxTokens, p.maxTokens),
 	}
 	for _, m := range r.Messages {
-		w, err := wire(m)
+		w, err := wire(m, &f)
 		if err != nil {
 			return nil, err
 		}
@@ -99,17 +103,21 @@ func (p *provider) body(r model.Request) ([]byte, error) {
 		}
 		req.ToolChoice, req.ParallelToolCalls = "auto", new(false)
 	}
-	return textfmt.Encode(req)
+	skeleton, err := textfmt.Encode(req)
+	if err != nil {
+		return nil, err
+	}
+	return f.splice(skeleton), nil
 }
 
-func wire(m model.Message) (any, error) {
+func wire(m model.Message, f *files) (any, error) {
 	switch {
 	case m.Role == model.RoleTool:
 		return toolResult{m.Role, m.ToolCallID, m.Name, m.Content}, nil
 	case m.Raw != nil:
 		return replay(m.Raw)
 	case len(m.Parts) > 0:
-		return message{Role: m.Role, Content: withParts(m.Content, m.Parts)}, nil
+		return message{Role: m.Role, Content: withParts(m.Content, m.Parts, f)}, nil
 	}
 	return message{Role: m.Role, Content: m.Content}, nil
 }
@@ -131,12 +139,14 @@ func replay(raw json.RawMessage) (message, error) {
 	return m, nil
 }
 
-// withParts is a text part with text followed by a part per file: images as images, anything else as a file.
-func withParts(text string, parts []model.Part) []any {
+// withParts is a text part with text followed by a part per file: images as images, anything else as a file. The
+// files' data is added to f, and their data URLs hold f's mark in its place.
+func withParts(text string, parts []model.Part, f *files) []any {
 	content := []any{textPart{"text", text}}
 	for _, part := range parts {
 		mediaType := cmp.Or(part.MediaType, "application/octet-stream")
-		url := "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(part.Data)
+		url := "data:" + mediaType + ";base64," + f.mark
+		f.data = append(f.data, part.Data)
 		if strings.HasPrefix(mediaType, "image/") {
 			var p imagePart
 			p.Type, p.ImageURL.URL = "image_url", url
@@ -148,4 +158,29 @@ func withParts(text string, parts []model.Part) []any {
 		content = append(content, p)
 	}
 	return content
+}
+
+// files are the data of a request's file parts, in request order, and the random mark that stands in for each in
+// the encoded request.
+type files struct {
+	mark string
+	data [][]byte
+}
+
+// splice replaces the marks in skeleton, in order, with the base64 encoding of the files' data.
+func (f files) splice(skeleton []byte) []byte {
+	if len(f.data) == 0 {
+		return skeleton
+	}
+	size := len(skeleton)
+	for _, d := range f.data {
+		size += base64.StdEncoding.EncodedLen(len(d)) - len(f.mark)
+	}
+	out := make([]byte, 0, size)
+	for _, d := range f.data {
+		before, after, _ := bytes.Cut(skeleton, []byte(f.mark))
+		out = base64.StdEncoding.AppendEncode(append(out, before...), d)
+		skeleton = after
+	}
+	return append(out, skeleton...)
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -245,6 +246,24 @@ func TestChatBodyWithParts(t *testing.T) {
 		MaxTokens:   4096,
 	})
 	golden.Assert(t, "chat_with_parts", append(body, '\n'))
+}
+
+func TestChatBodyIsTheOnlyCopyOfTheFilesItCarries(t *testing.T) {
+	data := make([]byte, 8<<20)
+	r := model.Request{Model: "m", Messages: []model.Message{{Role: model.RoleUser, Content: "?", Parts: []model.Part{
+		{Filename: "a.png", MediaType: "image/png", Data: data}, {Filename: "a.pdf", Data: data},
+	}}}}
+	p := &provider{temperature: "0.7"}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	body, err := p.body(r)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > uint64(len(body))+1<<20 {
+		t.Errorf("building a %d-byte body allocated %d bytes", len(body), allocated)
+	}
 }
 
 // toolTurn is a provider's answer requesting two calls, pretty-printed and with fields that are not sent back.

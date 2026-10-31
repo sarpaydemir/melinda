@@ -10,7 +10,10 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/files"
@@ -360,5 +363,88 @@ func TestFailuresAreLoggedWithTheirCause(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("log %q lacks %q", out.String(), want)
 		}
+	}
+}
+
+// shared serves one attachment to concurrent replies and counts its downloads.
+type shared struct {
+	chat.Platform
+	meta      chat.Attachment
+	downloads atomic.Int32
+}
+
+func (p *shared) Attachment(context.Context, string) (chat.Attachment, error) { return p.meta, nil }
+
+func (p *shared) Download(context.Context, string, int64) ([]byte, error) {
+	p.downloads.Add(1)
+	return []byte("data"), nil
+}
+
+// analysed is an analysis that returns the note named id.
+func analysed(id string) func(context.Context, files.File) files.Note {
+	return func(context.Context, files.File) files.Note { return files.Note{ID: id} }
+}
+
+// holding starts a reply whose attachment needs all the memory attachments may use and returns once the
+// attachment's analysis has started. The function it returns ends that analysis and returns the reply's context.
+func holding(t *testing.T, p *shared, s *config.Settings) func() files.Context {
+	t.Helper()
+	analysing, finish, done := make(chan struct{}), make(chan struct{}), make(chan files.Context)
+	go func() {
+		done <- files.Ingest(t.Context(), p, s, discard, []string{"f1"}, func(context.Context, files.File) files.Note {
+			close(analysing)
+			<-finish
+			return files.Note{ID: "first"}
+		})
+	}()
+	select {
+	case <-analysing:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first attachment was not analysed")
+	}
+	return sync.OnceValue(func() files.Context {
+		close(finish)
+		return <-done
+	})
+}
+
+// hugeFile is an attachment whose size alone needs more memory than attachments may use together.
+var hugeFile = chat.Attachment{Name: "huge.png", Size: 1 << 40}
+
+const hugeLimit = `{"model": "m", "vision_model": "v", "file_max_bytes": 1099511627776}`
+
+func TestAttachmentWaitsForTheMemoryAnotherReplyHolds(t *testing.T) {
+	p := &shared{meta: hugeFile}
+	s := settings(t, hugeLimit)
+	release := holding(t, p, s)
+	defer release()
+	second := make(chan files.Context)
+	go func() { second <- files.Ingest(t.Context(), p, s, discard, []string{"f1"}, analysed("second")) }()
+	select {
+	case c := <-second:
+		t.Fatalf("second reply ingested %q while the first held the memory", describe(c))
+	case <-time.After(50 * time.Millisecond):
+	}
+	if n := p.downloads.Load(); n != 1 {
+		t.Errorf("%d downloads while the first attachment was analysed, want 1", n)
+	}
+	check(t, release(), "first", "part huge.png (png)")
+	check(t, <-second, "second", "part huge.png (png)")
+}
+
+func TestWaitForMemoryEndsWithTheReply(t *testing.T) {
+	p := &shared{meta: hugeFile}
+	s := settings(t, hugeLimit)
+	defer holding(t, p, s)()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	var log strings.Builder
+	c := files.Ingest(ctx, p, s, slog.New(slog.NewTextHandler(&log, nil)), []string{"f1"}, analysed("second"))
+	check(t, c, "files.download_failed filename=huge.png", "part huge.png (png)")
+	if n := p.downloads.Load(); n != 1 {
+		t.Errorf("%d downloads, want only the first reply's", n)
+	}
+	if want := `file_id=f1 error="context deadline exceeded"`; !strings.Contains(log.String(), want) {
+		t.Errorf("log %q lacks %q", log.String(), want)
 	}
 }

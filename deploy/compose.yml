@@ -4,7 +4,7 @@ services:
   dost:
     image: ${IMAGE:-dost:latest}
     restart: unless-stopped
-    mem_limit: ${AGENT_MEMORY_LIMIT:-512m}
+    mem_limit: ${AGENT_MEMORY_LIMIT:-1g}
     stop_grace_period: 45s
     depends_on:
       postgres:

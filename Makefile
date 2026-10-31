@@ -7,7 +7,7 @@ LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.d
 TEST_DB_IMAGE ?= pgvector/pgvector:pg17
 
 .DEFAULT_GOAL := help
-.PHONY: help check fmt fmt-check vet staticcheck test test-integration vuln build image release release-dry-run tidy clean
+.PHONY: help check fmt fmt-check vet staticcheck test test-integration test-load vuln build image release release-dry-run tidy clean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -43,6 +43,9 @@ test-integration: ## Integration tests against a throwaway pgvector container (n
 	[ -n "$$ready" ] || { echo "test database did not become ready" >&2; exit 1; }; \
 	DOST_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$$port/postgres?sslmode=disable" \
 		$(GO) test -race -count=1 -tags=integration ./...
+
+test-load: ## Memory load test: worst-case concurrent replies under the default container memory limit
+	$(GO) test -count=1 -tags=load -run ContainerLimit -v ./internal/app/
 
 vuln: ## Known-vulnerability scan (pinned in go.mod)
 	$(GO) tool govulncheck ./...
