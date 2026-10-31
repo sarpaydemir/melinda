@@ -42,6 +42,15 @@ func IsErrorReply(s string) bool { return strings.Contains(s, "[ERR_") }
 
 func (c Client) failure(code string) string { return c.Failure + " [" + code + "]" }
 
+// Failed reports whether s is one of the failure replies Generate returns, unlike an answer that quotes one.
+func (c Client) Failed(s string) bool {
+	switch s {
+	case c.failure(CodeTruncated), c.failure(CodeInvokeFailedInitial), c.failure(CodeEmptyResponse):
+		return true
+	}
+	return false
+}
+
 // WithCutOffNote appends the cut-off note to content when r was cut off, and logs why it was.
 func (c Client) WithCutOffNote(ctx context.Context, content string, r model.Response) string {
 	if !r.CutOff {

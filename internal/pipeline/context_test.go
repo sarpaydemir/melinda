@@ -48,8 +48,19 @@ type historyReader interface {
 	Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 }
 
+// attachments describes every message's attachments the same way and records the messages it is given.
+type attachments struct {
+	fileCtx, summary string
+	got              []chat.Message
+}
+
+func (a *attachments) Describe(_ context.Context, m chat.Message) (string, string) {
+	a.got = append(a.got, m)
+	return a.fileCtx, a.summary
+}
+
 func loader(h historyReader, u *users, log *slog.Logger) pipeline.Loader {
-	return pipeline.Loader{History: h, Users: u, UserPrefix: userPrefix, Log: log}
+	return pipeline.Loader{History: h, Users: u, Files: &attachments{}, UserPrefix: userPrefix, Log: log}
 }
 
 var discard = slog.New(slog.DiscardHandler)
@@ -143,6 +154,23 @@ func TestLoadReadsTheConversationHistory(t *testing.T) {
 				t.Errorf("Load = %+v\nwant %+v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestLoadDescribesTheAttachments(t *testing.T) {
+	a := &attachments{fileCtx: "### report.pdf\nQuarterly numbers.", summary: "report.pdf (pdf)"}
+	l := loader(history{}, &users{}, discard)
+	l.Files = a
+	msg := chat.Message{ID: "p1", AuthorID: "u1", Text: "u1: Check this", AttachmentIDs: []string{"f1"}}
+	got, err := l.Load(context.Background(), msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.FileContext != a.fileCtx || got.FileSummary != a.summary {
+		t.Errorf("FileContext, FileSummary = %q, %q, want %q, %q", got.FileContext, got.FileSummary, a.fileCtx, a.summary)
+	}
+	if !reflect.DeepEqual(a.got, []chat.Message{msg}) {
+		t.Errorf("described %+v, want %+v", a.got, msg)
 	}
 }
 

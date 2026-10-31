@@ -22,9 +22,9 @@ func System(cat *Catalog, s *config.Settings, c Context, tools bool, now time.Ti
 	}
 	persona := textfmt.Strip(cmp.Or(s.Persona, cat.Text("system.persona_default")))
 	if persona != "" {
-		persona = cat.render("system.persona_section", map[string]string{"persona": persona})
+		persona = cat.Render("system.persona_section", map[string]string{"persona": persona})
 	}
-	filled := cat.render("system.template", map[string]string{
+	filled := cat.Render("system.template", map[string]string{
 		"base_prompt":       cat.Text("system.base"),
 		"persona":           persona,
 		"tool_instructions": toolText,
@@ -41,7 +41,7 @@ func System(cat *Catalog, s *config.Settings, c Context, tools bool, now time.Ti
 		}
 	}
 	userID := cmp.Or(c.UserID, unknownUserID)
-	return strings.Join(parts, "\n\n") + cat.render("system.current_user", map[string]string{
+	return strings.Join(parts, "\n\n") + cat.Render("system.current_user", map[string]string{
 		"user_id":  userID,
 		"is_admin": textfmt.Str(s.IsAdmin(userID)),
 		"security": cat.Text("system.security"),
@@ -53,14 +53,5 @@ func UserMessage(cat *Catalog, c Context, message string) string {
 	if c.FileSummary == "" {
 		return message
 	}
-	return message + cat.render("reply.files_suffix", map[string]string{"file_summary": c.FileSummary})
-}
-
-// render fills the entry id with values, which must cover every placeholder the entry declares.
-func (c *Catalog) render(id string, values map[string]string) string {
-	s, err := c.Template(id).Render(values)
-	if err != nil {
-		panic(err) // the catalog admits only declared placeholders, so a miss is a programming error
-	}
-	return s
+	return message + cat.Render("reply.files_suffix", map[string]string{"file_summary": c.FileSummary})
 }

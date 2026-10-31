@@ -60,9 +60,6 @@ func Builtin() []Entry {
 		{ID: "files.vision", Kind: KindFormat, Placeholders: []string{"user_message", "file_list"}},
 		{ID: "files.vision_office_label", Kind: KindRaw},
 		{ID: "files.section", Kind: KindFormat, Placeholders: []string{"filename", "analysis"}},
-		{ID: "files.empty_analysis", Kind: KindRaw},
-		{ID: "files.analysis_error", Kind: KindFormat, Placeholders: []string{"error"}},
-		{ID: "files.analysis_error_fallback", Kind: KindFormat, Placeholders: []string{"error", "text"}},
 		{ID: "files.office_fallback", Kind: KindFormat, Placeholders: []string{"text"}},
 		{ID: "files.analysis_unavailable", Kind: KindFormat, Placeholders: []string{"name"}},
 

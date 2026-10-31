@@ -89,6 +89,16 @@ func (c *Catalog) Template(id string) *Template { return c.item(id).tmpl }
 // Text returns the text of the entry id as loaded, before rendering. It panics when no entry has that ID.
 func (c *Catalog) Text(id string) string { return c.item(id).text }
 
+// Render fills the entry id with values, which must cover every placeholder the entry declares; it panics
+// otherwise, or when no entry has that ID.
+func (c *Catalog) Render(id string, values map[string]string) string {
+	s, err := c.Template(id).Render(values)
+	if err != nil {
+		panic(err) // the catalog admits only declared placeholders, so a miss is a programming error
+	}
+	return s
+}
+
 // Export writes the text of every entry to dir as <id>.txt, creating dir when needed. Unless force is set, it
 // writes nothing when any of those files exists.
 func (c *Catalog) Export(dir string, force bool) error {

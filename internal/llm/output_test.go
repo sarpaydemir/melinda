@@ -122,6 +122,24 @@ func TestErrorRepliesAreRecognizedByTheirMarker(t *testing.T) {
 	}
 }
 
+func TestFailedRecognizesOnlyTheFailureRepliesOfGenerate(t *testing.T) {
+	c, _ := client(&provider{})
+	for s, want := range map[string]bool{
+		failure + " [ERR_LLM_RESPONSE_TRUNCATED]":           true,
+		failure + " [ERR_EMPTY_RESPONSE]":                   true,
+		failure + " [ERR_LLM_INVOKE_FAILED_INITIAL]":        true,
+		failure + " [ERR_FINAL_LLM_FAIL]":                   false,
+		"It says: " + failure + " [ERR_EMPTY_RESPONSE]":     false,
+		failure + " [ERR_EMPTY_RESPONSE]\n":                 false,
+		"Sorry, I could not answer. [ERR_EMPTY_RESPONSE]":   false,
+		"The screenshot shows [ERR_LLM_RESPONSE_TRUNCATED]": false,
+	} {
+		if got := c.Failed(s); got != want {
+			t.Errorf("Failed(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
 func TestCutOffRepliesGetTheNoteAndAWarning(t *testing.T) {
 	for _, tc := range []struct {
 		resp          model.Response

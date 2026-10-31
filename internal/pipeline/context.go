@@ -22,13 +22,18 @@ const (
 	debugClip = 4000
 )
 
-// Loader loads a message's context from the conversation history and the chat platform. Every field is required.
+// Loader loads a message's context from the conversation history, the author's profile, and the attachments. Every
+// field is required.
 type Loader struct {
 	History interface {
 		Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 	}
 	Users interface {
 		User(ctx context.Context, id string) (chat.User, error)
+	}
+	// Files describes the message's attachments: the file context and the file summary.
+	Files interface {
+		Describe(ctx context.Context, m chat.Message) (fileCtx, summary string)
 	}
 	// UserPrefix introduces the author's name in UserContext.
 	UserPrefix string
@@ -44,6 +49,7 @@ func (l Loader) Load(ctx context.Context, m chat.Message) (prompt.Context, error
 		return prompt.Context{}, fmt.Errorf("read history %s: %w", read, err)
 	}
 	c := prompt.Context{History: items, UserID: m.AuthorID, UserContext: l.userContext(ctx, m.AuthorID)}
+	c.FileContext, c.FileSummary = l.Files.Describe(ctx, m)
 	if l.Log.Enabled(ctx, slog.LevelDebug) {
 		l.Log.DebugContext(ctx, "context loaded",
 			"read_key", read,
