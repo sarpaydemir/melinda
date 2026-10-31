@@ -94,6 +94,14 @@ func TestStripRemovesUnicodeWhitespace(t *testing.T) {
 	}
 }
 
+func TestRStripRemovesTrailingWhitespaceOnly(t *testing.T) {
+	for in, want := range map[string]string{" a\t\x1c\u3000\n": " a", " \x1f ": ""} {
+		if got := textfmt.RStrip(in); got != want {
+			t.Errorf("RStrip(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestLowerAppliesFullUnicodeLowercasing(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"@BOT", "@bot"},

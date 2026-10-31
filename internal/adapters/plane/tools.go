@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -45,11 +44,13 @@ const fields = `"name":{"type":"string"},"description":{"type":"string"},"state_
 	`"cycle_id":{"type":"string"},"priority":{"type":"string","enum":["urgent","high","medium","low","none"]},` +
 	`"start_date":{"type":"string"},"target_date":{"type":"string"},"parent_id":{"type":"string"}`
 
-// Tools are the tools Plane contributes with a settings snapshot, in the order they are offered. Their requests go
-// through transport, failed reads are retried with waits on clk, and they log to log.
-func Tools(s *config.Settings, transport http.RoundTripper, clk clock.Clock, log *slog.Logger) []tool.Tool {
+// Tools are the tools Plane contributes with a settings snapshot and the catalog c of their texts, in the order they
+// are offered. Their requests go through transport, failed reads and updates are retried with waits on clk, and they
+// log to log.
+func Tools(s *config.Settings, c *prompt.Catalog, transport http.RoundTripper, clk clock.Clock, log *slog.Logger) []tool.Tool {
 	r := reader{transport: transport, clk: clk, log: log}
 	r.invalid = s.Decode(&r.settings)
+	w := writer{r, c}
 	return []tool.Tool{
 		function{"plane_list_projects", `{"type":"object","properties":{}}`, r.projects},
 		function{"plane_get_project_metadata", `{"type":"object","properties":{"project_id":{"type":"string"}},"required":["project_id"]}`, r.metadata},
@@ -57,15 +58,15 @@ func Tools(s *config.Settings, transport http.RoundTripper, clk clock.Clock, log
 			`"state_id":{"type":"string"},"assignee_id":{"type":"string"},"cycle_id":{"type":"string"},"label_id":{"type":"string"},` +
 			`"order_by":{"type":"string"},"limit":{"type":"integer"}},"required":["project_id"]}`, r.workItems},
 		function{"plane_create_issue", `{"type":"object","properties":{"project_id":{"type":"string"},` + fields +
-			`},"required":["project_id","name"]}`, nil},
+			`},"required":["project_id","name"]}`, w.createWorkItem},
 		function{"plane_update_issue", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
-			fields + `},"required":["project_id","work_item_id"]}`, nil},
+			fields + `},"required":["project_id","work_item_id"]}`, w.updateWorkItem},
 		function{"plane_list_comments", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
 			`"limit":{"type":"integer"}},"required":["project_id","work_item_id"]}`, r.comments},
 		function{"plane_list_cycle_issues", `{"type":"object","properties":{"project_id":{"type":"string"},"cycle_id":{"type":"string"},` +
 			`"limit":{"type":"integer"}},"required":["project_id","cycle_id"]}`, r.cycleWorkItems},
 		function{"plane_create_comment", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
-			`"body":{"type":"string"}},"required":["project_id","work_item_id","body"]}`, nil},
+			`"body":{"type":"string"}},"required":["project_id","work_item_id","body"]}`, w.createComment},
 		function{"plane_get_work_item", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"}},` +
 			`"required":["project_id","work_item_id"]}`, r.workItem},
 	}
@@ -93,10 +94,18 @@ func Prompts() []prompt.Entry {
 		{ID: "tools.desc.plane_create_comment", Kind: prompt.KindRaw, Default: "Add a comment to a work item."},
 		{ID: "tools.desc.plane_get_work_item", Kind: prompt.KindRaw, Default: "Show a work item in detail: state, " +
 			"assignees, priority, and description."},
+		{ID: "plane.attr.requester_line", Kind: prompt.KindFormat, Placeholders: []string{"requested_by"},
+			Default: "— Requested by {requested_by}"},
+		{ID: "plane.attr.created", Kind: prompt.KindRaw, Default: "Created this work item."},
+		{ID: "plane.attr.edited", Kind: prompt.KindFormat, Placeholders: []string{"changed"}, Default: "Changed: {changed}"},
+		{ID: "plane.field_labels", Kind: prompt.KindRaw, Default: "name=name\ndescription=description\nstate_id=state\n" +
+			"assignee_ids=assignees\nlabel_ids=labels\ncycle_id=cycle\npriority=priority\nstart_date=start date\n" +
+			"target_date=target date\nparent_id=parent"},
+		{ID: "plane.month_aliases", Kind: prompt.KindRaw, Default: ""},
 	}
 }
 
-// function is a tool that runs call; one without call cannot be called yet.
+// function is a tool that runs call.
 type function struct {
 	name, parameters string
 	call             func(context.Context, tool.Call) (string, error)
@@ -106,12 +115,7 @@ func (f function) Name() string { return f.name }
 
 func (f function) Parameters() json.RawMessage { return json.RawMessage(f.parameters) }
 
-func (f function) Call(ctx context.Context, c tool.Call) (string, error) {
-	if f.call == nil {
-		return "", errors.ErrUnsupported
-	}
-	return f.call(ctx, c)
-}
+func (f function) Call(ctx context.Context, c tool.Call) (string, error) { return f.call(ctx, c) }
 
 // settings are Plane's keys of the settings document.
 type settings struct {
@@ -260,8 +264,17 @@ func (r reader) workItem(ctx context.Context, call tool.Call) (string, error) {
 // read returns the text that names the missing settings, or runs read with a client for the workspace until it
 // succeeds, at most three times.
 func (r reader) read(ctx context.Context, name string, read func(*Client) (string, error)) (string, error) {
+	c, missing, err := r.client()
+	if c == nil {
+		return missing, err
+	}
+	return tool.Retry(ctx, r.clk, r.log, name, func() (string, error) { return read(c) })
+}
+
+// client is a client for the workspace, or nil with the text that names the missing settings.
+func (r reader) client() (*Client, string, error) {
 	if r.invalid != nil {
-		return "", r.invalid
+		return nil, "", r.invalid
 	}
 	var missing []string
 	for _, s := range [][2]string{{r.Endpoint, "plane_endpoint"}, {r.APIKey, "plane_api_secret"}, {r.Workspace, "plane_workspace_slug"}} {
@@ -270,10 +283,9 @@ func (r reader) read(ctx context.Context, name string, read func(*Client) (strin
 		}
 	}
 	if len(missing) > 0 {
-		return "Error: Missing Plane config: " + strings.Join(missing, ", "), nil
+		return nil, "Error: Missing Plane config: " + strings.Join(missing, ", "), nil
 	}
-	c := NewClient(r.Endpoint, r.APIKey, r.Workspace, r.transport, r.log)
-	return tool.Retry(ctx, r.clk, r.log, name, func() (string, error) { return read(c) })
+	return NewClient(r.Endpoint, r.APIKey, r.Workspace, r.transport, r.log), "", nil
 }
 
 // enrich returns the cycle rows with the work items their issue holds or names: the rows that need no request keep

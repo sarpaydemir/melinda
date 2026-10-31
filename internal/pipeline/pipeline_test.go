@@ -502,6 +502,17 @@ func TestToolCallsAreDirectOnlyInOneToOneConversations(t *testing.T) {
 	}
 }
 
+func TestToolCallsNameTheAuthorAsThePlatformKnowsThem(t *testing.T) {
+	f := newFixture(t)
+	f.settings.s = &config.Settings{Model: "chat-model"}
+	f.model.toolCalls = [][]model.ToolCall{{{ID: "call_1", Name: "lookup", Arguments: json.RawMessage(`{}`)}}}
+	f.answer(t, job("dm:u1", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "hi", Kind: chat.Direct}))
+	calls := f.lookup.received()
+	if len(calls) != 1 || calls[0].Requester(t.Context()) != "u1 (@u1)" {
+		t.Errorf("calls %+v, want one whose requester is the author's label", calls)
+	}
+}
+
 func TestToolOfARunCancelledBeforeItsFirstWriteMayNotWrite(t *testing.T) {
 	f := newFixture(t)
 	f.settings.s = &config.Settings{Model: "chat-model"}

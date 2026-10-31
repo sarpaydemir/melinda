@@ -28,6 +28,9 @@ func Tail[T any](xs []T, n int) []T {
 // Strip removes leading and trailing Unicode whitespace, including U+001C..U+001F.
 func Strip(s string) string { return strings.TrimFunc(s, isSpace) }
 
+// RStrip removes the trailing whitespace that Strip removes.
+func RStrip(s string) string { return strings.TrimRightFunc(s, isSpace) }
+
 func isSpace(r rune) bool { return unicode.IsSpace(r) || ('\x1c' <= r && r <= '\x1f') }
 
 // SplitLines splits s at \n, \r\n, \r, \v, \f, U+001C..U+001E, U+0085, U+2028, and U+2029. A final line break

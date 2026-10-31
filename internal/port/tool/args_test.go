@@ -66,6 +66,15 @@ func TestStringIsTheFirstTruthyValueStripped(t *testing.T) {
 	}
 }
 
+func TestLookupTellsAMissingKeyFromANullOne(t *testing.T) {
+	args := arguments(t, `{"ids": null, "names": []}`)
+	for key, want := range map[string]bool{"ids": true, "names": true, "labels": false} {
+		if v, ok := args.Lookup(key); ok != want || (key == "names") != (v != nil) {
+			t.Errorf("Lookup(%q) = %v, %t; want present %t", key, v, ok, want)
+		}
+	}
+}
+
 func TestIntConvertsTheValueOrFallsBack(t *testing.T) {
 	for args, want := range map[string]int{
 		`{"limit": "7"}`:   7,

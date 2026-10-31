@@ -47,6 +47,16 @@ func (a Args) String(keys ...string) (string, error) {
 	return "", nil
 }
 
+// Lookup returns the value of key as decoded, and whether the arguments have it.
+func (a Args) Lookup(key string) (any, bool) {
+	for _, m := range a.members {
+		if m.Key == key {
+			return m.Value, true
+		}
+	}
+	return nil, false
+}
+
 // Int returns the value of key converted by textfmt.Int, or def.
 func (a Args) Int(key string, def int) int { return textfmt.Int(a.members.Get(key), def) }
 

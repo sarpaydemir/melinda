@@ -72,7 +72,7 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 			"httpfetch": {open: httpfetch.New},
 		},
 		tools: []toolSource{{
-			tools:   func(s *config.Settings, _ *prompt.Catalog) []tool.Tool { return plane.Tools(s, transport, clk, log) },
+			tools:   func(s *config.Settings, c *prompt.Catalog) []tool.Tool { return plane.Tools(s, c, transport, clk, log) },
 			prompts: plane.Prompts(),
 			secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}},
 		}},

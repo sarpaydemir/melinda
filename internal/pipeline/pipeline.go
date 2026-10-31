@@ -228,7 +228,7 @@ func (p *Pipeline) tools(s *config.Settings, cat *prompt.Catalog, out *outbound,
 		Catalog: cat, Clock: p.Clock, Log: log,
 	}
 	call := tool.Call{ConversationID: m.ConversationID, UserID: m.AuthorID, Direct: m.Kind == chat.Direct,
-		BeforeWrite: out.permit}
+		Requester: chat.Requester(out.platform, m.AuthorID), BeforeWrite: out.permit}
 	return tools.Offer(call, s.EnabledTools, b, p.Tools(s, cat))
 }
 

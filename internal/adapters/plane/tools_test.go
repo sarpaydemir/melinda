@@ -1,6 +1,8 @@
 package plane_test
 
 import (
+	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -15,6 +17,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/tool"
+	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/testkit"
 	"github.com/sarpaydemir/dost/internal/testkit/conformance"
 	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
@@ -66,8 +69,12 @@ type noWait struct{ *fakeclock.Clock }
 
 func (c noWait) NewTimer(time.Duration) clock.Timer { return c.Clock.NewTimer(0) }
 
-// planeTools are Plane's tools with the settings document doc; they never wait to retry.
-func planeTools(t *testing.T, doc string) []tool.Tool {
+// monthAliases name February in a second way.
+const monthAliases = "\nşubat, subat"
+
+// planeTools are Plane's tools with the settings document doc and the default texts, with monthAliases. It is now
+// on their clock, on which they never wait to retry.
+func planeTools(t *testing.T, doc string, now time.Time) []tool.Tool {
 	t.Helper()
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(doc), &m); err != nil {
@@ -77,7 +84,15 @@ func planeTools(t *testing.T, doc string) []tool.Tool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return plane.Tools(s, transport(t), noWait{fakeclock.New(time.Unix(0, 0))}, slog.New(slog.DiscardHandler))
+	defaults, err := prompt.Load(plane.Prompts(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	texts, err := defaults.With(map[string]string{"plane.month_aliases": monthAliases})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plane.Tools(s, texts, transport(t), noWait{fakeclock.New(now)}, slog.New(slog.DiscardHandler))
 }
 
 // configured is the settings document for the workspace f serves.
@@ -92,10 +107,13 @@ type exchange struct {
 	settings string
 	// routes answer each "METHOD /path" below the workspace with their responses in turn, the last one from then on.
 	routes map[string][]testkit.Response
+	// requester names the user being answered; today is the date, 2026-10-31 when empty; refuse refuses writes.
+	requester, today string
+	refuse           error
 	// want is the result, or the error's text when failed, with the fake's address written as {endpoint}.
 	want   string
 	failed bool
-	// calls are the requests made, below the workspace, sorted.
+	// calls are the requests made, below the workspace, each followed by its body after a space when it has one.
 	calls []string
 }
 
@@ -109,7 +127,19 @@ func (x exchange) check(t *testing.T) {
 	if doc == "" {
 		doc = configured(f)
 	}
-	got, err := call(t, doc, x.tool, x.args)
+	now, err := time.Parse(time.DateOnly, cmp.Or(x.today, "2026-10-31"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookups := 0
+	got, err := call(t, doc, now, x.tool, tool.Call{
+		Args:        json.RawMessage(x.args),
+		Requester:   func(context.Context) string { lookups++; return x.requester },
+		BeforeWrite: func(context.Context) error { return x.refuse },
+	})
+	if lookups > 1 {
+		t.Errorf("the requester was looked up %d times", lookups)
+	}
 	if err != nil {
 		got = err.Error()
 	}
@@ -117,24 +147,28 @@ func (x exchange) check(t *testing.T) {
 		t.Errorf("%s(%s) = %q (error: %v)\nwant %q (error: %v)", x.tool, x.args, got, err != nil, x.want, x.failed)
 	}
 	var calls []string
-	for _, c := range f.Calls() {
-		calls = append(calls, strings.Replace(c, " /api/v1/workspaces/"+workspace, " ", 1))
+	for _, r := range f.Requests() {
+		c := strings.Replace(r.Call(), " /api/v1/workspaces/"+workspace, " ", 1)
+		if len(r.Body) > 0 {
+			c += " " + string(r.Body)
+		}
+		calls = append(calls, c)
 	}
 	slices.Sort(calls)
-	if !slices.Equal(calls, x.calls) {
-		t.Errorf("requests %q, want %q", calls, x.calls)
+	if want := slices.Sorted(slices.Values(x.calls)); !slices.Equal(calls, want) {
+		t.Errorf("requests %q, want %q", calls, want)
 	}
 }
 
-// call calls the tool name with args, with the settings document doc.
-func call(t *testing.T, doc, name, args string) (string, error) {
+// call makes the call c of the tool name at the time now, with the settings document doc.
+func call(t *testing.T, doc string, now time.Time, name string, c tool.Call) (string, error) {
 	t.Helper()
-	tools := planeTools(t, doc)
+	tools := planeTools(t, doc, now)
 	i := slices.IndexFunc(tools, func(tl tool.Tool) bool { return tl.Name() == name })
 	if i < 0 {
 		t.Fatalf("no tool %s", name)
 	}
-	return tools[i].Call(t.Context(), tool.Call{Args: json.RawMessage(args)})
+	return tools[i].Call(t.Context(), c)
 }
 
 func run(t *testing.T, exchanges []exchange) {
@@ -151,7 +185,7 @@ func listing(total, items string) testkit.Response {
 func TestToolsKeepTheToolContract(t *testing.T) {
 	f := planefake.New(t, workspace, apiKey)
 	f.Route("GET", "/projects/").Default(answer(`[]`))
-	conformance.Tools(t, planeTools(t, configured(f)), plane.Prompts())
+	conformance.Tools(t, planeTools(t, configured(f), time.Unix(0, 0)), plane.Prompts())
 }
 
 func TestUnusableSettingsAreReportedAfterTheArgumentChecks(t *testing.T) {
@@ -479,7 +513,8 @@ func TestCycleWorkItemsAreFetchedForAtMost50Rows5AtATime(t *testing.T) {
 		mu.Unlock()
 		return answer(`{"name":"enriched"}`)
 	})
-	got, err := call(t, configured(f), "plane_list_cycle_issues", `{"project_id": "`+projectID+`", "cycle_id": "`+cycleID+`", "limit": 50}`)
+	got, err := call(t, configured(f), time.Unix(0, 0), "plane_list_cycle_issues",
+		tool.Call{Args: json.RawMessage(`{"project_id": "` + projectID + `", "cycle_id": "` + cycleID + `", "limit": 50}`)})
 	want := "Plane cycle issues for project_id=" + projectID + ", cycle_id=" + cycleID + ":\nTotal fetched cycle items: 53\n\n" +
 		"Showing first 50 detailed rows:"
 	for i := 50; i < 53; i++ {

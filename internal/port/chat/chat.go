@@ -123,3 +123,21 @@ func (u User) Label() string {
 	}
 	return name + " (@" + username + ")"
 }
+
+// Requester returns the function that names the user id in records a tool writes: the Label of the user as users
+// knows them, the id alone when the lookup fails, or "" when there is no user.
+func Requester(users interface {
+	User(ctx context.Context, id string) (User, error)
+}, id string) func(context.Context) string {
+	return func(ctx context.Context) string {
+		if id == "" {
+			return ""
+		}
+		u, err := users.User(ctx, id)
+		if err != nil {
+			u = User{}
+		}
+		u.ID = id
+		return u.Label()
+	}
+}
