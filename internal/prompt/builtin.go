@@ -20,6 +20,7 @@ func Builtin() []Entry {
 		{ID: "system.no_public_knowledge", Kind: KindRaw},
 		{ID: "system.no_memory", Kind: KindRaw},
 		{ID: "system.no_file_context", Kind: KindRaw},
+		{ID: "system.context_moved", Kind: KindRaw},
 		{ID: "system.time_format", Kind: KindTime},
 
 		{ID: "tools.instructions", Kind: KindRaw},
@@ -41,6 +42,8 @@ func Builtin() []Entry {
 		{ID: "reply.files_suffix", Kind: KindFormat, Placeholders: []string{"file_summary"}},
 		{ID: "error.generic", Kind: KindRaw},
 		{ID: "context.user_prefix", Kind: KindRaw},
+		{ID: "context.message", Kind: KindFormat, Placeholders: []string{"public_knowledge", "long_term_memory",
+			"file_context"}},
 
 		{ID: "memory.facts", Kind: KindRaw},
 		{ID: "memory.files_marker", Kind: KindFormat, Placeholders: []string{"file_summary"}},

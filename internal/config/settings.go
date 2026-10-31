@@ -41,7 +41,10 @@ type Settings struct {
 	// ToolSummaryRole is the role, user or system, of the message that gives the model the results of the tools it
 	// called.
 	ToolSummaryRole string `json:"tool_summary_role"`
-	Persona         string `json:"persona"`
+	// ContextRole is the role, user or system, of the text that gives the model a reply's shared knowledge, stored
+	// facts, and file context.
+	ContextRole string `json:"context_role"`
+	Persona     string `json:"persona"`
 	// AdminIDs is admin_ids, which the document may give as a list or a comma-separated string.
 	AdminIDs             []string `json:"-"`
 	NameExcludedChannels Channels `json:"name_excluded_channels"`
@@ -214,6 +217,7 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 		MaxToolIterations:      defaultToolIterations,
 		MaxToolCalls:           defaultToolCalls,
 		ToolSummaryRole:        "user",
+		ContextRole:            "user",
 		ChatPlatform:           "mattermost",
 		ModelProvider:          "openai",
 		WebSearch:              "searxng",
@@ -245,6 +249,9 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 	problems = append(problems, s.decode(s)...)
 	if s.ToolSummaryRole != "user" && s.ToolSummaryRole != "system" {
 		problems = append(problems, errors.New("tool_summary_role: must be user or system"))
+	}
+	if s.ContextRole != "user" && s.ContextRole != "system" {
+		problems = append(problems, errors.New("context_role: must be user or system"))
 	}
 	if s.DebounceSeconds < 0 {
 		problems = append(problems, errors.New("debounce_seconds: must not be negative"))

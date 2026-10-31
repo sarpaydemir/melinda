@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -242,6 +243,9 @@ func (p *Pipeline) generate(ctx context.Context, s *config.Settings, cat *prompt
 	log.DebugContext(ctx, "model input", "system_chars", utf8.RuneCountInString(system),
 		"user_chars", utf8.RuneCountInString(user), "history_items", len(c.History), "tools", len(specs))
 	msgs := llm.Messages(system, c.History, user)
+	if text := prompt.ContextMessage(cat, s, c); text != "" {
+		msgs = slices.Insert(msgs, len(msgs)-1, model.Message{Role: model.RoleUser, Content: text})
+	}
 	var reply string
 	if len(specs) == 0 {
 		reply = client.Generate(ctx, model.Request{Model: s.Model, Messages: msgs})

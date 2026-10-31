@@ -29,30 +29,8 @@ const (
 )
 
 var memoryScenarios = []scenario{
-	{name: "memory_recall", settings: withEmbeddings, seed: func(h *harness) {
-		h.history(h.memoryKey("u1"),
-			`{"user": "acme", "assistant": "Brand overview done.", "ts": "2026-03-01T10:00:00.123456+00:00", "scope": "public", "context_id": "", "step": 1}`,
-			`{"ts": "2026-02-01T00:00:00", "user": "old user msg", "scope": "private", "assistant": "old assistant msg"}`)
-		facts := h.setting("facts_collection", "dost_memory")
-		h.vector(facts, "Ada prefers tea", []float32{1, 0.1}, `{"key": "%s", "type": "user_fact", "scope": "private"}`, h.memoryKey("u1"))
-		h.vector(facts, "Ada works on the compiler", []float32{1, 0.5}, `{"key": "%s", "scope": "public", "type": "user_fact", `+
-			`"user_id": "%s", "is_dm": false, "context_id": "%s"}`, h.memoryKey("u1"), id("u1"), id("c0"))
-		h.vector(facts, "Grace likes coffee", []float32{1, 0.2}, `{"key": "%s", "type": "user_fact", "scope": "public"}`, h.memoryKey("u2"))
-		kb := h.setting("kb_collection", "dost_public_kb")
-		h.vector(kb, "The release train leaves on Fridays", []float32{0, 1, 0.3}, `{"type": "public_kb", "topic": "releases", `+
-			`"tags": ["release"], "timestamp": "2026-06-17T12:00:00+00:00", "source_ids": ["pid_1"], "source_channel_ids": ["cid_1"], `+
-			`"source_create_at_min": 1781697600000, "source_create_at_max": 1781697600000, "evidence": "website", "confidence": 0.8, "verified": true}`)
-		h.deployRule()
-		h.vector(kb, "Unrelated note", []float32{0, 1}, `{"type": "other"}`)
-		h.vector(kb, "Office closes at six", []float32{0, 1, 0.5},
-			`{"type": "public_kb", "timestamp": "2026-10-01T00:00:00Z", "evidence": "document", "verified": false}`)
-	}, replies: texts(`{"query": "release schedule"}`, "Hello again, Ada.", "NULL", "Quite a bit."), play: func(h *harness) {
-		h.post(post("p1", "u1", "dm1", "", "hello", 0))
-		h.flush(3*time.Second, 1)
-		h.clock.Advance(7 * time.Second)
-		h.post(post("p2", "u1", "ch1", "", "@agent what do you know?", 10000))
-		h.flush(3*time.Second, 2)
-	}},
+	memoryRecall("memory_recall", withEmbeddings),
+	memoryRecall("memory_recall_user_context", withEmbeddings+`,"context_role":"user"`),
 	{name: "fact_extraction", settings: withEmbeddings, seed: func(h *harness) {
 		var turns []string
 		for i := 1; i <= 4; i++ {
@@ -101,6 +79,34 @@ var memoryScenarios = []scenario{
 			h.post(p)
 			h.flush(3*time.Second, 1)
 		}},
+}
+
+// memoryRecall answers in a direct and a public conversation over stored turns, facts, and knowledge.
+func memoryRecall(name, settings string) scenario {
+	return scenario{name: name, settings: settings, seed: func(h *harness) {
+		h.history(h.memoryKey("u1"),
+			`{"user": "acme", "assistant": "Brand overview done.", "ts": "2026-03-01T10:00:00.123456+00:00", "scope": "public", "context_id": "", "step": 1}`,
+			`{"ts": "2026-02-01T00:00:00", "user": "old user msg", "scope": "private", "assistant": "old assistant msg"}`)
+		facts := h.setting("facts_collection", "dost_memory")
+		h.vector(facts, "Ada prefers tea", []float32{1, 0.1}, `{"key": "%s", "type": "user_fact", "scope": "private"}`, h.memoryKey("u1"))
+		h.vector(facts, "Ada works on the compiler", []float32{1, 0.5}, `{"key": "%s", "scope": "public", "type": "user_fact", `+
+			`"user_id": "%s", "is_dm": false, "context_id": "%s"}`, h.memoryKey("u1"), id("u1"), id("c0"))
+		h.vector(facts, "Grace likes coffee", []float32{1, 0.2}, `{"key": "%s", "type": "user_fact", "scope": "public"}`, h.memoryKey("u2"))
+		kb := h.setting("kb_collection", "dost_public_kb")
+		h.vector(kb, "The release train leaves on Fridays", []float32{0, 1, 0.3}, `{"type": "public_kb", "topic": "releases", `+
+			`"tags": ["release"], "timestamp": "2026-06-17T12:00:00+00:00", "source_ids": ["pid_1"], "source_channel_ids": ["cid_1"], `+
+			`"source_create_at_min": 1781697600000, "source_create_at_max": 1781697600000, "evidence": "website", "confidence": 0.8, "verified": true}`)
+		h.deployRule()
+		h.vector(kb, "Unrelated note", []float32{0, 1}, `{"type": "other"}`)
+		h.vector(kb, "Office closes at six", []float32{0, 1, 0.5},
+			`{"type": "public_kb", "timestamp": "2026-10-01T00:00:00Z", "evidence": "document", "verified": false}`)
+	}, replies: texts(`{"query": "release schedule"}`, "Hello again, Ada.", "NULL", "Quite a bit."), play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "hello", 0))
+		h.flush(3*time.Second, 1)
+		h.clock.Advance(7 * time.Second)
+		h.post(post("p2", "u1", "ch1", "", "@agent what do you know?", 10000))
+		h.flush(3*time.Second, 2)
+	}}
 }
 
 // learningAnswer is the fact model's answer to the learning run: a duplicate of a stored entry, two entries to

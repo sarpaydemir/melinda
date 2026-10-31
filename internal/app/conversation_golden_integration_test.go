@@ -381,7 +381,7 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 		"mattermost_endpoint": raw(`"` + h.chat.URL() + `"`), "mattermost_token": raw(`"chat-token"`),
 		"mattermost_bot_id": raw(`"` + id("bot") + `"`), "enabled_tools": raw(`[]`),
 		"plane_endpoint": raw(`"` + h.plane.URL() + `"`), "plane_api_key": raw(`"plane-key"`),
-		"plane_workspace_slug": raw(`"ws"`), "web_fetch_allow_private": raw(`true`),
+		"plane_workspace_slug": raw(`"ws"`), "web_fetch_allow_private": raw(`true`), "context_role": raw(`"system"`),
 	}
 	if sc.settings != "" {
 		var extra map[string]json.RawMessage
