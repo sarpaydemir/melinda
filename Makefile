@@ -5,9 +5,6 @@ DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 TEST_DB_IMAGE ?= pgvector/pgvector:pg17
-TEST_DB_NAME  ?= dost-test-db
-TEST_DB_PORT  ?= 55432
-TEST_DB_URL   := postgres://postgres:postgres@localhost:$(TEST_DB_PORT)/postgres?sslmode=disable
 
 .DEFAULT_GOAL := help
 .PHONY: help check fmt fmt-check vet staticcheck test test-integration vuln build tidy clean
@@ -34,12 +31,18 @@ test: ## Unit tests with the race detector
 	$(GO) test -race -count=1 ./...
 
 test-integration: ## Integration tests against a throwaway pgvector container (needs Docker)
-	@docker rm -f $(TEST_DB_NAME) >/dev/null 2>&1 || true
-	@docker run -d --rm --name $(TEST_DB_NAME) -e POSTGRES_PASSWORD=postgres \
-		-p $(TEST_DB_PORT):5432 $(TEST_DB_IMAGE) >/dev/null
-	@trap 'docker rm -f $(TEST_DB_NAME) >/dev/null 2>&1' EXIT; \
-	for i in $$(seq 1 30); do docker exec $(TEST_DB_NAME) pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done; \
-	DOST_TEST_DATABASE_URL='$(TEST_DB_URL)' $(GO) test -race -count=1 -tags=integration ./...
+	@set -e; name="dost-test-$$$$-$$(date +%s)"; \
+	trap 'docker rm -f "$$name" >/dev/null 2>&1 || true' EXIT; \
+	trap 'exit 130' INT TERM HUP QUIT; \
+	docker run -d --rm --name "$$name" -e POSTGRES_PASSWORD=postgres \
+		-p 127.0.0.1::5432 $(TEST_DB_IMAGE) >/dev/null; \
+	port=$$(docker port "$$name" 5432/tcp | head -n1 | sed 's/.*://'); \
+	[ -n "$$port" ] || { echo "could not determine test database port" >&2; exit 1; }; \
+	ready=; for i in $$(seq 1 60); do \
+		docker exec "$$name" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && ready=1 && break; sleep 1; done; \
+	[ -n "$$ready" ] || { echo "test database did not become ready" >&2; exit 1; }; \
+	DOST_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$$port/postgres?sslmode=disable" \
+		$(GO) test -race -count=1 -tags=integration ./...
 
 vuln: ## Known-vulnerability scan (pinned in go.mod)
 	$(GO) tool govulncheck ./...
