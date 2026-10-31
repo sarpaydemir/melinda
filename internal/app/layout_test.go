@@ -104,7 +104,7 @@ func TestDependencyDirection(t *testing.T) {
 		{from: local("internal/dispatch"), forbidden: local("internal/gateway", "internal/pipeline")},
 		{from: local("internal/pipeline"), forbidden: local("internal/gateway", "internal/dispatch")},
 		{from: local("internal"), forbidden: local("internal/app")},
-		{from: []string{module}, forbidden: local("internal/testkit")},
+		{from: []string{module}, except: local("internal/testkit"), forbidden: local("internal/testkit")},
 		{from: []string{module}, except: local("internal/store", "internal/testkit"), forbidden: []string{"github.com/jackc/pgx"}, direct: true},
 	}
 
