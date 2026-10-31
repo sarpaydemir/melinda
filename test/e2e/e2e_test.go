@@ -103,15 +103,8 @@ type agent struct {
 // start runs dost and waits until its first recovery has finished, which follows connecting.
 func (e *env) start() *agent {
 	e.t.Helper()
-	a := &agent{t: e.t, logs: &logs{}, done: make(chan struct{})}
-	a.cmd = exec.Command(os.Getenv("DOST_E2E_BINARY"), "run")
-	a.cmd.Env = []string{
-		"DOST_DATABASE_URL=" + e.dsn, "DOST_SETTINGS_FILE=" + e.settings, "DOST_HTTP_ADDR=",
-		"DOST_SETTINGS_TTL=1s", "DOST_SHUTDOWN_TIMEOUT=" + shutdownTimeout.String(),
-	}
+	a := &agent{t: e.t, logs: &logs{}, done: make(chan struct{}), cmd: e.command()}
 	a.cmd.Stdout, a.cmd.Stderr = a.logs, a.logs
-	// The agent dies with the test binary, even when go test kills it at its timeout.
-	a.cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	if err := a.cmd.Start(); err != nil {
 		e.t.Fatal(err)
 	}
@@ -125,6 +118,18 @@ func (e *env) start() *agent {
 	})
 	a.await("startup recovery", func() bool { return strings.Contains(a.logs.String(), `msg="recovery finished"`) })
 	return a
+}
+
+// command returns an unstarted dost run against e.
+func (e *env) command() *exec.Cmd {
+	cmd := exec.Command(os.Getenv("DOST_E2E_BINARY"), "run")
+	cmd.Env = []string{
+		"DOST_DATABASE_URL=" + e.dsn, "DOST_SETTINGS_FILE=" + e.settings, "DOST_HTTP_ADDR=",
+		"DOST_SETTINGS_TTL=1s", "DOST_SHUTDOWN_TIMEOUT=" + shutdownTimeout.String(),
+	}
+	// The agent dies with the test binary, even when go test kills it at its timeout.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	return cmd
 }
 
 // stop sends SIGTERM and fails unless the agent exits 0 within the shutdown timeout.

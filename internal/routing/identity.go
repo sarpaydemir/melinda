@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -89,16 +90,18 @@ func (r *Identity) Resolve(ctx context.Context, p agent) chat.User {
 	return me
 }
 
-// Verify logs a warning when the platform reports a different ID for the agent's account than the configured one.
-func (r *Identity) Verify(ctx context.Context, p agent) {
+// Verify returns an error when the platform reports a different ID for the agent's account than the configured
+// one, since the agent would then answer its own posts. A failed lookup is only logged.
+func (r *Identity) Verify(ctx context.Context, p agent) error {
 	self, err := p.Self(ctx)
 	if err != nil {
 		r.log.Warn("could not verify the agent's account", "error", err)
-		return
+		return nil
 	}
 	if id := p.Identity().ID; self.ID != id {
-		r.log.Warn("the platform reports a different ID for the agent's account", "configured", id, "reported", self.ID)
+		return fmt.Errorf("the configured agent ID %q is not the token's account; the platform reports %q", id, self.ID)
 	}
+	return nil
 }
 
 // load returns the username of the stored entry when it is usable, keeping the entry in process.

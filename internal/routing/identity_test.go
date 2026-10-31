@@ -353,29 +353,33 @@ func TestConcurrentResolvesAgree(t *testing.T) {
 	wg.Wait()
 }
 
-func TestVerifyWarnsWhenPlatformReportsAnotherAgentID(t *testing.T) {
+func TestVerifyFailsWhenPlatformReportsAnotherAgentID(t *testing.T) {
 	cases := []struct {
-		name string
-		self chat.User
-		err  error
-		warn bool
+		name    string
+		self    chat.User
+		err     error
+		warn    bool
+		failure bool
 	}{
-		{"same ID", chat.User{ID: agentID, Username: "helper"}, nil, false},
-		{"different ID", chat.User{ID: "reported-id", Username: "helper"}, nil, true},
-		{"lookup failed", chat.User{}, errors.New("connection refused"), true},
+		{"same ID", chat.User{ID: agentID, Username: "helper"}, nil, false, false},
+		{"different ID", chat.User{ID: "reported-id", Username: "helper"}, nil, false, true},
+		{"lookup failed", chat.User{}, errors.New("connection refused"), true, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFixture(t)
 			a := &fakeAgent{configured: chat.User{ID: agentID}, self: c.self, err: c.err}
 
-			f.id.Verify(t.Context(), a)
+			err := f.id.Verify(t.Context(), a)
 
+			if (err != nil) != c.failure {
+				t.Errorf("err = %v, want failure %v", err, c.failure)
+			}
+			if err != nil && !strings.Contains(err.Error(), "reported-id") {
+				t.Errorf("error does not name the reported ID: %v", err)
+			}
 			if got := strings.Contains(f.logs.String(), "level=WARN"); got != c.warn {
 				t.Errorf("warned = %v, want %v; logs:\n%s", got, c.warn, f.logs)
-			}
-			if c.warn && c.err == nil && !strings.Contains(f.logs.String(), "reported-id") {
-				t.Errorf("warning does not name the reported ID; logs:\n%s", f.logs)
 			}
 			if got := f.stored(t); got != "" {
 				t.Errorf("cache written by Verify: %s", got)

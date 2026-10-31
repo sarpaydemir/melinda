@@ -120,7 +120,9 @@ func run(ctx context.Context, env config.Env, version string, table adapters, cl
 	}
 	store := kv.New(db, clk)
 	identity := routing.NewIdentity(store, s.BotIdentityKey, clk, log)
-	identity.Verify(ctx, platform)
+	if err := identity.Verify(ctx, platform); err != nil {
+		return err
+	}
 
 	sup := NewSupervisor(log, clk, env.ShutdownTimeout)
 	lock := db.NewLock(env.AgentID, clk, log)

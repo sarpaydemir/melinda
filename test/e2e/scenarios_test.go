@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,21 @@ func TestUnaddressedAndOwnPostsAreNotAnswered(t *testing.T) {
 		t.Errorf("replies %+v, want only the DM answer", got)
 	}
 	e.assertSettled()
+}
+
+func TestBotIDOfAnotherAccountStopsStartupBeforeAnyReply(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, map[string]any{"mattermost_bot_id": id("u1")})
+	out := &logs{}
+	cmd := e.command()
+	cmd.Stdout, cmd.Stderr = out, out
+
+	if err := cmd.Run(); err == nil || !strings.Contains(out.String(), id("bot")) {
+		t.Errorf("exit %v, want a failure naming the token's account; logs:\n%s", err, out)
+	}
+	if got := e.replies(); len(got) != 0 {
+		t.Errorf("replies %+v, want none", got)
+	}
 }
 
 func TestMessageBufferedAtACrashIsAnsweredOnceAfterRestart(t *testing.T) {

@@ -58,7 +58,7 @@ func freeAddr(t *testing.T) string {
 }
 
 func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) {
-	chatServer := mattermostfake.New(t, "chat-token", mattermostfake.User{ID: "reported-id", Username: "agent"})
+	chatServer := mattermostfake.New(t, "chat-token", mattermostfake.User{ID: "agent-id", Username: "agent"})
 	table := workingTable()
 	table.platforms = map[string]platformAdapter{"mattermost": {
 		open: func(s *config.Settings) (chat.Platform, error) {
@@ -68,7 +68,7 @@ func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) 
 	addr := freeAddr(t)
 	env := environment(t, "DOST_DATABASE_URL="+testdb.New(t), "DOST_HTTP_ADDR="+addr,
 		`DOST_SETTINGS_JSON={"model":"m","model_provider":"compatible","web_search":"meta","web_fetch":"direct",`+
-			`"mattermost_endpoint":"`+chatServer.URL()+`","mattermost_token":"chat-token","mattermost_bot_id":"configured-id"}`)
+			`"mattermost_endpoint":"`+chatServer.URL()+`","mattermost_token":"chat-token","mattermost_bot_id":"agent-id"}`)
 	logs := &logWatch{match: `msg=connected component=gateway`, seen: make(chan struct{})}
 	secrets := new(logging.Secrets)
 	log := logging.New(logs, slog.LevelInfo, false, secrets)
@@ -96,7 +96,6 @@ func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) 
 	}
 	for _, want := range []string{
 		`msg=starting version=1.2.3 agent=dost settings=DOST_SETTINGS_JSON components="[kb-learner pipeline flusher dispatcher recovery gateway]"`,
-		`msg="the platform reports a different ID for the agent's account" configured=configured-id reported=reported-id`,
 	} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("logs do not contain %s:\n%s", want, logs)
