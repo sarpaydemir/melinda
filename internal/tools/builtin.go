@@ -44,6 +44,8 @@ type Builtin struct {
 	// Clock times the waits between attempts of a failed call.
 	Clock clock.Clock
 	Log   *slog.Logger
+
+	crossed *crossReads
 }
 
 // Outbound is the part of the chat platform a run writes through.

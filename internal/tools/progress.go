@@ -47,7 +47,8 @@ func (p *progressUpdate) Call(ctx context.Context, c tool.Call) (string, error) 
 	if p.posted >= p.b.MaxProgressUpdates {
 		return "Error: Progress update limit reached for this request. Continue the task and give the final answer.", nil
 	}
-	m := chat.Outgoing{ConversationID: c.ConversationID, ThreadID: p.b.ReplyThread, Text: textfmt.Clip(message, p.b.ProgressUpdateMaxChars)}
+	m := chat.Outgoing{ConversationID: c.ConversationID, ThreadID: p.b.ReplyThread,
+		Text: post(p.b.RestrictOutbound, p.b.crossed, textfmt.Clip(message, p.b.ProgressUpdateMaxChars))}
 	id, err := p.b.Chat.Send(ctx, m)
 	if err == nil && id == "" {
 		err = errors.New("no message ID returned")

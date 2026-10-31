@@ -50,12 +50,13 @@ func (c *crossReads) list() []string {
 // Offer returns the tools offered to the model, in this order: the built-in knowledge tools, contributed, and the
 // built-in conversation tools; the built-in tools work with b. With enabled not nil, only the tools it names are
 // offered, in the same order; a name of no such tool is an error. Each call of a tool gets call with the call's
-// arguments. With b.RestrictOutbound set, calls of outbound tools are refused once a call has read another
-// conversation.
+// arguments. With b.RestrictOutbound set, calls of outbound tools are refused and posts made inert once a call has
+// read another conversation.
 func Offer(call tool.Call, enabled []string, b Builtin, contributed []tool.Tool) (Set, error) {
+	crossed := new(crossReads)
+	b.crossed = crossed
 	knowledge, conversation := b.tools()
 	all := slices.Concat(knowledge, contributed, conversation)
-	crossed := new(crossReads)
 	s := Set{offered: all, call: call, restrict: b.RestrictOutbound, crossed: crossed, texts: b.Catalog, log: b.Log}
 	s.call.ReadFrom = func(id string) {
 		if id != call.ConversationID {
@@ -83,6 +84,18 @@ func (s Set) FileIDs() []string {
 		}
 	}
 	return nil
+}
+
+// Post returns text as the reply posts it: unchanged, or inert once a restricted reply has read another conversation.
+func (s Set) Post(text string) string {
+	return post(s.restrict, s.crossed, text)
+}
+
+func post(restrict bool, crossed *crossReads, text string) string {
+	if restrict && len(crossed.list()) > 0 {
+		return inert(text)
+	}
+	return text
 }
 
 // Specs are the offered tools as the model is offered them, each described by its catalog entry
