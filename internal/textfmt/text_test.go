@@ -121,3 +121,35 @@ func TestLowerAppliesFullUnicodeLowercasing(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitLinesBreaksAtEveryLineBoundary(t *testing.T) {
+	tests := []struct {
+		in   string
+		want []string
+	}{
+		{"", []string{""}},
+		{"a", []string{"a"}},
+		{"a\n", []string{"a"}},
+		{"\n", []string{""}},
+		{"a\n\nb", []string{"a", "", "b"}},
+		{"a\r\nb", []string{"a", "b"}},
+		{"a\r\rb", []string{"a", "", "b"}},
+		{"a\n\rb", []string{"a", "", "b"}},
+		{"\r\n\r\n", []string{"", ""}},
+		{"x\vy\fz\x1cp\x1dq\x1er\u0085s\u2028t\u2029u", []string{"x", "y", "z", "p", "q", "r", "s", "t", "u"}},
+		{"a\x1fb\vc", []string{"a\x1fb", "c"}},
+		{"ş\u2028", []string{"ş"}},
+	}
+	for _, tt := range tests {
+		if got := textfmt.SplitLines(tt.in); !slices.Equal(got, tt.want) {
+			t.Errorf("SplitLines(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestHTMLEscapeEscapesMarkupAndQuotes(t *testing.T) {
+	got := textfmt.HTMLEscape(`<a href="x">Tom & Jerry's</a> İş &amp;`)
+	if want := "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#x27;s&lt;/a&gt; İş &amp;amp;"; got != want {
+		t.Errorf("HTMLEscape = %q, want %q", got, want)
+	}
+}

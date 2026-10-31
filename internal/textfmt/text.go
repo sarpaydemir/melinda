@@ -30,6 +30,36 @@ func Strip(s string) string { return strings.TrimFunc(s, isSpace) }
 
 func isSpace(r rune) bool { return unicode.IsSpace(r) || ('\x1c' <= r && r <= '\x1f') }
 
+// SplitLines splits s at \n, \r\n, \r, \v, \f, U+001C..U+001E, U+0085, U+2028, and U+2029. A final line break
+// ends the last line instead of starting an empty one; an empty s is one empty line.
+func SplitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		switch r {
+		case '\n', '\v', '\f', '\r', '\x1c', '\x1d', '\x1e', '\u0085', '\u2028', '\u2029':
+		default:
+			continue
+		}
+		lines = append(lines, s[start:i-size])
+		if r == '\r' && i < len(s) && s[i] == '\n' {
+			i++
+		}
+		start = i
+	}
+	if start < len(s) || len(lines) == 0 {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#x27;")
+
+// HTMLEscape escapes &, <, >, ", and ' as &amp;, &lt;, &gt;, &quot;, and &#x27;.
+func HTMLEscape(s string) string { return htmlEscaper.Replace(s) }
+
 // Lower applies full Unicode lowercasing: U+0130 becomes "i\u0307" and a word-final capital sigma becomes ς.
 func Lower(s string) string {
 	var b strings.Builder

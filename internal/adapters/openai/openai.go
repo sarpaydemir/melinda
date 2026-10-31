@@ -107,7 +107,7 @@ func (p *provider) Chat(ctx context.Context, r model.Request) (model.Response, e
 // Embed returns the answer's first embedding, with retries. An answer without one fails the attempt, whatever error
 // it carries.
 func (p *provider) Embed(ctx context.Context, model, text string) ([]float32, error) {
-	body, err := encode(embeddingRequest{model, text})
+	body, err := textfmt.Encode(embeddingRequest{model, text})
 	if err != nil {
 		return nil, err
 	}

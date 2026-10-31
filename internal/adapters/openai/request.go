@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bytes"
 	"cmp"
 	"encoding/base64"
 	"encoding/json"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sarpaydemir/dost/internal/port/model"
+	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
 // The wire types list their fields in the order the API receives them.
@@ -92,18 +92,7 @@ func (p *provider) body(r model.Request) ([]byte, error) {
 		}
 		req.ToolChoice, req.ParallelToolCalls = "auto", new(false)
 	}
-	return encode(req)
-}
-
-// encode is v as compact UTF-8 JSON without escaping HTML or other non-ASCII characters.
-func encode(v any) ([]byte, error) {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, fmt.Errorf("encode request: %w", err)
-	}
-	return unescapeSeparators(bytes.TrimSuffix(b.Bytes(), []byte("\n"))), nil
+	return textfmt.Encode(req)
 }
 
 func wire(m model.Message) (any, error) {
@@ -152,28 +141,4 @@ func withParts(text string, parts []model.Part) []any {
 		content = append(content, p)
 	}
 	return content
-}
-
-// unescapeSeparators turns the \u2028 and \u2029 escapes that encoding/json writes in every string back into the
-// characters. It works in place.
-func unescapeSeparators(b []byte) []byte {
-	out := b[:0]
-	for i := 0; i < len(b); i++ {
-		if b[i] != '\\' {
-			out = append(out, b[i])
-			continue
-		}
-		switch string(b[i:min(i+6, len(b))]) {
-		case `\u2028`:
-			out = append(out, "\u2028"...)
-			i += 5
-		case `\u2029`:
-			out = append(out, "\u2029"...)
-			i += 5
-		default: // an escaped character, or the first two bytes of another \uXXXX
-			out = append(out, b[i], b[i+1])
-			i++
-		}
-	}
-	return out
 }
