@@ -47,6 +47,9 @@ func listPackages(t *testing.T) []goPackage {
 // leafPackages may use only the standard library.
 func leafPackages() []string { return local("internal/textfmt", "internal/clock") }
 
+// portPackages may use only the standard library and leaf packages.
+func portPackages() []string { return local("internal/port") }
+
 // local qualifies module-relative package paths.
 func local(paths ...string) []string {
 	out := make([]string, len(paths))
@@ -75,12 +78,17 @@ func TestPackagesAreDocumented(t *testing.T) {
 
 func TestStandardLibraryOnlyPackages(t *testing.T) {
 	for _, p := range listPackages(t) {
-		if !within(p.ImportPath, leafPackages()...) {
+		var allowed []string
+		switch {
+		case within(p.ImportPath, leafPackages()...):
+		case within(p.ImportPath, portPackages()...):
+			allowed = leafPackages()
+		default:
 			continue
 		}
 		for _, d := range p.Deps {
-			if first, _, _ := strings.Cut(d, "/"); strings.Contains(first, ".") {
-				t.Errorf("%s depends on %s; it may use only the standard library", p.ImportPath, d)
+			if first, _, _ := strings.Cut(d, "/"); strings.Contains(first, ".") && !within(d, allowed...) {
+				t.Errorf("%s depends on %s; it may use only the standard library and %v", p.ImportPath, d, allowed)
 			}
 		}
 	}
@@ -88,8 +96,9 @@ func TestStandardLibraryOnlyPackages(t *testing.T) {
 
 func TestDependencyDirection(t *testing.T) {
 	foundation := local("internal/config", "internal/logging", "internal/prompt")
-	clients := local("internal/mattermost", "internal/llm", "internal/integrations", "internal/store")
-	domain := local("internal/routing", "internal/memory", "internal/kb", "internal/files", "internal/tools", "internal/automation")
+	adapters := local("internal/adapters")
+	stores := local("internal/store")
+	domain := local("internal/routing", "internal/memory", "internal/kb", "internal/files", "internal/tools", "internal/automation", "internal/llm")
 	components := local("internal/gateway", "internal/dispatch", "internal/pipeline")
 	above := func(layers ...[]string) []string { return append(concat(layers...), local("internal/app")...) }
 
@@ -97,19 +106,21 @@ func TestDependencyDirection(t *testing.T) {
 		from, except, forbidden []string
 		direct                  bool // check direct imports only, not transitive dependencies
 	}{
-		{from: foundation, forbidden: above(clients, domain, components)},
-		{from: clients, forbidden: above(domain, components)},
+		{from: foundation, forbidden: above(portPackages(), stores, domain, components)},
+		{from: adapters, forbidden: above(stores, domain, components)},
+		{from: stores, forbidden: above(domain, components)},
 		{from: domain, forbidden: above(components)},
 		{from: local("internal/gateway"), forbidden: local("internal/dispatch", "internal/pipeline")},
 		{from: local("internal/dispatch"), forbidden: local("internal/gateway", "internal/pipeline")},
 		{from: local("internal/pipeline"), forbidden: local("internal/gateway", "internal/dispatch")},
+		{from: []string{module}, except: concat(adapters, local("internal/app", "cmd/dost")), forbidden: adapters},
 		{from: local("internal"), forbidden: local("internal/app")},
 		{from: []string{module}, except: local("internal/testkit"), forbidden: local("internal/testkit")},
 		{from: []string{module}, except: local("internal/store", "internal/testkit"), forbidden: []string{"github.com/jackc/pgx"}, direct: true},
 	}
 
 	pkgs := listPackages(t)
-	layered := concat(leafPackages(), foundation, clients, domain, components)
+	layered := concat(leafPackages(), foundation, portPackages(), adapters, stores, domain, components)
 	for _, prefix := range layered {
 		if !hasPackage(pkgs, prefix) {
 			t.Errorf("rule refers to %s, which matches no package", prefix)
@@ -136,6 +147,30 @@ func TestDependencyDirection(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestAdaptersAreIndependent(t *testing.T) {
+	for _, p := range listPackages(t) {
+		own := adapterOf(p.ImportPath)
+		if own == "" {
+			continue
+		}
+		for _, d := range p.Deps {
+			if other := adapterOf(d); other != "" && other != own {
+				t.Errorf("%s must not depend on %s; adapters share code only through ports and lower layers", p.ImportPath, d)
+			}
+		}
+	}
+}
+
+// adapterOf returns the adapter that path belongs to, or "".
+func adapterOf(path string) string {
+	rest, ok := strings.CutPrefix(path, module+"/internal/adapters/")
+	if !ok {
+		return ""
+	}
+	name, _, _ := strings.Cut(rest, "/")
+	return name
 }
 
 func concat(lists ...[]string) []string {
