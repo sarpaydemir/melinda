@@ -38,6 +38,8 @@ type env struct {
 	db       *pgx.Conn
 	dsn      string
 	settings string // settings file path
+	// settingsTTL is DOST_SETTINGS_TTL.
+	settingsTTL string
 }
 
 // newEnv starts the fakes and creates the database. extra holds settings members merged into the document.
@@ -47,7 +49,7 @@ func newEnv(t *testing.T, extra map[string]any) *env {
 	if binary == "" {
 		t.Skip("DOST_E2E_BINARY is not set")
 	}
-	e := &env{t: t, dsn: testdb.New(t), settings: filepath.Join(t.TempDir(), "settings.json")}
+	e := &env{t: t, dsn: testdb.New(t), settings: filepath.Join(t.TempDir(), "settings.json"), settingsTTL: "1s"}
 	e.chat = mattermostfake.New(t, "chat-token", mattermostfake.User{ID: id("bot"), Username: "agent"})
 	e.chat.AddUser(mattermostfake.User{ID: id("u1"), Username: "ada", FirstName: "Ada"})
 	e.chat.AddTeam(mattermostfake.Team{ID: id("t1"), Name: "team", DisplayName: "Team"})
@@ -103,6 +105,14 @@ type agent struct {
 // start runs dost and waits until its first recovery has finished, which follows connecting.
 func (e *env) start() *agent {
 	e.t.Helper()
+	a := e.launch()
+	a.await("startup recovery", func() bool { return strings.Contains(a.logs.String(), `msg="recovery finished"`) })
+	return a
+}
+
+// launch runs dost without waiting for it to start.
+func (e *env) launch() *agent {
+	e.t.Helper()
 	a := &agent{t: e.t, logs: &logs{}, done: make(chan struct{}), cmd: e.command()}
 	a.cmd.Stdout, a.cmd.Stderr = a.logs, a.logs
 	if err := a.cmd.Start(); err != nil {
@@ -116,7 +126,6 @@ func (e *env) start() *agent {
 			e.t.Errorf("the agent reported a data race:\n%s", a.logs)
 		}
 	})
-	a.await("startup recovery", func() bool { return strings.Contains(a.logs.String(), `msg="recovery finished"`) })
 	return a
 }
 
@@ -125,7 +134,7 @@ func (e *env) command() *exec.Cmd {
 	cmd := exec.Command(os.Getenv("DOST_E2E_BINARY"), "run")
 	cmd.Env = []string{
 		"DOST_DATABASE_URL=" + e.dsn, "DOST_SETTINGS_FILE=" + e.settings, "DOST_HTTP_ADDR=",
-		"DOST_SETTINGS_TTL=1s", "DOST_SHUTDOWN_TIMEOUT=" + shutdownTimeout.String(),
+		"DOST_SETTINGS_TTL=" + e.settingsTTL, "DOST_SHUTDOWN_TIMEOUT=" + shutdownTimeout.String(),
 	}
 	// The agent dies with the test binary, even when go test kills it at its timeout.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}

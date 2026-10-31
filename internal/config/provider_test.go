@@ -35,7 +35,7 @@ func openWith(t *testing.T, env config.Env, keys []config.SecretKey, validate fu
 	mask := new(logging.Secrets)
 	h := &harness{clock: fakeclock.New(time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)), logs: new(bytes.Buffer)}
 	h.log = logging.New(h.logs, slog.LevelDebug, false, mask)
-	p, err := config.NewProvider(env, keys, validate, mask, h.clock, h.log)
+	p, err := config.NewProvider(env, keys, nil, validate, mask, h.clock, h.log)
 	return p, h, err
 }
 

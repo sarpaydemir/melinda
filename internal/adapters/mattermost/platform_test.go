@@ -2,6 +2,7 @@ package mattermost_test
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -77,6 +78,17 @@ func TestIdentityIsTheConfiguredAccountWithoutIO(t *testing.T) {
 		t.Errorf("with a username: %+v, want %+v", got, want)
 	}
 	mm.AssertCalls(t)
+}
+
+func TestSelfReportsARejectedTokenAsUnauthorized(t *testing.T) {
+	for status, want := range map[int]bool{401: true, 403: true, 503: false} {
+		mm := newFake(t)
+		mm.On("GET", "/api/v4/users/me").Reply(testkit.Status(status))
+		_, err := open(t, mm, "").Self(t.Context())
+		if err == nil || errors.Is(err, chat.ErrUnauthorized) != want {
+			t.Errorf("status %d: err = %v, want unauthorized %v", status, err, want)
+		}
+	}
 }
 
 func TestLookupsMapMattermostFields(t *testing.T) {

@@ -549,7 +549,7 @@ func TestReloadKeepsFixedKeys(t *testing.T) {
 	next, ignored, err := startup.Reload(document(t, `{
 		"model": "m2", "chat_platform": "telegram", "web_fetch": "browser", "buffer_prefix": "q:",
 		"kb_collection": "other", "debounce_seconds": 5, "assistant_label": "Bot"
-	}`), func(s *config.Settings) error { validated = s.ChatPlatform; return nil })
+	}`), nil, func(s *config.Settings) error { validated = s.ChatPlatform; return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,9 +569,37 @@ func TestReloadKeepsFixedKeys(t *testing.T) {
 	}
 }
 
+func TestReloadKeepsTheStartupValuesOfRestartKeys(t *testing.T) {
+	startup := settings(t, `{"model": "m", "chat_id": "a", "chat_token": "t1", "chat_url": "u1"}`)
+	var validated adapterKeys
+	next, ignored, err := startup.Reload(document(t, `{
+		"model": "m", "chat_id": "b", "chat_url": "u2", "chat_name": "n"
+	}`), []string{"chat_id", "chat_token", "chat_name"}, func(s *config.Settings) error { return s.Decode(&validated) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"chat_id", "chat_token", "chat_name"}; !slices.Equal(ignored, want) {
+		t.Errorf("ignored: got %v, want %v", ignored, want)
+	}
+	var got adapterKeys
+	if err := next.Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if want := (adapterKeys{ID: "a", Token: "t1", URL: "u2"}); got != want || validated != want {
+		t.Errorf("decoded %+v, validated %+v, want %+v", got, validated, want)
+	}
+}
+
+type adapterKeys struct {
+	ID    string `json:"chat_id"`
+	Token string `json:"chat_token"`
+	URL   string `json:"chat_url"`
+	Name  string `json:"chat_name"`
+}
+
 func TestReloadWithoutChangesIgnoresNothing(t *testing.T) {
 	startup := settings(t, `{"model": "m"}`)
-	next, ignored, err := startup.Reload(document(t, `{"model": "m", "persona": "p"}`), noAdapters)
+	next, ignored, err := startup.Reload(document(t, `{"model": "m", "persona": "p"}`), nil, noAdapters)
 	if err != nil || ignored != nil || next.Persona != "p" {
 		t.Errorf("got %v, %v, %v", next, ignored, err)
 	}
@@ -579,7 +607,7 @@ func TestReloadWithoutChangesIgnoresNothing(t *testing.T) {
 
 func TestReloadFailsLikeLoad(t *testing.T) {
 	startup := settings(t, `{"model": "m"}`)
-	if _, _, err := startup.Reload(document(t, `{"model": ""}`), noAdapters); err == nil ||
+	if _, _, err := startup.Reload(document(t, `{"model": ""}`), nil, noAdapters); err == nil ||
 		!strings.Contains(err.Error(), "model is required") {
 		t.Errorf("got %v", err)
 	}

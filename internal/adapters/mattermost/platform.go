@@ -3,6 +3,7 @@ package mattermost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -65,6 +66,9 @@ func (p *platform) Identity() chat.User { return p.identity }
 
 func (p *platform) Self(ctx context.Context) (chat.User, error) {
 	u, err := p.client.GetMe(ctx)
+	if apiErr, ok := errors.AsType[*APIError](err); ok && (apiErr.Status == http.StatusUnauthorized || apiErr.Status == http.StatusForbidden) {
+		return chat.User{}, fmt.Errorf("%w: %w", chat.ErrUnauthorized, err)
+	}
 	if err != nil {
 		return chat.User{}, err
 	}

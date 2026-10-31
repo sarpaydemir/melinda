@@ -69,7 +69,7 @@ func load(env config.Env, table adapters, clk clock.Clock, secrets *logging.Secr
 	components, errComponents := enable(env.Components)
 	dsn, errDSN := pg.DSN(env)
 	prompts, errPrompts := prompt.Load(table.prompts(), env.PromptsDir)
-	settings, errSettings := config.NewProvider(env, table.secretKeys(), validator(table), secrets, clk, log)
+	settings, errSettings := config.NewProvider(env, table.secretKeys(), table.restartKeys(), validator(table), secrets, clk, log)
 	return startup{components: components, dsn: dsn, settings: settings, prompts: prompts},
 		errors.Join(errComponents, errDSN, errPrompts, errSettings)
 }
@@ -213,7 +213,7 @@ func exportPrompts(ctx context.Context, env config.Env, dir string, force bool, 
 		return err
 	}
 	if env.SettingsSource() != "" {
-		settings, err := config.NewProvider(env, table.secretKeys(), validator(table), secrets, clk, log)
+		settings, err := config.NewProvider(env, table.secretKeys(), table.restartKeys(), validator(table), secrets, clk, log)
 		if err != nil {
 			return err
 		}

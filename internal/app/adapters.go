@@ -54,6 +54,7 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 				tools:   func(s *config.Settings, c *prompt.Catalog) []tool.Tool { return mattermost.Tools(s, c, transport, log) },
 				prompts: mattermost.Prompts(),
 				secrets: []config.SecretKey{{Key: "mattermost_token"}},
+				restart: []string{"mattermost_bot_id", "mattermost_token"},
 			},
 		},
 		models: map[string]entry[model.Provider]{
@@ -99,6 +100,8 @@ type platformAdapter struct {
 	tools   func(*config.Settings, *prompt.Catalog) []tool.Tool
 	prompts []prompt.Entry
 	secrets []config.SecretKey
+	// restart are the settings keys whose startup values hold until the process restarts.
+	restart []string
 }
 
 // handler is an automation handler and the catalog entries of its texts.
@@ -153,6 +156,16 @@ func (a adapters) secretKeys() []config.SecretKey {
 	}
 	slices.SortFunc(keys, func(x, y config.SecretKey) int { return strings.Compare(x.Key, y.Key) })
 	return slices.Compact(keys)
+}
+
+// restartKeys are the restart-only keys of every registered platform, selected or not, since the selection itself
+// holds until restart.
+func (a adapters) restartKeys() []string {
+	var keys []string
+	for _, name := range slices.Sorted(maps.Keys(a.platforms)) {
+		keys = append(keys, a.platforms[name].restart...)
+	}
+	return keys
 }
 
 // names are the adapter names a settings document selects.

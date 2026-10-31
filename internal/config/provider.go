@@ -16,6 +16,7 @@ import (
 type Provider struct {
 	env      Env
 	keys     []SecretKey
+	restart  []string
 	validate func(*Settings) error
 	mask     *logging.Secrets
 	clock    clock.Clock
@@ -30,11 +31,11 @@ type Provider struct {
 }
 
 // NewProvider loads the settings from the first configured source. keys are the secret keys the adapters declare,
-// and validate checks the selected adapters' settings in every snapshot. The values of the secret keys are added
+// restart the adapter keys whose startup values hold for the life of the process, and validate checks the selected adapters' settings in every snapshot. The values of the secret keys are added
 // to mask before each snapshot is checked.
-func NewProvider(env Env, keys []SecretKey, validate func(*Settings) error, mask *logging.Secrets, clk clock.Clock, log *slog.Logger) (*Provider, error) {
+func NewProvider(env Env, keys []SecretKey, restart []string, validate func(*Settings) error, mask *logging.Secrets, clk clock.Clock, log *slog.Logger) (*Provider, error) {
 	p := &Provider{
-		env: env, keys: keys, validate: validate, mask: mask, clock: clk, log: log,
+		env: env, keys: keys, restart: restart, validate: validate, mask: mask, clock: clk, log: log,
 		ignored: map[string]bool{},
 	}
 	doc, err := p.read()
@@ -93,5 +94,5 @@ func (p *Provider) reload(prev *Settings) (*Settings, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return prev.Reload(doc, p.validate)
+	return prev.Reload(doc, p.restart, p.validate)
 }

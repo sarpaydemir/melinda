@@ -91,17 +91,25 @@ func (r *Identity) Resolve(ctx context.Context, p agent) chat.User {
 }
 
 // Verify returns an error when the platform reports a different ID for the agent's account than the configured
-// one, since the agent would then answer its own posts. A failed lookup is only logged.
+// one, since the agent would then answer its own posts. A failed lookup is retried with backoff until it succeeds
+// or ctx ends; rejected credentials fail at once.
 func (r *Identity) Verify(ctx context.Context, p agent) error {
-	self, err := p.Self(ctx)
-	if err != nil {
-		r.log.Warn("could not verify the agent's account", "error", err)
-		return nil
+	for wait := time.Second; ; wait = min(2*wait, lookupPause) {
+		self, err := p.Self(ctx)
+		if err == nil {
+			if id := p.Identity().ID; self.ID != id {
+				return fmt.Errorf("the configured agent ID %q is not the token's account; the platform reports %q", id, self.ID)
+			}
+			return nil
+		}
+		if errors.Is(err, chat.ErrUnauthorized) {
+			return fmt.Errorf("the platform rejected the agent's token: %w", err)
+		}
+		r.log.Warn("could not verify the agent's account; retrying", "retry_in", wait, "error", err)
+		if err := clock.Sleep(ctx, r.clk, wait); err != nil {
+			return err
+		}
 	}
-	if id := p.Identity().ID; self.ID != id {
-		return fmt.Errorf("the configured agent ID %q is not the token's account; the platform reports %q", id, self.ID)
-	}
-	return nil
 }
 
 // load returns the username of the stored entry when it is usable, keeping the entry in process.

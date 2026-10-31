@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -357,18 +358,15 @@ func TestVerifyFailsWhenPlatformReportsAnotherAgentID(t *testing.T) {
 	cases := []struct {
 		name    string
 		self    chat.User
-		err     error
-		warn    bool
 		failure bool
 	}{
-		{"same ID", chat.User{ID: agentID, Username: "helper"}, nil, false, false},
-		{"different ID", chat.User{ID: "reported-id", Username: "helper"}, nil, false, true},
-		{"lookup failed", chat.User{}, errors.New("connection refused"), true, false},
+		{"same ID", chat.User{ID: agentID, Username: "helper"}, false},
+		{"different ID", chat.User{ID: "reported-id", Username: "helper"}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFixture(t)
-			a := &fakeAgent{configured: chat.User{ID: agentID}, self: c.self, err: c.err}
+			a := &fakeAgent{configured: chat.User{ID: agentID}, self: c.self}
 
 			err := f.id.Verify(t.Context(), a)
 
@@ -378,12 +376,72 @@ func TestVerifyFailsWhenPlatformReportsAnotherAgentID(t *testing.T) {
 			if err != nil && !strings.Contains(err.Error(), "reported-id") {
 				t.Errorf("error does not name the reported ID: %v", err)
 			}
-			if got := strings.Contains(f.logs.String(), "level=WARN"); got != c.warn {
-				t.Errorf("warned = %v, want %v; logs:\n%s", got, c.warn, f.logs)
-			}
 			if got := f.stored(t); got != "" {
 				t.Errorf("cache written by Verify: %s", got)
 			}
 		})
+	}
+}
+
+// flakyAgent fails the first failures lookups, then reports self.
+type flakyAgent struct {
+	fakeAgent
+	failures int32
+}
+
+func (a *flakyAgent) Self(ctx context.Context) (chat.User, error) {
+	if n := a.calls.Load(); n < a.failures {
+		a.calls.Add(1)
+		return chat.User{}, errors.New("connection refused")
+	}
+	return a.fakeAgent.Self(ctx)
+}
+
+func TestVerifyRetriesAFailedLookupWithBackoffThenFailsOnAnotherAgentID(t *testing.T) {
+	f := newFixture(t)
+	a := &flakyAgent{fakeAgent: fakeAgent{configured: chat.User{ID: agentID}, self: chat.User{ID: "reported-id"}}, failures: 2}
+	done := make(chan error, 1)
+	go func() { done <- f.id.Verify(t.Context(), a) }()
+
+	for _, wait := range []time.Duration{time.Second, 2 * time.Second} {
+		f.clk.AwaitTimers(t, 1)
+		if got, _ := f.clk.Next(); got != wait {
+			t.Errorf("retry in %v, want %v", got, wait)
+		}
+		f.clk.Advance(wait)
+	}
+	err := <-done
+
+	if err == nil || !strings.Contains(err.Error(), "reported-id") {
+		t.Errorf("err = %v, want a failure naming the reported ID", err)
+	}
+	assertCalls(t, &a.fakeAgent, 3)
+	if n := strings.Count(f.logs.String(), "level=WARN"); n != 2 {
+		t.Errorf("warnings = %d, want one per failed lookup; logs:\n%s", n, f.logs)
+	}
+}
+
+func TestVerifyFailsAtOnceWhenThePlatformRejectsTheToken(t *testing.T) {
+	f := newFixture(t)
+	a := &fakeAgent{configured: chat.User{ID: agentID}, err: fmt.Errorf("401: %w", chat.ErrUnauthorized)}
+
+	if err := f.id.Verify(t.Context(), a); !errors.Is(err, chat.ErrUnauthorized) {
+		t.Errorf("err = %v, want unauthorized", err)
+	}
+	assertCalls(t, a, 1)
+}
+
+func TestVerifyStopsRetryingWhenTheContextEnds(t *testing.T) {
+	f := newFixture(t)
+	a := &fakeAgent{configured: chat.User{ID: agentID}, err: errors.New("connection refused")}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- f.id.Verify(ctx, a) }()
+
+	f.clk.AwaitTimers(t, 1)
+	cancel()
+
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }

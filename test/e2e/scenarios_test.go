@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarpaydemir/dost/internal/testkit"
 	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
 	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
 )
@@ -64,6 +65,63 @@ func TestBotIDOfAnotherAccountStopsStartupBeforeAnyReply(t *testing.T) {
 	if got := e.replies(); len(got) != 0 {
 		t.Errorf("replies %+v, want none", got)
 	}
+}
+
+func TestFailedAccountLookupIsRetriedThenAnotherAccountStopsStartup(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, map[string]any{"mattermost_bot_id": id("u1")})
+	e.chat.On("GET", "/api/v4/users/me").Reply(testkit.Status(503))
+	out := &logs{}
+	cmd := e.command()
+	cmd.Stdout, cmd.Stderr = out, out
+
+	if err := cmd.Run(); err == nil || !strings.Contains(out.String(), id("bot")) {
+		t.Errorf("exit %v, want a failure naming the token's account; logs:\n%s", err, out)
+	}
+	if n := strings.Count(out.String(), "could not verify the agent's account; retrying"); n != 1 {
+		t.Errorf("retries logged = %d, want 1; logs:\n%s", n, out)
+	}
+	if got := e.replies(); len(got) != 0 {
+		t.Errorf("replies %+v, want none", got)
+	}
+}
+
+func TestSIGTERMWhileTheAccountLookupKeepsFailingExitsCleanly(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, nil)
+	e.chat.On("GET", "/api/v4/users/me").Default(testkit.Status(503))
+	a := e.launch()
+	a.await("a retried lookup", func() bool {
+		return strings.Count(a.logs.String(), "could not verify the agent's account; retrying") >= 2
+	})
+	a.stop()
+
+	if strings.Contains(a.logs.String(), `msg="recovery finished"`) {
+		t.Errorf("the agent started without a verified account; logs:\n%s", a.logs)
+	}
+}
+
+func TestEditedBotIDAndTokenWaitForARestart(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, nil)
+	e.settingsTTL = "0s"
+	a := e.start()
+	e.post("dm1", "", "first")
+	a.awaitReplies(e, 1)
+	e.writeSettings(map[string]any{"mattermost_bot_id": id("u1"), "mattermost_token": "other-token"})
+	e.post("dm1", "", "second")
+	a.awaitReplies(e, 2)
+	a.stop()
+
+	for _, key := range []string{"mattermost_bot_id", "mattermost_token"} {
+		if !strings.Contains(a.logs.String(), `msg="settings change ignored until restart" setting=`+key) {
+			t.Errorf("no ignored-change warning for %s; logs:\n%s", key, a.logs)
+		}
+	}
+	if n := e.chat.Connections(); n != 1 {
+		t.Errorf("websocket connections = %d, want 1", n)
+	}
+	e.assertSettled()
 }
 
 func TestMessageBufferedAtACrashIsAnsweredOnceAfterRestart(t *testing.T) {

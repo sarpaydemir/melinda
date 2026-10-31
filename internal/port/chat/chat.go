@@ -47,6 +47,9 @@ type Platform interface {
 // ctx.Err() if ctx ends first. The engine takes ownership of event.
 type Deliver func(ctx context.Context, event json.RawMessage) error
 
+// ErrUnauthorized reports that the platform rejected the agent's credentials.
+var ErrUnauthorized = errors.New("credentials rejected")
+
 // ErrTooLarge reports an attachment larger than the requested limit.
 var ErrTooLarge = errors.New("attachment exceeds the size limit")
 

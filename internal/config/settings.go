@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -104,10 +105,22 @@ func Load(doc map[string]json.RawMessage, agentID string, secrets []SecretKey, v
 }
 
 // Reload builds the snapshot that follows s from a new document, as Load does, but keeps the secret keys,
-// namespacing, and adapter selection values of s. It returns the keys whose new values it ignored.
-func (s *Settings) Reload(doc map[string]json.RawMessage, validate func(*Settings) error) (*Settings, []string, error) {
-	next, problems := build(doc, s.agentID, s.secrets)
+// namespacing, and adapter selection values of s, and the values of s under the adapter keys in restart. It
+// returns the keys whose new values it ignored.
+func (s *Settings) Reload(doc map[string]json.RawMessage, restart []string, validate func(*Settings) error) (*Settings, []string, error) {
 	var ignored []string
+	for _, key := range restart {
+		v, ok := s.doc[key]
+		if nv, nok := doc[key]; ok != nok || !bytes.Equal(v, nv) {
+			ignored = append(ignored, key)
+		}
+		if ok {
+			doc[key] = v
+		} else {
+			delete(doc, key)
+		}
+	}
+	next, problems := build(doc, s.agentID, s.secrets)
 	kept := s.fixed()
 	for i, f := range next.fixed() {
 		if *f.value != *kept[i].value {
