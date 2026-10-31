@@ -224,19 +224,6 @@ func TestAddWritesRowsInTheExistingShape(t *testing.T) {
 	}
 }
 
-func parseVector(t *testing.T, text string) []float32 {
-	t.Helper()
-	var v []float32
-	for f := range strings.SplitSeq(strings.Trim(text, "[]"), ",") {
-		x, err := strconv.ParseFloat(f, 32)
-		if err != nil {
-			t.Fatal(err)
-		}
-		v = append(v, float32(x))
-	}
-	return v
-}
-
 func TestAddWritesAllRowsOrNone(t *testing.T) {
 	s, conn := open(t)
 	err := s.Add(t.Context(), "facts", []Doc{
