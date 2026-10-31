@@ -82,6 +82,15 @@ func TestRecordsRequestsInOrder(t *testing.T) {
 	}
 }
 
+func TestForgetDropsRecordedRequests(t *testing.T) {
+	s := testkit.NewServer(t)
+	s.On("GET", "/a").Default(testkit.Status(204))
+	do(t, "GET", s.URL()+"/a", "")
+	s.Forget()
+	do(t, "GET", s.URL()+"/a?n=2", "")
+	s.AssertCalls(t, "GET /a?n=2")
+}
+
 func TestQueueThenDefault(t *testing.T) {
 	s := testkit.NewServer(t)
 	s.On("GET", "/x").Reply(testkit.Raw(200, "text/plain", []byte("one")), testkit.Status(503)).

@@ -149,6 +149,16 @@ func TestCreatedPostsAppearInChannelPosts(t *testing.T) {
 	}
 }
 
+func TestPruneDropsOlderPosts(t *testing.T) {
+	mm := mattermostfake.New(t, token, bot)
+	mm.AddPost(mattermostfake.Post{ID: "p1", ChannelID: "c1", CreateAt: 1000})
+	mm.AddPost(mattermostfake.Post{ID: "p2", ChannelID: "c1", CreateAt: 2000})
+	mm.Prune(2000)
+	if got := mm.Posts("c1"); len(got) != 1 || got[0].ID != "p2" {
+		t.Errorf("posts after Prune(2000) = %+v, want only p2", got)
+	}
+}
+
 func TestSearchMatchesEveryTermIgnoringCase(t *testing.T) {
 	mm := mattermostfake.New(t, token, bot)
 	mm.AddPost(mattermostfake.Post{ChannelID: "c1", Message: "Deploy plan for Friday"})

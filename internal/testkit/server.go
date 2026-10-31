@@ -134,6 +134,13 @@ func (s *Server) Requests() []Request {
 	return slices.Clone(s.requests)
 }
 
+// Forget drops the requests recorded so far, so a long-running test does not keep them all.
+func (s *Server) Forget() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.requests = nil
+}
+
 // Calls returns Request.Call for every request received so far.
 func (s *Server) Calls() []string {
 	var calls []string

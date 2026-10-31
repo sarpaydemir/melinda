@@ -190,6 +190,13 @@ func (f *Fake) Posts(channelID string) []Post {
 	return out
 }
 
+// Prune drops the posts created before ms, in Unix milliseconds.
+func (f *Fake) Prune(ms int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.posts = slices.DeleteFunc(f.posts, func(p Post) bool { return p.CreateAt < ms })
+}
+
 // newID returns a 26-character ID, the length of Mattermost IDs; f.mu must be held.
 func (f *Fake) newID() string {
 	f.lastID++

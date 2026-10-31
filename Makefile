@@ -5,9 +5,10 @@ DATE      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 TEST_DB_IMAGE ?= pgvector/pgvector:pg17
+DURATION      ?= 3m
 
 .DEFAULT_GOAL := help
-.PHONY: help check fmt fmt-check vet staticcheck test test-integration test-e2e test-load vuln build image release release-dry-run tidy clean
+.PHONY: help check fmt fmt-check vet staticcheck test test-integration test-e2e test-load test-soak vuln build image release release-dry-run tidy clean
 
 help: ## List targets
 	@LC_ALL=C grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -54,6 +55,9 @@ test-e2e: ## End-to-end scenarios: the race-enabled binary against fakes and a t
 
 test-load: ## Memory load test: worst-case concurrent replies under the default container memory limit
 	$(GO) test -count=1 -tags=load -run ContainerLimit -v ./internal/app/
+
+test-soak: ## Soak test (needs Docker): make test-soak DURATION=2h OUT=<dir for log and profiles>
+	$(call with-test-db,DOST_SOAK_DURATION=$(DURATION) DOST_SOAK_OUT=$(OUT) $(GO) test -count=1 -tags=soak -run Soak -timeout 0 -v ./internal/app/)
 
 vuln: ## Known-vulnerability scan (pinned in go.mod)
 	$(GO) tool govulncheck ./...
