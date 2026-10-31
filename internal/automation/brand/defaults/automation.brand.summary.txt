@@ -1,0 +1,11 @@
+Brand analysis of {brand}, in full:
+
+**Categories:** {categories}
+**Audience:** {target}
+**Price segment:** {price}
+
+**All slogans:**
+{slogans}
+
+**All video concepts:**
+{videos}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/routing"
 )
 
@@ -26,7 +27,6 @@ const (
 var (
 	errStopped    = errors.New("pipeline stopped accepting runs")
 	errRunTimeout = errors.New("run deadline exceeded")
-	errTakenOver  = errors.New("in-flight record released by another process; nothing written")
 )
 
 type inflight interface {
@@ -271,7 +271,7 @@ func (r *record) beforeWrite(ctx context.Context) error {
 		r.release(ctx)
 	}
 	if r.gone {
-		return errTakenOver
+		return chat.ErrTakenOver
 	}
 	return nil
 }

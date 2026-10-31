@@ -1,0 +1,7 @@
+Brand: {brand}
+Categories: {categories}
+Audience: {target}
+Website summary: {web_summary}
+
+Write five creative slogans for the brand in this JSON shape:
+{{"slogans": [{{"text": "the slogan", "why": "why it works"}}]}}

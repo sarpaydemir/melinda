@@ -2,10 +2,16 @@ package automation
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"regexp"
 
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/dost/internal/port/model"
+	"github.com/sarpaydemir/dost/internal/port/web"
+	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
@@ -23,6 +29,24 @@ type Run struct {
 	Chat interface {
 		Send(ctx context.Context, m chat.Outgoing) (string, error)
 	}
+	// Catalog is the prompt catalog with the run's overrides.
+	Catalog *prompt.Catalog
+	// Model answers requests without tools.
+	Model interface {
+		Generate(ctx context.Context, r model.Request) string
+	}
+	Search web.Searcher
+	Fetch  web.Fetcher
+	// History holds the conversation items under each logical key.
+	History interface {
+		Add(ctx context.Context, key string, item json.RawMessage) error
+	}
+	// Knowledge queues items for the shared-knowledge learning run.
+	Knowledge interface {
+		AppendRaw(ctx context.Context, s *config.Settings, m chat.Message, item json.RawMessage) error
+	}
+	Clock clock.Clock
+	Log   *slog.Logger
 }
 
 // mention is an @mention and the whitespace after it.

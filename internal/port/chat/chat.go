@@ -11,6 +11,9 @@ import (
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
+// ErrTakenOver refuses a run's write after another process took the run over; the run must stop writing.
+var ErrTakenOver = errors.New("in-flight record released by another process; nothing written")
+
 // Platform is a chat platform as the engine uses it. A value is built from one settings snapshot and is safe for
 // concurrent use.
 type Platform interface {

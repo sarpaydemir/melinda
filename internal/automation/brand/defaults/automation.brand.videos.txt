@@ -1,0 +1,6 @@
+Brand: {brand}
+Slogans: {slogans}
+Audience: {target}
+
+Propose three video ad concepts in this JSON shape:
+{{"videos": [{{"title": "video title", "idea": "the concept", "duration": "length (15s/30s/60s)"}}]}}

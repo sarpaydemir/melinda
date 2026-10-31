@@ -1,0 +1,6 @@
+Brand: {brand}
+Website: {url}
+Page text (first 5000 characters): {content}
+
+Describe the brand in this JSON shape:
+{{"summary": "two or three sentences about the brand", "findings": ["finding", "finding", "finding"], "products": ["product", "product"]}}

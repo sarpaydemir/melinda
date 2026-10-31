@@ -60,9 +60,9 @@ func testTable() adapters {
 			{tools: toolsNamed("tracker_list", "tracker_create"), secrets: []config.SecretKey{{Key: "tracker_key", Ref: "tracker_secret", Overwrite: true}}},
 			{tools: toolsNamed("notes")},
 		},
-		handlers: map[string]automation.Handler{
-			"summarize": func(context.Context, automation.Run) (string, error) { return "", nil },
-			"analyze":   func(context.Context, automation.Run) (string, error) { return "", nil },
+		handlers: map[string]handler{
+			"summarize": {run: func(context.Context, automation.Run) (string, error) { return "", nil }},
+			"analyze":   {run: func(context.Context, automation.Run) (string, error) { return "", nil }},
 		},
 	}
 }

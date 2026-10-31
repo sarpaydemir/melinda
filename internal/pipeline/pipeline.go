@@ -50,6 +50,7 @@ type Pipeline struct {
 		Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 		AddTurn(ctx context.Context, key, user, assistant string, metadata map[string]any) (int, error)
 		Scoped(ctx context.Context, key, scope string, n int) ([]json.RawMessage, error)
+		Add(ctx context.Context, key string, item json.RawMessage) error
 	}
 	// Knowledge holds the shared knowledge entries.
 	Knowledge interface {
@@ -63,6 +64,7 @@ type Pipeline struct {
 	// Learning queues answered conversations for the learning run.
 	Learning interface {
 		Append(ctx context.Context, s *config.Settings, m chat.Message, reply string) error
+		AppendRaw(ctx context.Context, s *config.Settings, m chat.Message, item json.RawMessage) error
 	}
 	// Handlers run the configured automations, by handler ID.
 	Handlers map[string]automation.Handler
@@ -118,7 +120,7 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 	if err != nil {
 		return fmt.Errorf("open model provider: %w", err)
 	}
-	client := llm.Client{Provider: provider, Failure: cat.Text("error.generic"), CutOffNote: cat.Text("reply.truncated_note"), Log: log}
+	client := newClient(provider, cat, log)
 	facts := memory.Facts{Settings: s, Model: client, Embedder: provider, Store: p.Facts, History: p.History,
 		Prompt: cat.Text("memory.facts"), Log: log}
 	knowledge := kb.Retriever{Settings: s, Model: client, Embedder: provider, Store: p.Knowledge,
@@ -158,8 +160,21 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 // reply and queues it for learning unless it is a failure reply. A handler error ends the run without saving.
 func (p *Pipeline) automate(ctx context.Context, s *config.Settings, cat *prompt.Catalog, m chat.Message,
 	a config.Automation, args map[string]string, out *outbound, log *slog.Logger) error {
+	provider, err := p.Model(s)
+	if err != nil {
+		return fmt.Errorf("open model provider: %w", err)
+	}
+	search, err := p.Search(s)
+	if err != nil {
+		return fmt.Errorf("open web search: %w", err)
+	}
+	fetch, err := p.Fetch(s)
+	if err != nil {
+		return fmt.Errorf("open page fetch: %w", err)
+	}
 	log.Info("running automation", "automation", a.Name)
-	reply, err := p.Handlers[a.Handler](ctx, automation.Run{Message: m, Settings: s, Args: args, Chat: out})
+	reply, err := p.Handlers[a.Handler](ctx, automation.Run{Message: m, Settings: s, Args: args, Chat: out, Catalog: cat,
+		Model: newClient(provider, cat, log), Search: search, Fetch: fetch, History: p.History, Knowledge: p.Learning, Clock: p.Clock, Log: log})
 	if err != nil {
 		return fmt.Errorf("automation %s: %w", a.Name, err)
 	}
@@ -174,6 +189,11 @@ func (p *Pipeline) automate(ctx context.Context, s *config.Settings, cat *prompt
 		return fmt.Errorf("queue turn for learning: %w", err)
 	}
 	return nil
+}
+
+// newClient is a run's model client for provider, with the texts of cat.
+func newClient(provider model.Provider, cat *prompt.Catalog, log *slog.Logger) llm.Client {
+	return llm.Client{Provider: provider, Failure: cat.Text("error.generic"), CutOffNote: cat.Text("reply.truncated_note"), Log: log}
 }
 
 // loader loads a message's context with the run's snapshot, catalog, platform, shared knowledge, model, and facts.
@@ -304,13 +324,13 @@ func (o *outbound) Upload(ctx context.Context, conversationID string, f chat.Fil
 // out: the post may exist. A failed post is logged, not returned; only a run that may not write fails.
 func send(ctx context.Context, out *outbound, m chat.Outgoing, log *slog.Logger) error {
 	_, err := out.Send(ctx, m)
-	if err != nil && len(m.FileIDs) > 0 && !errors.Is(err, errTakenOver) && !errors.Is(err, context.DeadlineExceeded) {
+	if err != nil && len(m.FileIDs) > 0 && !errors.Is(err, chat.ErrTakenOver) && !errors.Is(err, context.DeadlineExceeded) {
 		log.Warn("reply with files not posted; posting it without them", "error", err)
 		m.FileIDs = nil
 		_, err = out.Send(ctx, m)
 	}
 	switch {
-	case errors.Is(err, errTakenOver):
+	case errors.Is(err, chat.ErrTakenOver):
 		return err
 	case err != nil:
 		log.Error("reply not posted", "error", err)

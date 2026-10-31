@@ -15,6 +15,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/adapters/plane"
 	"github.com/sarpaydemir/dost/internal/adapters/searxng"
 	"github.com/sarpaydemir/dost/internal/automation"
+	"github.com/sarpaydemir/dost/internal/automation/brand"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -39,7 +40,7 @@ type adapters struct {
 	// tool set never changes on upgrade.
 	tools []toolSource
 	// handlers are the automation handlers, by the IDs the automations setting names them by.
-	handlers map[string]automation.Handler
+	handlers map[string]handler
 }
 
 // builtin is the table of the adapters this binary ships: their HTTP requests go through transport, clk times
@@ -75,6 +76,9 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 			prompts: plane.Prompts(),
 			secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}},
 		}},
+		handlers: map[string]handler{
+			"brand_analysis": {run: brand.Analyze, prompts: brand.Prompts()},
+		},
 	}
 }
 
@@ -93,6 +97,12 @@ type platformAdapter struct {
 	secrets []config.SecretKey
 }
 
+// handler is an automation handler and the catalog entries of its texts.
+type handler struct {
+	run     automation.Handler
+	prompts []prompt.Entry
+}
+
 // toolSource contributes tools on every platform, and the catalog entries of their texts.
 type toolSource struct {
 	tools   func(*config.Settings, *prompt.Catalog) []tool.Tool
@@ -109,6 +119,9 @@ func (a adapters) prompts() []prompt.Entry {
 	}
 	for _, src := range a.tools {
 		entries = append(entries, src.prompts...)
+	}
+	for _, id := range slices.Sorted(maps.Keys(a.handlers)) {
+		entries = append(entries, a.handlers[id].prompts...)
 	}
 	return entries
 }
@@ -169,7 +182,11 @@ func (a adapters) choose(n names) (selected, error) {
 	model, errModel := pick(a.models, "model_provider", n.model)
 	search, errSearch := pick(a.searchers, "web_search", n.search)
 	fetch, errFetch := pick(a.fetchers, "web_fetch", n.fetch)
-	s := selected{platform: platform.open, model: model.open, search: search.open, fetch: fetch.open, handlers: a.handlers}
+	s := selected{platform: platform.open, model: model.open, search: search.open, fetch: fetch.open,
+		handlers: make(map[string]automation.Handler, len(a.handlers))}
+	for id, h := range a.handlers {
+		s.handlers[id] = h.run
+	}
 	if platform.tools != nil {
 		s.tools = append(s.tools, platform.tools)
 	}
@@ -193,7 +210,7 @@ func (a adapters) validate(s *config.Settings) error {
 	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s, nil)) // only their names are read
 	errs := []error{err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s), errTools}
 	for i, auto := range s.Automations {
-		if a.handlers[auto.Handler] == nil {
+		if _, ok := a.handlers[auto.Handler]; !ok {
 			errs = append(errs, fmt.Errorf("automations[%d]: unknown handler %q (available: %s)", i, auto.Handler,
 				strings.Join(slices.Sorted(maps.Keys(a.handlers)), ", ")))
 		}

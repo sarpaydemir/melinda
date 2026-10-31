@@ -20,6 +20,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/kb"
+	"github.com/sarpaydemir/dost/internal/llm"
 	"github.com/sarpaydemir/dost/internal/pipeline"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
@@ -232,6 +233,14 @@ func (h *historyFake) AddTurn(ctx context.Context, key, user, assistant string, 
 	return len(h.items[key]), nil
 }
 
+func (h *historyFake) Add(_ context.Context, key string, item json.RawMessage) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.items[key] = append(h.items[key], item)
+	h.writes = append(h.writes, key+" "+string(item))
+	return nil
+}
+
 // Scoped serves the last n turns under key; the fake keeps no scopes.
 func (h *historyFake) Scoped(ctx context.Context, key, _ string, n int) ([]json.RawMessage, error) {
 	return h.Get(ctx, key, n)
@@ -256,6 +265,12 @@ func (h *historyFake) written() []string {
 	return slices.Clone(h.writes)
 }
 
+// webFake finds nothing and reads empty pages.
+type webFake struct{}
+
+func (*webFake) Search(context.Context, string, int) ([]web.Result, error) { return nil, nil }
+func (*webFake) Fetch(context.Context, string) (string, error)             { return "", nil }
+
 // settingsFake serves the snapshot s; tests replace it only while no run is going.
 type settingsFake struct{ s *config.Settings }
 
@@ -266,6 +281,7 @@ func (f *settingsFake) Current(context.Context) *config.Settings { return f.s }
 type fixture struct {
 	p        *pipeline.Pipeline
 	chat     *chatFake
+	web      *webFake
 	model    *modelFake
 	lookup   *lookupTool
 	history  *historyFake
@@ -283,6 +299,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f := &fixture{
 		chat:     &chatFake{identity: chat.User{ID: agentID, Username: "helper"}},
+		web:      &webFake{},
 		model:    &modelFake{},
 		lookup:   &lookupTool{},
 		history:  &historyFake{items: map[string][]json.RawMessage{}},
@@ -296,8 +313,8 @@ func newFixture(t *testing.T) *fixture {
 		Settings: f.settings,
 		Platform: func(*config.Settings) (chat.Platform, error) { return f.chat, nil },
 		Model:    func(*config.Settings) (model.Provider, error) { return f.model, nil },
-		Search:   func(*config.Settings) (web.Searcher, error) { return nil, nil },
-		Fetch:    func(*config.Settings) (web.Fetcher, error) { return nil, nil },
+		Search:   func(*config.Settings) (web.Searcher, error) { return f.web, nil },
+		Fetch:    func(*config.Settings) (web.Fetcher, error) { return f.web, nil },
 		Tools:    func(*config.Settings, *prompt.Catalog) []tool.Tool { return []tool.Tool{f.lookup} },
 		Identity: routing.NewIdentity(&kvtest.Memory{}, "agent:bot_identity", clock.Real(), discard),
 		History:  f.history,
@@ -691,6 +708,10 @@ func TestMatchedAutomationPostsThroughTheRunAndOnlyItsReplyIsSaved(t *testing.T)
 	}
 	if got.Message.ID != "p1" || got.Settings != f.settings.s || !maps.Equal(got.Args, map[string]string{"name": "Acme Co"}) {
 		t.Errorf("handler got message %q, settings %p, args %q", got.Message.ID, got.Settings, got.Args)
+	}
+	if client, _ := got.Model.(llm.Client); client.Provider != f.model || got.Search != f.web || got.Fetch != f.web ||
+		got.History != f.history || got.Knowledge != f.p.Learning || got.Catalog == nil || got.Clock == nil || got.Log == nil {
+		t.Errorf("handler run lacks the pipeline's model, web, history, learning queue, catalog, clock, or log: %+v", got)
 	}
 	want := []chat.Outgoing{{ConversationID: "c1", ThreadID: "p1", Text: "Starting."}}
 	if posts := f.chat.sent(); writes != 1 || !reflect.DeepEqual(posts, want) {

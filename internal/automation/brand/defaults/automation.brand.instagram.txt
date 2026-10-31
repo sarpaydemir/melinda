@@ -1,0 +1,5 @@
+Brand: {brand}
+Instagram: {handle}
+
+Describe the brand's presence on Instagram in this JSON shape:
+{{"summary": "two or three sentences about its Instagram strategy", "themes": ["theme", "theme", "theme"]}}

@@ -1,0 +1,8 @@
+Brand: {brand}
+Website summary: {web_summary}
+Products found: {products}
+Instagram summary: {instagram_summary}
+Instagram themes: {themes}
+
+From this, analyse the brand's products in this JSON shape:
+{{"categories": ["category", "category"], "target": "who the brand sells to", "price": "price segment (budget/mid-range/premium)"}}
