@@ -356,9 +356,9 @@ func TestJobCombinesTheBufferedMessagesUnderTheFirstPayload(t *testing.T) {
 		} else {
 			assertJSON(t, "journaled buffer", string(r[0].Buffer), buffer)
 		}
-		if logs := ff.logs.String(); !strings.Contains(logs, "key="+key) || !strings.Contains(logs, "generation=g1") ||
+		if logs := ff.logs.String(); !strings.Contains(logs, "conversation_key="+key) || !strings.Contains(logs, "generation=g1") ||
 			!strings.Contains(logs, "fragments=6") || !strings.Contains(logs, "post_ids=\"[p1 p2 p3 p4 p5 p6]\"") {
-			t.Errorf("the take is not logged with key, generation, fragment count, and post IDs:\n%s", logs)
+			t.Errorf("the take is not logged with its conversation key, generation, fragment count, and post IDs:\n%s", logs)
 		}
 	})
 }
@@ -568,8 +568,8 @@ func TestJournaledRunsAreResubmittedBeforeStoredBuffersAreFlushed(t *testing.T) 
 				dropped += line
 			}
 		}
-		if !strings.Contains(dropped, "key="+prefix+"dm:u3") || !strings.Contains(dropped, `post_ids="[p8 p9]"`) {
-			t.Errorf("expired record not logged at error level with its key and post IDs:\n%s", ff.logs.String())
+		if !strings.Contains(dropped, "conversation_key="+prefix+"dm:u3") || !strings.Contains(dropped, `post_ids="[p8 p9]"`) {
+			t.Errorf("expired record not logged at error level with its conversation key and post IDs:\n%s", ff.logs.String())
 		}
 	})
 }
@@ -611,7 +611,7 @@ func TestStartupSweepSchedulesBuffersWrittenBeforeStart(t *testing.T) {
 		if err := ff.shutdown(); err != nil {
 			t.Fatalf("Run = %v", err)
 		}
-		if logs := ff.logs.String(); !strings.Contains(logs, "key="+prefix+"dm:malformed") {
+		if logs := ff.logs.String(); !strings.Contains(logs, "conversation_key="+prefix+"dm:malformed") {
 			t.Errorf("malformed buffer not logged:\n%s", logs)
 		}
 	})

@@ -12,6 +12,7 @@ import (
 
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/dost/internal/logging"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/store/kv"
@@ -160,9 +161,9 @@ func (d *Dispatcher) handle(event json.RawMessage) {
 		return
 	}
 	d.recent.add(m.ID)
-	d.log.Info("message buffered", "post_id", m.ID, "key", n.Key, "generation", n.Generation)
+	d.log.Info("message buffered", "post_id", m.ID, logging.KeyConversation, n.Key, "generation", n.Generation)
 	if err := d.flusher.Notify(d.work, *n); err != nil {
-		d.log.Warn("flusher not notified; the buffer is flushed at the next start", "key", n.Key, "error", err)
+		d.log.Warn("flusher not notified; the buffer is flushed at the next start", logging.KeyConversation, n.Key, "error", err)
 	}
 }
 

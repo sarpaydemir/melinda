@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/dost/internal/logging"
 	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/store/journal"
 	"github.com/sarpaydemir/dost/internal/textfmt"
@@ -103,12 +104,12 @@ func (f *Flusher) resume(ctx context.Context) error {
 	}
 	for _, r := range expired {
 		b, _ := parse(r.Buffer)
-		f.log.Error("run dropped after repeated restarts", "key", r.Key, "generation", r.Generation, "post_ids", b.postIDs())
+		f.log.Error("run dropped after repeated restarts", logging.KeyConversation, r.Key, "generation", r.Generation, "post_ids", b.postIDs())
 	}
 	for _, r := range records {
 		b, err := parse(r.Buffer)
 		if err != nil {
-			f.log.Error("journaled run is malformed; not resubmitted", "key", r.Key, "generation", r.Generation, "error", err)
+			f.log.Error("journaled run is malformed; not resubmitted", logging.KeyConversation, r.Key, "generation", r.Generation, "error", err)
 			continue
 		}
 		submit, _, err := f.pipeline.Reserve(ctx)
@@ -116,7 +117,7 @@ func (f *Flusher) resume(ctx context.Context) error {
 			return err
 		}
 		submit(b.job(r.Key))
-		f.log.Info("run resubmitted", "key", r.Key, "generation", r.Generation, "post_ids", b.postIDs())
+		f.log.Info("run resubmitted", logging.KeyConversation, r.Key, "generation", r.Generation, "post_ids", b.postIDs())
 	}
 	all, err := f.buffers.List(ctx, f.prefix)
 	if err != nil {
@@ -125,7 +126,7 @@ func (f *Flusher) resume(ctx context.Context) error {
 	for key, v := range all {
 		b, err := parse(v)
 		if err != nil {
-			f.log.Error("malformed buffer left in place", "key", key, "error", err)
+			f.log.Error("malformed buffer left in place", logging.KeyConversation, key, "error", err)
 			continue
 		}
 		f.due[key] = timer{generation: b.generation, at: b.flushAfter}
@@ -201,7 +202,7 @@ func (f *Flusher) flush(ctx context.Context, key string) {
 	b, err := parse(v)
 	switch {
 	case err != nil:
-		f.log.Error("malformed buffer left in place", "key", key, "error", err)
+		f.log.Error("malformed buffer left in place", logging.KeyConversation, key, "error", err)
 		return
 	case b.generation != t.generation || len(b.fragments) == 0:
 		return
@@ -225,7 +226,7 @@ func (f *Flusher) flush(ctx context.Context, key string) {
 		return
 	}
 	submit(b.job(key))
-	f.log.Info("conversation taken", "key", key, "generation", t.generation, "fragments", len(b.fragments), "post_ids", b.postIDs())
+	f.log.Info("conversation taken", logging.KeyConversation, key, "generation", t.generation, "fragments", len(b.fragments), "post_ids", b.postIDs())
 }
 
 // retry re-arms key's timer after a store error, waiting 1 s at first and twice as long each time up to 30 s.
@@ -236,7 +237,7 @@ func (f *Flusher) retry(ctx context.Context, key string, t timer, err error) {
 	t.backoff = min(max(2*t.backoff, time.Second), maxBackoff)
 	t.at = f.clk.Now().Add(t.backoff)
 	f.due[key] = t
-	f.log.Warn("store unavailable; flush retried", "key", key, "retry_in", t.backoff, "error", err)
+	f.log.Warn("store unavailable; flush retried", logging.KeyConversation, key, "retry_in", t.backoff, "error", err)
 }
 
 // parsed is a stored buffer read for a flush.
