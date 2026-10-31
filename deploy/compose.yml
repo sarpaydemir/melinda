@@ -1,0 +1,61 @@
+name: dost
+
+services:
+  dost:
+    image: ${IMAGE:-dost:latest}
+    restart: unless-stopped
+    mem_limit: ${AGENT_MEMORY_LIMIT:-512m}
+    stop_grace_period: 45s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DOST_SETTINGS_FILE: /etc/dost/settings.json
+      DOST_PROMPTS_DIR: /etc/dost/prompts
+      DOST_DB_HOST: postgres
+      DOST_DB_USER: dost
+      DOST_DB_NAME: dost
+      DOST_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - ${SETTINGS_PATH:-./settings.json}:/etc/dost/settings.json:ro
+      - ${PROMPTS_PATH:-./prompts}:/etc/dost/prompts:ro
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-512m}
+    environment:
+      POSTGRES_USER: dost
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: dost
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dost -d dost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  searxng:
+    profiles: [search]
+    image: searxng/searxng:2026.10.30-ffa88e3ba
+    restart: unless-stopped
+    mem_limit: ${SEARXNG_MEMORY_LIMIT:-512m}
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?set SEARXNG_SECRET}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    depends_on:
+      - valkey
+
+  valkey:
+    profiles: [search]
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    mem_limit: ${VALKEY_MEMORY_LIMIT:-256m}
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+
+volumes:
+  postgres-data:

@@ -32,6 +32,7 @@ commands:
   run                             run the agent until SIGINT or SIGTERM
   config check [--db]             validate the environment and settings; --db also verifies the database schema
   prompts export <dir> [--force]  write the effective prompt catalog to dir, one file per ID; --force overwrites
+  health                          exit 0 when /readyz on DOST_HTTP_ADDR answers 200, otherwise 1
   version                         print the version
 `
 
@@ -59,6 +60,16 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		return 0
 	case is("-h"), is("--help"), is("help"):
 		fmt.Fprint(stdout, usage)
+		return 0
+	case is("health"):
+		env, err := config.LoadEnv(environ)
+		if err == nil {
+			err = checkReady(ctx, env.HTTPAddr)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 		return 0
 	case is("run"):
 		env, secrets, log, err := setup(environ, stderr)

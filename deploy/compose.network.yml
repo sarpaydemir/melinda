@@ -1,0 +1,6 @@
+# Join an existing network: docker compose -f compose.yml -f compose.network.yml up -d
+# Set NETWORK to the network's name.
+networks:
+  default:
+    name: ${NETWORK:?set NETWORK}
+    external: true

@@ -1,0 +1,9 @@
+.git
+bin
+dist
+profiles
+.env
+.env.*
+deploy/.env
+deploy/settings.json
+*.local.*

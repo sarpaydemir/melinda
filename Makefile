@@ -7,7 +7,7 @@ LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.d
 TEST_DB_IMAGE ?= pgvector/pgvector:pg17
 
 .DEFAULT_GOAL := help
-.PHONY: help check fmt fmt-check vet staticcheck test test-integration vuln build tidy clean
+.PHONY: help check fmt fmt-check vet staticcheck test test-integration vuln build image tidy clean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -49,6 +49,9 @@ vuln: ## Known-vulnerability scan (pinned in go.mod)
 
 build: ## Static binary in bin/
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/dost ./cmd/dost
+
+image: ## Container image dost:$(VERSION), also tagged dost:latest
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t dost:$(VERSION) -t dost:latest .
 
 tidy: ## go mod tidy
 	$(GO) mod tidy
