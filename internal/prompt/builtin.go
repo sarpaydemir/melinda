@@ -65,8 +65,6 @@ func Builtin() []Entry {
 		{ID: "files.analysis_error_fallback", Kind: KindFormat, Placeholders: []string{"error", "text"}},
 		{ID: "files.office_fallback", Kind: KindFormat, Placeholders: []string{"text"}},
 		{ID: "files.analysis_unavailable", Kind: KindFormat, Placeholders: []string{"name"}},
-		{ID: "files.office_empty", Kind: KindRaw},
-		{ID: "files.office_error", Kind: KindFormat, Placeholders: []string{"error"}},
 
 		{ID: "tool.image.ok", Kind: KindRaw},
 		{ID: "tool.image.attached", Kind: KindRaw},

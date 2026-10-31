@@ -99,7 +99,7 @@ func parseInt(s string) (int, bool) {
 	if s != "" && (s[0] == '+' || s[0] == '-') {
 		sign, s = s[:1], s[1:]
 	}
-	digits := make([]byte, 0, len(s))
+	digits := make([]byte, 0, min(len(s), maxIntDigits))
 	afterDigit := false
 	for _, r := range s {
 		if r == '_' && afterDigit {
@@ -107,13 +107,13 @@ func parseInt(s string) (int, bool) {
 			continue
 		}
 		d, ok := decimal(r)
-		if !ok {
+		if !ok || len(digits) == maxIntDigits {
 			return 0, false
 		}
 		digits = append(digits, '0'+d)
 		afterDigit = true
 	}
-	if !afterDigit || len(digits) > maxIntDigits {
+	if !afterDigit {
 		return 0, false
 	}
 	n, _ := strconv.ParseInt(sign+string(digits), 10, 64) // only ErrRange is possible, and n is then saturated

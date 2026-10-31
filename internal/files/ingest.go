@@ -43,14 +43,29 @@ type Part struct {
 	Kind string
 }
 
-// analysable are the media types and extensions the vision model reads; every text/ media type is read as well.
+// mediaTypes are the extensions the vision model reads that imply a media type.
+var mediaTypes = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".webp": "image/webp",
+	".pdf":  "application/pdf",
+	".doc":  "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xls":  "application/vnd.ms-excel",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
+	".ppt":  "application/vnd.ms-powerpoint",
+	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	".odt":  "application/vnd.oasis.opendocument.text",
+	".ods":  "application/vnd.oasis.opendocument.spreadsheet",
+	".odp":  "application/vnd.oasis.opendocument.presentation",
+}
+
+// The vision model also reads these media types, every text/ media type, and these extensions.
 var (
-	analysableTypes      = []string{"image/jpeg", "image/png", "image/webp", "application/pdf"}
-	analysableExtensions = []string{
-		".jpg", ".jpeg", ".png", ".webp", ".pdf",
-		".doc", ".docx", ".xls", ".xlsx", ".xlsm", ".ppt", ".pptx", ".odt", ".ods", ".odp",
-		".txt", ".md", ".csv", ".json", ".log", ".xml", ".yaml", ".yml",
-	}
+	analysableTypes = []string{"image/jpeg", "image/png", "image/webp", "application/pdf"}
+	textExtensions  = []string{".txt", ".md", ".csv", ".json", ".log", ".xml", ".yaml", ".yml"}
 )
 
 // Ingest reads the metadata of a message's attachments, in order and within the settings' file count, and
@@ -85,8 +100,7 @@ func Ingest(ctx context.Context, p chat.Platform, s *config.Settings, log *slog.
 		case s.VisionModel == "":
 			continue
 		case !analysable(a.MediaType, ext):
-			kind := cmp.Or(ext, a.MediaType, "application/octet-stream")
-			c.note("files.unsupported", map[string]string{"filename": name, "kind": kind})
+			c.note("files.unsupported", map[string]string{"filename": name, "kind": cmp.Or(ext, mediaType(a))})
 			continue
 		case a.Size > s.FileMaxBytes:
 			c.note("files.too_large", map[string]string{"filename": name, "max_mb": maxMB})
@@ -126,6 +140,16 @@ func extension(a chat.Attachment) string {
 }
 
 func analysable(mediaType, ext string) bool {
-	return slices.Contains(analysableTypes, mediaType) || strings.HasPrefix(mediaType, "text/") ||
-		slices.Contains(analysableExtensions, ext)
+	_, typed := mediaTypes[ext]
+	return slices.Contains(analysableTypes, mediaType) || strings.HasPrefix(mediaType, "text/") || typed ||
+		slices.Contains(textExtensions, ext)
+}
+
+// mediaType is the attachment's reported media type, else the one its extension implies, else
+// application/octet-stream.
+func mediaType(a chat.Attachment) string {
+	if a.MediaType != "" {
+		return a.MediaType
+	}
+	return cmp.Or(mediaTypes[extension(a)], "application/octet-stream")
 }

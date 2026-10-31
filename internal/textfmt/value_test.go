@@ -3,6 +3,7 @@ package textfmt_test
 import (
 	"math"
 	"math/big"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -281,6 +282,8 @@ func TestIntConvertsValueOrReturnsDefault(t *testing.T) {
 		{"\U0001d7d85", 5},
 		{"99999999999999999999", math.MaxInt},
 		{"-99999999999999999999", math.MinInt},
+		{strings.Repeat("1", 4300), math.MaxInt},
+		{strings.Repeat("1_", 4299) + "1", math.MaxInt},
 		{strings.Repeat("1", 4301), def},
 		{"1__0", def},
 		{"_1", def},
@@ -300,5 +303,16 @@ func TestIntConvertsValueOrReturnsDefault(t *testing.T) {
 		if got := textfmt.Int(tt.in, def); got != tt.want {
 			t.Errorf("Int(%#v) = %d, want %d", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestIntStopsReadingPastTheDigitLimit(t *testing.T) {
+	digits := strings.Repeat("\U0001d7ff", 1<<20) // the last of 50 contiguous digits, the slowest to decode
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	got := textfmt.Int(digits, -1)
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; got != -1 || allocated > 64<<10 {
+		t.Errorf("Int(1M digits) = %d after allocating %d bytes, want -1 within 64 KiB", got, allocated)
 	}
 }
