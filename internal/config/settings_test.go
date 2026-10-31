@@ -80,6 +80,8 @@ func defaults() config.Settings {
 		FactsCollection:     "agent_memory",
 		KBCollection:        "agent_public_kb",
 		AssistantLabel:      "agent",
+		FileMaxCount:        5,
+		FileMaxBytes:        20971520,
 	}
 }
 
@@ -174,7 +176,8 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"admin_ids": null, "name_excluded_channels": null, "enabled_tools": null, "chat_platform": null,
 		"model_provider": null, "web_search": null, "web_fetch": null, "debounce_seconds": null,
 		"buffer_prefix": null, "last_seen_key": null, "bot_identity_key": null, "memory_key_prefix": null,
-		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null
+		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
+		"file_max_count": null, "file_max_bytes": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
@@ -246,6 +249,13 @@ func TestToolLimitsFallBackWhenZero(t *testing.T) {
 		if want := []int{tc.iterations, tc.calls, tc.kbTokens, tc.final}; !slices.Equal(got, want) {
 			t.Errorf("%s: got %v, want %v", tc.doc, got, want)
 		}
+	}
+}
+
+func TestAttachmentLimitsAreSettings(t *testing.T) {
+	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000}`)
+	if s.FileMaxCount != 2 || s.FileMaxBytes != 1000 {
+		t.Errorf("got %d files of %d bytes, want 2 of 1000", s.FileMaxCount, s.FileMaxBytes)
 	}
 }
 
@@ -373,6 +383,10 @@ func TestWrongTypesNameTheKeyAndExpectedType(t *testing.T) {
 		{`"debounce_seconds": "3"`, "debounce_seconds: expected number"},
 		{`"debounce_seconds": -1`, "debounce_seconds: must not be negative"},
 		{`"kb_collection": 1`, "kb_collection: expected string"},
+		{`"file_max_count": "5"`, "file_max_count: expected integer"},
+		{`"file_max_count": 0`, "file_max_count: must be positive"},
+		{`"file_max_bytes": 1.5`, "file_max_bytes: expected integer"},
+		{`"file_max_bytes": -1`, "file_max_bytes: must be positive"},
 	} {
 		got := settingsErr(t, `{"model": "m", `+tc.entry+`}`)
 		if want := "invalid settings:\ncore: " + tc.want; got != want {

@@ -59,6 +59,10 @@ type Settings struct {
 	KBCollection    string  `json:"kb_collection"`
 	AssistantLabel  string  `json:"assistant_label"`
 
+	// FileMaxCount and FileMaxBytes bound the attachments of one message: how many are read and the size of each.
+	FileMaxCount int   `json:"file_max_count"`
+	FileMaxBytes int64 `json:"file_max_bytes"`
+
 	agentID string
 	secrets []SecretKey
 	doc     map[string]json.RawMessage
@@ -171,6 +175,8 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 		FactsCollection:     agentID + "_memory",
 		KBCollection:        agentID + "_public_kb",
 		AssistantLabel:      agentID,
+		FileMaxCount:        5,
+		FileMaxBytes:        20 << 20,
 		agentID:             agentID,
 		secrets:             secrets,
 		doc:                 doc,
@@ -182,6 +188,12 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 	problems = append(problems, s.decode(s)...)
 	if s.DebounceSeconds < 0 {
 		problems = append(problems, errors.New("debounce_seconds: must not be negative"))
+	}
+	if s.FileMaxCount < 1 {
+		problems = append(problems, errors.New("file_max_count: must be positive"))
+	}
+	if s.FileMaxBytes < 1 {
+		problems = append(problems, errors.New("file_max_bytes: must be positive"))
 	}
 	if raw, ok := doc["admin_ids"]; ok {
 		ids, err := adminIDs(raw)
