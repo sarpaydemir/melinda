@@ -67,3 +67,20 @@ func TestEncodeASCIIHandlesDeepNestingInLinearTime(t *testing.T) {
 		t.Errorf("EncodeASCII of %d levels took %v", depth, elapsed)
 	}
 }
+
+func TestEncodeCompactHandlesDeepNestingInLinearTime(t *testing.T) {
+	const depth = 10000
+	v := any(textfmt.Object{})
+	for range depth {
+		v = textfmt.Object{{Key: "<a>", Value: []any{v}}}
+	}
+	start := time.Now()
+	got, err := textfmt.EncodeCompact(v)
+	elapsed := time.Since(start)
+	if want := strings.Repeat(`{"<a>":[`, depth) + "{}" + strings.Repeat("]}", depth); string(got) != want || err != nil {
+		t.Errorf("EncodeCompact of %d levels = %d bytes, %v; want %d bytes", depth, len(got), err, len(want))
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("EncodeCompact of %d levels took %v", depth, elapsed)
+	}
+}

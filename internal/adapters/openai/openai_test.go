@@ -753,3 +753,27 @@ func TestEmbedTimeoutIsNotTheRequestTimeout(t *testing.T) {
 		t.Errorf("got %v, %v; want [0.5] from the first attempt", got, err)
 	}
 }
+
+func TestChatResendsToolCallsWithoutHTMLEscapes(t *testing.T) {
+	fake := openaifake.New(t)
+	answer := `{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function",` +
+		`"function":{"name":"create_issue","arguments":"{\"description\": \"Seen on <mobile> & web.\"}"}}]}}]}`
+	fake.Chat().Reply(testkit.Raw(200, "application/json", []byte(answer)), openaifake.Text("done"))
+	p, _ := open(t, fake.URL())
+	tools := []model.ToolSpec{{Name: "create_issue", Parameters: json.RawMessage(`{"type":"object"}`)}}
+	messages := []model.Message{{Role: model.RoleUser, Content: "file it"}}
+	turn, err := p.Chat(context.Background(), model.Request{Model: "m", Messages: messages, Tools: tools})
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages = append(messages, turn.Message,
+		model.Message{Role: model.RoleTool, ToolCallID: "call_1", Name: "create_issue", Content: "ok"})
+	if _, err := p.Chat(context.Background(), model.Request{Model: "m", Messages: messages, Tools: tools}); err != nil {
+		t.Fatal(err)
+	}
+	want := `"tool_calls":[{"id":"call_1","type":"function","function":{"name":"create_issue",` +
+		`"arguments":"{\"description\": \"Seen on <mobile> & web.\"}"}}]`
+	if body := string(fake.Requests()[1].Body); !strings.Contains(body, want) {
+		t.Errorf("body %s\nlacks %s", body, want)
+	}
+}

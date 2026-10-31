@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"strconv"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // Encode is v as compact JSON, as encoding/json writes it but without escaping HTML characters, U+2028, or
@@ -25,17 +26,28 @@ func Encode(v any) ([]byte, error) {
 // separators and every character outside printable ASCII escaped as \uXXXX, in UTF-16 surrogate pairs beyond the
 // Basic Multilingual Plane. Non-finite floats and other types are an error.
 func EncodeASCII(v any) ([]byte, error) {
-	return appendASCII(nil, v)
+	return appendValue(nil, v, true)
 }
 
-func appendASCII(b []byte, v any) ([]byte, error) {
+// EncodeCompact writes a value as Decode returns it, or a tree of such values, as Encode writes JSON: no spaces,
+// raw UTF-8, and no HTML escaping. Non-finite floats and other types are an error.
+func EncodeCompact(v any) ([]byte, error) {
+	return appendValue(nil, v, false)
+}
+
+// appendValue writes v in one pass: with ", " and ": " and ASCII escapes when ascii is set, compactly otherwise.
+func appendValue(b []byte, v any, ascii bool) ([]byte, error) {
+	comma, colon := ",", ":"
+	if ascii {
+		comma, colon = ", ", ": "
+	}
 	switch v := v.(type) {
 	case nil:
 		return append(b, "null"...), nil
 	case bool:
 		return strconv.AppendBool(b, v), nil
 	case string:
-		return appendASCIIString(b, v), nil
+		return appendString(b, v, ascii), nil
 	case int64:
 		return strconv.AppendInt(b, v, 10), nil
 	case *big.Int:
@@ -47,10 +59,10 @@ func appendASCII(b []byte, v any) ([]byte, error) {
 		b = append(b, '[')
 		for i, x := range v {
 			if i > 0 {
-				b = append(b, ", "...)
+				b = append(b, comma...)
 			}
 			var err error
-			if b, err = appendASCII(b, x); err != nil {
+			if b, err = appendValue(b, x, ascii); err != nil {
 				return nil, err
 			}
 		}
@@ -59,11 +71,11 @@ func appendASCII(b []byte, v any) ([]byte, error) {
 		b = append(b, '{')
 		for i, m := range v {
 			if i > 0 {
-				b = append(b, ", "...)
+				b = append(b, comma...)
 			}
-			b = append(appendASCIIString(b, m.Key), ": "...)
+			b = append(appendString(b, m.Key, ascii), colon...)
 			var err error
-			if b, err = appendASCII(b, m.Value); err != nil {
+			if b, err = appendValue(b, m.Value, ascii); err != nil {
 				return nil, err
 			}
 		}
@@ -72,7 +84,8 @@ func appendASCII(b []byte, v any) ([]byte, error) {
 	return nil, fmt.Errorf("textfmt: cannot encode %T", v)
 }
 
-func appendASCIIString(b []byte, s string) []byte {
+// appendString writes s quoted, escaping control characters, and everything outside printable ASCII when ascii is set.
+func appendString(b []byte, s string, ascii bool) []byte {
 	b = append(b, '"')
 	for _, r := range s {
 		switch {
@@ -88,6 +101,8 @@ func appendASCIIString(b []byte, s string) []byte {
 			b = append(b, `\r`...)
 		case r == '\t':
 			b = append(b, `\t`...)
+		case r >= 0x20 && !ascii:
+			b = utf8.AppendRune(b, r)
 		case r < 0x20 || r >= 0x7f:
 			for _, u := range utf16.Encode([]rune{r}) {
 				b = fmt.Appendf(b, `\u%04x`, u)

@@ -123,7 +123,7 @@ func wire(m model.Message, f *files) (any, error) {
 }
 
 // replay is an assistant message the API returned, as sent back to it: its content, or "" when that is empty,
-// and its tool calls, both in the API's own encoding. Other members, such as reasoning, are left out.
+// in the API's own encoding, and its tool calls re-encoded in their original order. Other members, such as reasoning, are left out.
 func replay(raw json.RawMessage) (message, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &members); err != nil {
@@ -134,7 +134,13 @@ func replay(raw json.RawMessage) (message, error) {
 		m.Content = members["content"]
 	}
 	if truthy(members["tool_calls"]) {
-		m.ToolCalls = members["tool_calls"]
+		calls, err := textfmt.Decode(members["tool_calls"], false)
+		if err != nil {
+			return message{}, fmt.Errorf("replay tool calls: %w", err)
+		}
+		if m.ToolCalls, err = textfmt.EncodeCompact(calls); err != nil {
+			return message{}, fmt.Errorf("replay tool calls: %w", err)
+		}
 	}
 	return m, nil
 }
