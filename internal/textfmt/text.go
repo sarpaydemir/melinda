@@ -55,6 +55,14 @@ func SplitLines(s string) []string {
 	return lines
 }
 
+// IsUUID reports whether s is a UUID once every "urn:" and "uuid:", the braces around it, and every hyphen are
+// removed: exactly 32 hexadecimal digits.
+func IsUUID(s string) bool {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "urn:", ""), "uuid:", "")
+	s = strings.ReplaceAll(strings.Trim(s, "{}"), "-", "")
+	return len(s) == 32 && strings.Trim(s, "0123456789abcdefABCDEF") == ""
+}
+
 var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#x27;")
 
 // HTMLEscape escapes &, <, >, ", and ' as &amp;, &lt;, &gt;, &quot;, and &#x27;.

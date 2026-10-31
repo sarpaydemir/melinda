@@ -147,6 +147,38 @@ func TestSplitLinesBreaksAtEveryLineBoundary(t *testing.T) {
 	}
 }
 
+func TestIsUUIDAcceptsUUIDsWithOptionalHyphensBracesAndPrefixes(t *testing.T) {
+	const id = "8f0e4c1a-2b3d-4e5f-9a6b-7c8d9e0f1a2b"
+	hex := strings.ReplaceAll(id, "-", "")
+	for s, want := range map[string]bool{
+		id:                                    true,
+		strings.ToUpper(id):                   true,
+		hex:                                   true,
+		"{" + id + "}":                        true,
+		"{{" + id + "}":                       true,
+		id + "}{":                             true,
+		"urn:uuid:" + id:                      true,
+		"uuid:" + id:                          true,
+		"urn:" + id:                           true,
+		"uurn:uid:" + id:                      true,
+		"8f0e4c1a2b3d-4e5f-9a6b-7c8d9e0f1a2b": true,
+		"-" + hex + "-":                       true,
+		"URN:UUID:" + id:                      false,
+		hex[:31]:                              false,
+		hex + "0":                             false,
+		hex[:31] + "g":                        false,
+		hex[:31] + "é":                        false,
+		"8f0e-4c1a-2b3d":                      false,
+		"WEB-12":                              false,
+		"{}":                                  false,
+		"":                                    false,
+	} {
+		if got := textfmt.IsUUID(s); got != want {
+			t.Errorf("IsUUID(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
 func TestHTMLEscapeEscapesMarkupAndQuotes(t *testing.T) {
 	got := textfmt.HTMLEscape(`<a href="x">Tom & Jerry's</a> İş &amp;`)
 	if want := "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#x27;s&lt;/a&gt; İş &amp;amp;"; got != want {
