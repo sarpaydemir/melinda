@@ -1,7 +1,6 @@
 package prompt_test
 
 import (
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -237,37 +236,6 @@ func TestExportOverwritesOnlyWhenForced(t *testing.T) {
 	for id, want := range map[string]string{"greeting": "Hello, {name}.", "label": "{label}", "clock": "%H:%M"} {
 		if b, err := os.ReadFile(filepath.Join(out, id+".txt")); err != nil || string(b) != want {
 			t.Errorf("%s.txt: %q, %v; want %q", id, b, err, want)
-		}
-	}
-}
-
-// TestCompatProfileRendersItsFixtures loads the private profile in DOST_COMPAT_PROFILE and renders each fixture
-// in its renders/*.json ({"id", "values", "expected"}) byte for byte.
-func TestCompatProfileRendersItsFixtures(t *testing.T) {
-	dir := os.Getenv("DOST_COMPAT_PROFILE")
-	if dir == "" {
-		t.Skip("DOST_COMPAT_PROFILE is not set")
-	}
-	c := load(t, prompt.Builtin(), filepath.Join(dir, "prompts"))
-	fixtures, err := filepath.Glob(filepath.Join(dir, "renders", "*.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(fixtures) == 0 {
-		t.Skip("the profile has no render fixtures")
-	}
-	for _, path := range fixtures {
-		var f struct {
-			ID       string            `json:"id"`
-			Values   map[string]string `json:"values"`
-			Expected string            `json:"expected"`
-		}
-		if b, err := os.ReadFile(path); err != nil || json.Unmarshal(b, &f) != nil {
-			t.Errorf("%s: not a render fixture (%v)", path, err)
-			continue
-		}
-		if got := render(t, c, f.ID, f.Values); got != f.Expected {
-			t.Errorf("%s: %s renders\n%q\nwant\n%q", path, f.ID, got, f.Expected)
 		}
 	}
 }

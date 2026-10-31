@@ -16,6 +16,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/port/model"
 	"github.com/sarpaydemir/dost/internal/port/tool"
 	"github.com/sarpaydemir/dost/internal/port/web"
+	"github.com/sarpaydemir/dost/internal/prompt"
 )
 
 // adapters is the constructor table of the built-in adapters, keyed by the names the settings select them by.
@@ -60,17 +61,33 @@ type entry[T any] struct {
 	secrets []config.SecretKey
 }
 
-// platformAdapter is a chat platform with the tools it contributes, which are offered only on that platform.
+// platformAdapter is a chat platform with the tools it contributes, which are offered only on that platform, and
+// the catalog entries of those tools' texts.
 type platformAdapter struct {
 	open    func(*config.Settings) (chat.Platform, error)
 	tools   func(*config.Settings) []tool.Tool
+	prompts []prompt.Entry
 	secrets []config.SecretKey
 }
 
-// toolSource contributes tools on every platform.
+// toolSource contributes tools on every platform, and the catalog entries of their texts.
 type toolSource struct {
 	tools   func(*config.Settings) []tool.Tool
+	prompts []prompt.Entry
 	secrets []config.SecretKey
+}
+
+// prompts are the built-in catalog entries followed by those of every registered adapter, selected or not, since
+// the selection is read from the document whose overrides the catalog checks.
+func (a adapters) prompts() []prompt.Entry {
+	entries := prompt.Builtin()
+	for _, name := range slices.Sorted(maps.Keys(a.platforms)) {
+		entries = append(entries, a.platforms[name].prompts...)
+	}
+	for _, src := range a.tools {
+		entries = append(entries, src.prompts...)
+	}
+	return entries
 }
 
 // secretKeys are the secret keys of every registered adapter, selected or not, since the selection is read from

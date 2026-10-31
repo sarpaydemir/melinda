@@ -13,6 +13,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/store/kv"
 	"github.com/sarpaydemir/dost/internal/store/pg"
@@ -32,6 +33,14 @@ func Check(ctx context.Context, env config.Env, version string, db bool, secrets
 	return check(ctx, env, db, builtin(http.DefaultTransport, clk, "dost/"+version), clk, secrets, log)
 }
 
+// ExportPrompts writes the effective prompt catalog to dir, one <id>.txt file per entry: the defaults, the profile
+// directory, and, when a settings source is configured, the settings' prompts overrides. Unless force is set, it
+// writes nothing when any of those files exists.
+func ExportPrompts(ctx context.Context, env config.Env, version, dir string, force bool, secrets *logging.Secrets, log *slog.Logger) error {
+	clk := clock.Real()
+	return exportPrompts(ctx, env, dir, force, builtin(http.DefaultTransport, clk, "dost/"+version), clk, secrets, log)
+}
+
 // startup is the validated configuration that Run and Check start from.
 type startup struct {
 	components []string
@@ -39,15 +48,31 @@ type startup struct {
 	settings   *config.Provider
 }
 
-// load validates the environment and loads the settings, reporting every problem at once.
+// load validates the environment and loads the prompt catalog and the settings, reporting every problem at once.
 func load(ctx context.Context, env config.Env, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) (startup, error) {
 	for _, name := range env.Unknown {
 		log.Warn("unknown environment variable", "name", name)
 	}
 	components, errComponents := enable(env.Components)
 	dsn, errDSN := pg.DSN(env)
-	settings, errSettings := config.NewProvider(ctx, env, table.secretKeys(), table.validate, secrets, clk, log)
-	return startup{components: components, dsn: dsn, settings: settings}, errors.Join(errComponents, errDSN, errSettings)
+	_, errPrompts := prompt.Load(table.prompts(), env.PromptsDir)
+	settings, errSettings := config.NewProvider(ctx, env, table.secretKeys(), validator(table), secrets, clk, log)
+	return startup{components: components, dsn: dsn, settings: settings}, errors.Join(errComponents, errDSN, errPrompts, errSettings)
+}
+
+// validator checks each settings snapshot: the selected adapters build from it and its prompts overrides apply to
+// the catalog's declarations, which do not depend on the profile directory. When the declarations themselves fail
+// to load, the caller's catalog load reports it and overrides are not checked.
+func validator(table adapters) func(*config.Settings) error {
+	defaults, _ := prompt.Load(table.prompts(), "")
+	return func(s *config.Settings) error {
+		err := table.validate(s)
+		if defaults == nil {
+			return err
+		}
+		_, errOverrides := defaults.With(s.Prompts)
+		return errors.Join(err, errOverrides)
+	}
 }
 
 func run(ctx context.Context, env config.Env, version string, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) error {
@@ -102,4 +127,21 @@ func check(ctx context.Context, env config.Env, verifyDB bool, table adapters, c
 	_ = json.Indent(&b, cfg.settings.Current(ctx).Redacted(), "", "  ") // Redacted is valid JSON
 	b.WriteByte('\n')
 	return b.String(), nil
+}
+
+func exportPrompts(ctx context.Context, env config.Env, dir string, force bool, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) error {
+	prompts, err := prompt.Load(table.prompts(), env.PromptsDir)
+	if err != nil {
+		return err
+	}
+	if env.SettingsSource() != "" {
+		settings, err := config.NewProvider(ctx, env, table.secretKeys(), validator(table), secrets, clk, log)
+		if err != nil {
+			return err
+		}
+		if prompts, err = prompts.With(settings.Current(ctx).Prompts); err != nil {
+			return err
+		}
+	}
+	return prompts.Export(dir, force)
 }

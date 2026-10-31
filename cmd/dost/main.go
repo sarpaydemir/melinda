@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"runtime"
 	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/sarpaydemir/dost/internal/app"
@@ -28,9 +29,10 @@ var (
 const usage = `usage: dost <command>
 
 commands:
-  run                  run the agent until SIGINT or SIGTERM
-  config check [--db]  validate the environment and settings; --db also verifies the database schema
-  version              print the version
+  run                             run the agent until SIGINT or SIGTERM
+  config check [--db]             validate the environment and settings; --db also verifies the database schema
+  prompts export <dir> [--force]  write the effective prompt catalog to dir, one file per ID; --force overwrites
+  version                         print the version
 `
 
 func main() {
@@ -75,6 +77,16 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 			var summary string
 			summary, err = app.Check(ctx, env, version, len(args) == 3, secrets, log)
 			fmt.Fprint(stdout, summary)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	case len(args) > 2 && !strings.HasPrefix(args[2], "-") && (is("prompts", "export", args[2]) || is("prompts", "export", args[2], "--force")):
+		env, secrets, log, err := setup(environ, stderr)
+		if err == nil {
+			err = app.ExportPrompts(ctx, env, version, args[2], len(args) == 4, secrets, log)
 		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)

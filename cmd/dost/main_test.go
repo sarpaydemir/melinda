@@ -28,6 +28,8 @@ func TestCommandLine(t *testing.T) {
 		{name: "unknown command", args: []string{"serve"}, wantCode: 2, wantErr: "usage:"},
 		{name: "extra argument", args: []string{"run", "now"}, wantCode: 2, wantErr: "usage:"},
 		{name: "unknown flag", args: []string{"config", "check", "--verbose"}, wantCode: 2, wantErr: "usage:"},
+		{name: "export without a directory", args: []string{"prompts", "export", "--force"}, wantCode: 2, wantErr: "usage:"},
+		{name: "unknown export flag", args: []string{"prompts", "export", "out", "--overwrite"}, wantCode: 2, wantErr: "usage:"},
 		{name: "invalid environment", args: []string{"run"}, environ: []string{"DOST_SHUTDOWN_TIMEOUT=soon"}, wantCode: 1,
 			wantErr: `invalid environment: DOST_SHUTDOWN_TIMEOUT: "soon" is not a duration`},
 		{name: "invalid configuration", args: []string{"config", "check", "--db"}, environ: []string{"DOST_COMPONENTS=gateway"}, wantCode: 1,
@@ -48,6 +50,24 @@ func TestCommandLine(t *testing.T) {
 				t.Errorf("stderr = %q, want substring %q", stderr.String(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestPromptsExportOverwritesOnlyWithForce(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		args     []string
+		wantCode int
+		wantErr  string
+	}{
+		{args: []string{"prompts", "export", dir}},
+		{args: []string{"prompts", "export", dir}, wantCode: 1, wantErr: "prompt: refusing to overwrite existing files: " + dir + "/"},
+		{args: []string{"prompts", "export", dir, "--force"}},
+	} {
+		var stdout, stderr bytes.Buffer
+		if got := run(context.Background(), tc.args, nil, &stdout, &stderr); got != tc.wantCode || !strings.HasPrefix(stderr.String(), tc.wantErr) {
+			t.Errorf("%v: exit code %d, stderr %q; want %d and %q", tc.args, got, &stderr, tc.wantCode, tc.wantErr)
+		}
 	}
 }
 
