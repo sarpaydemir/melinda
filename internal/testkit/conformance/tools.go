@@ -63,6 +63,7 @@ func Tools(t *testing.T, tools []tool.Tool, entries []catalog.Entry) {
 			UserID:         "user",
 			Requester:      func(context.Context) string { return "" },
 			BeforeWrite:    func(context.Context) error { return errors.New("writes are refused in this check") },
+			ReadFrom:       func(string) {},
 		}
 		for _, tl := range tools {
 			for _, args := range []string{`{}`, ``, `{`, `null`, `[]`, `"text"`, `7`, `{"query": 5, "limit": "x", "id": [1]}`} {

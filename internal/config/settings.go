@@ -65,6 +65,9 @@ type Settings struct {
 
 	// KBLearnFromPrivateChannels lets private and group conversations feed the shared knowledge.
 	KBLearnFromPrivateChannels bool `json:"kb_learn_from_private_channels"`
+	// RestrictOutboundAfterCrossReads refuses web search, page fetch, and work-tracker writes for the rest of a
+	// reply once it has read another conversation.
+	RestrictOutboundAfterCrossReads bool `json:"restrict_outbound_after_cross_reads"`
 
 	// FileMaxCount and FileMaxBytes bound the attachments of one message: how many are read and the size of each.
 	FileMaxCount int   `json:"file_max_count"`
@@ -232,6 +235,8 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 		agentID:                agentID,
 		secrets:                secrets,
 		doc:                    doc,
+
+		RestrictOutboundAfterCrossReads: true,
 	}
 	var problems []error
 	if raw := doc["model"]; raw == nil || string(raw) == "null" || string(raw) == `""` {

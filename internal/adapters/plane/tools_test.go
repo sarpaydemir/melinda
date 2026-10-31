@@ -188,6 +188,18 @@ func TestToolsKeepTheToolContract(t *testing.T) {
 	conformance.Tools(t, planeTools(t, configured(f), time.Unix(0, 0)), plane.Prompts())
 }
 
+func TestOnlyTheWriteToolsAreOutbound(t *testing.T) {
+	var outbound []string
+	for _, tl := range planeTools(t, `{"model":"m"}`, time.Unix(0, 0)) {
+		if _, ok := tl.(tool.Outbound); ok {
+			outbound = append(outbound, tl.Name())
+		}
+	}
+	if want := []string{"plane_create_issue", "plane_update_issue", "plane_create_comment"}; !slices.Equal(outbound, want) {
+		t.Errorf("outbound tools %q, want %q", outbound, want)
+	}
+}
+
 func TestUnusableSettingsAreReportedAfterTheArgumentChecks(t *testing.T) {
 	run(t, []exchange{
 		{name: "none at all", tool: "plane_list_projects", args: `{}`, settings: `{"model":"m"}`,

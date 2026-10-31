@@ -57,16 +57,16 @@ func Tools(s *config.Settings, c *prompt.Catalog, transport http.RoundTripper, c
 		function{"plane_list_issues", `{"type":"object","properties":{"project_id":{"type":"string"},"query":{"type":"string"},` +
 			`"state_id":{"type":"string"},"assignee_id":{"type":"string"},"cycle_id":{"type":"string"},"label_id":{"type":"string"},` +
 			`"order_by":{"type":"string"},"limit":{"type":"integer"}},"required":["project_id"]}`, r.workItems},
-		function{"plane_create_issue", `{"type":"object","properties":{"project_id":{"type":"string"},` + fields +
-			`},"required":["project_id","name"]}`, w.createWorkItem},
-		function{"plane_update_issue", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
-			fields + `},"required":["project_id","work_item_id"]}`, w.updateWorkItem},
+		outbound{function{"plane_create_issue", `{"type":"object","properties":{"project_id":{"type":"string"},` + fields +
+			`},"required":["project_id","name"]}`, w.createWorkItem}},
+		outbound{function{"plane_update_issue", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
+			fields + `},"required":["project_id","work_item_id"]}`, w.updateWorkItem}},
 		function{"plane_list_comments", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
 			`"limit":{"type":"integer"}},"required":["project_id","work_item_id"]}`, r.comments},
 		function{"plane_list_cycle_issues", `{"type":"object","properties":{"project_id":{"type":"string"},"cycle_id":{"type":"string"},` +
 			`"limit":{"type":"integer"}},"required":["project_id","cycle_id"]}`, r.cycleWorkItems},
-		function{"plane_create_comment", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
-			`"body":{"type":"string"}},"required":["project_id","work_item_id","body"]}`, w.createComment},
+		outbound{function{"plane_create_comment", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"},` +
+			`"body":{"type":"string"}},"required":["project_id","work_item_id","body"]}`, w.createComment}},
 		function{"plane_get_work_item", `{"type":"object","properties":{"project_id":{"type":"string"},"work_item_id":{"type":"string"}},` +
 			`"required":["project_id","work_item_id"]}`, r.workItem},
 	}
@@ -116,6 +116,11 @@ func (f function) Name() string { return f.name }
 func (f function) Parameters() json.RawMessage { return json.RawMessage(f.parameters) }
 
 func (f function) Call(ctx context.Context, c tool.Call) (string, error) { return f.call(ctx, c) }
+
+// outbound is a function that writes to the workspace.
+type outbound struct{ function }
+
+func (outbound) Outbound() {}
 
 // settings are Plane's keys of the settings document.
 type settings struct {

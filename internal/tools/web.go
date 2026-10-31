@@ -13,6 +13,8 @@ type searchWeb struct{ b Builtin }
 
 func (searchWeb) Name() string { return "search_web" }
 
+func (searchWeb) Outbound() {}
+
 func (searchWeb) Parameters() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`)
 }
@@ -55,6 +57,8 @@ func value(s *string) any {
 type visitPage struct{ b Builtin }
 
 func (visitPage) Name() string { return "visit_page" }
+
+func (visitPage) Outbound() {}
 
 func (visitPage) Parameters() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`)

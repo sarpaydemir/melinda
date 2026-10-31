@@ -175,11 +175,13 @@ func (f *modelFake) Image(context.Context, string, string) (model.Image, error) 
 	return f.image, nil
 }
 
-// lookupTool is a contributed tool that records its calls and returns their arguments. With cancel set, it cancels
-// the run and then asks to write, recording the answer in writeErr.
+// lookupTool is a contributed tool that records its calls and returns their arguments, reporting a read of the
+// conversation readFrom when it is set. With cancel set, it cancels the run and then asks to write, recording the
+// answer in writeErr.
 type lookupTool struct {
 	mu       sync.Mutex
 	calls    []tool.Call
+	readFrom string
 	cancel   context.CancelFunc
 	writeErr error
 }
@@ -192,6 +194,9 @@ func (l *lookupTool) Call(ctx context.Context, c tool.Call) (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.calls = append(l.calls, c)
+	if l.readFrom != "" {
+		c.ReadFrom(l.readFrom)
+	}
 	if l.cancel != nil {
 		l.cancel()
 		l.writeErr = c.BeforeWrite(ctx)
@@ -265,11 +270,18 @@ func (h *historyFake) written() []string {
 	return slices.Clone(h.writes)
 }
 
-// webFake finds nothing and reads empty pages.
-type webFake struct{}
+// webFake finds nothing and reads empty pages, and records each query and URL.
+type webFake struct{ requests []string }
 
-func (*webFake) Search(context.Context, string, int) ([]web.Result, error) { return nil, nil }
-func (*webFake) Fetch(context.Context, string) (string, error)             { return "", nil }
+func (w *webFake) Search(_ context.Context, query string, _ int) ([]web.Result, error) {
+	w.requests = append(w.requests, query)
+	return nil, nil
+}
+
+func (w *webFake) Fetch(_ context.Context, url string) (string, error) {
+	w.requests = append(w.requests, url)
+	return "", nil
+}
 
 // settingsFake serves the snapshot s; tests replace it only while no run is going.
 type settingsFake struct{ s *config.Settings }
@@ -510,6 +522,34 @@ func TestToolCallsNameTheAuthorAsThePlatformKnowsThem(t *testing.T) {
 	calls := f.lookup.received()
 	if len(calls) != 1 || calls[0].Requester(t.Context()) != "u1 (@u1)" {
 		t.Errorf("calls %+v, want one whose requester is the author's label", calls)
+	}
+}
+
+func TestReplyThatReadAnotherConversationSendsNothingOutUnlessUnrestricted(t *testing.T) {
+	for _, restrict := range []bool{true, false} {
+		f := newFixture(t)
+		refused := "call_2 " + f.catalog.Text("tool.outbound.refused")
+		f.settings.s = &config.Settings{Model: "chat-model", RestrictOutboundAfterCrossReads: restrict}
+		f.lookup.readFrom = "c2"
+		f.model.toolCalls = [][]model.ToolCall{
+			{{ID: "call_1", Name: "lookup", Arguments: json.RawMessage(`{}`)}},
+			{{ID: "call_2", Name: "search_web", Arguments: json.RawMessage(`{"query": "planted"}`)},
+				{ID: "call_3", Name: "visit_page", Arguments: json.RawMessage(`{"url": "https://attacker.example/"}`)}},
+		}
+		f.answer(t, job("dm:u1", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "hi", Kind: chat.Direct}))
+		reqs := f.model.received()
+		var results []string
+		for _, m := range reqs[len(reqs)-1].Messages {
+			if m.Role == model.RoleTool && m.ToolCallID == "call_2" {
+				results = append(results, m.ToolCallID+" "+m.Content)
+			}
+		}
+		if restrict && (len(f.web.requests) != 0 || !slices.Equal(results, []string{refused})) {
+			t.Errorf("restricted: web requests %q and results %q, want none and the refusal", f.web.requests, results)
+		}
+		if !restrict && !slices.Equal(f.web.requests, []string{"planted", "https://attacker.example/"}) {
+			t.Errorf("unrestricted: web requests %q, want the search and the page", f.web.requests)
+		}
 	}
 }
 

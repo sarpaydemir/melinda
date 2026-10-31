@@ -93,6 +93,7 @@ func (r reader) search(ctx context.Context, c tool.Call) (string, error) {
 		}
 		if readable(ctx, p.ChannelID) {
 			posts = append(posts, p)
+			c.ReadFrom(p.ChannelID)
 		}
 	}
 	if len(posts) == 0 {
@@ -176,6 +177,7 @@ func (r reader) channelPosts(ctx context.Context, c tool.Call) (string, error) {
 	if len(posts) == 0 {
 		return "No posts found.", nil
 	}
+	c.ReadFrom(channelID)
 	return r.list(ctx, "Recent posts for channel_id="+channelID+":", posts[:min(lastN, len(posts))], 800, func(p Post) string {
 		return "post_id=" + p.ID
 	}), nil

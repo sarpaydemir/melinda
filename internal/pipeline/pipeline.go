@@ -226,7 +226,7 @@ func (p *Pipeline) tools(s *config.Settings, cat *prompt.Catalog, out *outbound,
 		Search: search, Fetch: fetch, SearchLimit: s.SearchResultLimit, Knowledge: knowledge,
 		Images: provider, ImageModel: s.ImageGenerationModel, Chat: out, ReplyThread: routing.ReplyThread(m),
 		MaxProgressUpdates: s.MaxProgressUpdates, ProgressUpdateMaxChars: s.ProgressUpdateMaxChars,
-		Catalog: cat, Clock: p.Clock, Log: log,
+		RestrictOutbound: s.RestrictOutboundAfterCrossReads, Catalog: cat, Clock: p.Clock, Log: log,
 	}
 	call := tool.Call{ConversationID: m.ConversationID, UserID: m.AuthorID, Direct: m.Kind == chat.Direct,
 		Requester: chat.Requester(out.platform, m.AuthorID), BeforeWrite: out.permit}

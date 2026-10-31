@@ -37,6 +37,8 @@ type Builtin struct {
 	// points it keeps of each.
 	MaxProgressUpdates     int
 	ProgressUpdateMaxChars int
+	// RestrictOutbound refuses outbound calls for the rest of a reply once it has read another conversation.
+	RestrictOutbound bool
 	// Catalog holds the texts of the tools' results.
 	Catalog *prompt.Catalog
 	// Clock times the waits between attempts of a failed call.

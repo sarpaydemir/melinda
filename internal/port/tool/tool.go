@@ -17,6 +17,13 @@ type Tool interface {
 	Call(ctx context.Context, c Call) (string, error)
 }
 
+// Outbound is a Tool whose calls send what the model gives them outside the engine, such as a web request or a
+// work-tracker write.
+type Outbound interface {
+	Tool
+	Outbound()
+}
+
 // Call is one invocation, made while answering a message.
 type Call struct {
 	Args           json.RawMessage
@@ -29,4 +36,6 @@ type Call struct {
 	Requester func(context.Context) string
 	// BeforeWrite must be called, and its error returned, before the tool's first change outside the engine.
 	BeforeWrite func(context.Context) error
+	// ReadFrom must be called with each conversation whose content the result holds.
+	ReadFrom func(conversationID string)
 }

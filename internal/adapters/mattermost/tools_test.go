@@ -60,7 +60,7 @@ func named(t *testing.T, tools []tool.Tool, name string) tool.Tool {
 
 // asked is a call by user in the conversation here, a direct one when direct is set.
 func asked(user string, direct bool) tool.Call {
-	return tool.Call{ConversationID: here, UserID: user, Direct: direct}
+	return tool.Call{ConversationID: here, UserID: user, Direct: direct, ReadFrom: func(string) {}}
 }
 
 func ask(t *testing.T, mm *mattermostfake.Fake, name, args string, c tool.Call) string {
@@ -192,6 +192,31 @@ func TestSearchInADirectConversationKeepsChannelsTheUserBelongsTo(t *testing.T) 
 	}
 	mm.AssertCalls(t, "POST /api/v4/posts/search", membersCall(joined), membersCall(notJoined), membersCall(forbidden),
 		membersCall(failing), "POST /api/v4/users/ids")
+}
+
+func TestReadsReportEachConversationTheirResultHolds(t *testing.T) {
+	tests := []struct {
+		name, tool, args string
+		want             []string
+	}{
+		{"search", "search_mattermost", `{"query": "x"}`, []string{joined}},
+		{"channel posts", "mattermost_get_channel_posts", `{"channel_id": "` + joined + `"}`, []string{joined}},
+		{"refused channel posts", "mattermost_get_channel_posts", `{"channel_id": "` + notJoined + `"}`, nil},
+		{"teams", "mattermost_get_teams", `{}`, nil},
+		{"channels", "mattermost_get_channels", `{"team_id": "` + team + `"}`, nil},
+	}
+	for _, tt := range tests {
+		mm := newMembershipFake(t)
+		mm.On("POST", "/api/v4/posts/search").Reply(dmPosts)
+		mm.On("GET", "/api/v4/channels/{channel_id}/posts").Reply(postList([]string{"q1"}, post("q1", joined, "u1", "member", 1, "")))
+		var read []string
+		c := asked("me", true)
+		c.ReadFrom = func(id string) { read = append(read, id) }
+		ask(t, mm, tt.tool, tt.args, c)
+		if slices.Sort(read); !slices.Equal(slices.Compact(read), tt.want) {
+			t.Errorf("%s: reported %q, want %q", tt.name, read, tt.want)
+		}
+	}
 }
 
 func TestSearchFindsNothingReadable(t *testing.T) {

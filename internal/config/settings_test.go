@@ -86,6 +86,8 @@ func defaults() config.Settings {
 		SearchResultLimit:      5,
 		MaxProgressUpdates:     2,
 		ProgressUpdateMaxChars: 500,
+
+		RestrictOutboundAfterCrossReads: true,
 	}
 }
 
@@ -183,7 +185,7 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
 		"file_max_count": null, "file_max_bytes": null, "search_result_limit": null, "prompts": null,
 		"max_progress_updates": null, "progress_update_max_chars": null, "kb_learn_from_private_channels": null,
-		"tool_summary_role": null
+		"tool_summary_role": null, "restrict_outbound_after_cross_reads": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
@@ -195,7 +197,8 @@ func TestFalsyValuesAreKept(t *testing.T) {
 		"model": "m", "fact_model": "", "temperature": 0, "tool_call_temperature": 0.0, "max_tokens": 0,
 		"public_kb_max_tokens": 0, "tool_final_max_tokens": 0, "max_tool_iterations": 0, "max_tool_calls": 0,
 		"persona": "", "name_excluded_channels": [], "enabled_tools": [], "chat_platform": "",
-		"debounce_seconds": 0, "buffer_prefix": "", "assistant_label": "", "prompts": {}
+		"debounce_seconds": 0, "buffer_prefix": "", "assistant_label": "", "prompts": {},
+		"restrict_outbound_after_cross_reads": false
 	}`)
 	want := defaults()
 	want.Temperature, want.ToolCallTemperature = "0", "0.0"
@@ -208,6 +211,7 @@ func TestFalsyValuesAreKept(t *testing.T) {
 	want.BufferPrefix = ""
 	want.AssistantLabel = ""
 	want.Prompts = map[string]string{}
+	want.RestrictOutboundAfterCrossReads = false
 	if got := core(s); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
 	}
