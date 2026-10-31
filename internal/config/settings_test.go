@@ -59,30 +59,32 @@ func core(s *config.Settings) config.Settings {
 
 func defaults() config.Settings {
 	return config.Settings{
-		Model:               "m",
-		Temperature:         "0.7",
-		ToolCallTemperature: "0.1",
-		MaxTokens:           4096,
-		PublicKBMaxTokens:   6144,
-		ToolFinalMaxTokens:  8192,
-		MaxToolIterations:   15,
-		MaxToolCalls:        20,
-		ChatPlatform:        "mattermost",
-		ModelProvider:       "openai",
-		WebSearch:           "searxng",
-		WebFetch:            "httpfetch",
-		DebounceSeconds:     3,
-		BufferPrefix:        "agent:buffer:",
-		LastSeenKey:         "agent:last_seen",
-		BotIdentityKey:      "agent:bot_identity",
-		MemoryKeyPrefix:     "agent",
-		KBBatchKey:          "agent:public_kb_batch",
-		FactsCollection:     "agent_memory",
-		KBCollection:        "agent_public_kb",
-		AssistantLabel:      "agent",
-		FileMaxCount:        5,
-		FileMaxBytes:        20971520,
-		SearchResultLimit:   5,
+		Model:                  "m",
+		Temperature:            "0.7",
+		ToolCallTemperature:    "0.1",
+		MaxTokens:              4096,
+		PublicKBMaxTokens:      6144,
+		ToolFinalMaxTokens:     8192,
+		MaxToolIterations:      15,
+		MaxToolCalls:           20,
+		ChatPlatform:           "mattermost",
+		ModelProvider:          "openai",
+		WebSearch:              "searxng",
+		WebFetch:               "httpfetch",
+		DebounceSeconds:        3,
+		BufferPrefix:           "agent:buffer:",
+		LastSeenKey:            "agent:last_seen",
+		BotIdentityKey:         "agent:bot_identity",
+		MemoryKeyPrefix:        "agent",
+		KBBatchKey:             "agent:public_kb_batch",
+		FactsCollection:        "agent_memory",
+		KBCollection:           "agent_public_kb",
+		AssistantLabel:         "agent",
+		FileMaxCount:           5,
+		FileMaxBytes:           20971520,
+		SearchResultLimit:      5,
+		MaxProgressUpdates:     2,
+		ProgressUpdateMaxChars: 500,
 	}
 }
 
@@ -178,7 +180,8 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"model_provider": null, "web_search": null, "web_fetch": null, "debounce_seconds": null,
 		"buffer_prefix": null, "last_seen_key": null, "bot_identity_key": null, "memory_key_prefix": null,
 		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
-		"file_max_count": null, "file_max_bytes": null, "search_result_limit": null, "prompts": null
+		"file_max_count": null, "file_max_bytes": null, "search_result_limit": null, "prompts": null,
+		"max_progress_updates": null, "progress_update_max_chars": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
@@ -255,10 +258,14 @@ func TestToolLimitsFallBackWhenZero(t *testing.T) {
 }
 
 func TestLimitsAreSettings(t *testing.T) {
-	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000, "search_result_limit": 8}`)
+	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000, "search_result_limit": 8,
+		"max_progress_updates": 3, "progress_update_max_chars": 200}`)
 	if s.FileMaxCount != 2 || s.FileMaxBytes != 1000 || s.SearchResultLimit != 8 {
 		t.Errorf("got %d files of %d bytes and %d search results, want 2 of 1000 and 8",
 			s.FileMaxCount, s.FileMaxBytes, s.SearchResultLimit)
+	}
+	if s.MaxProgressUpdates != 3 || s.ProgressUpdateMaxChars != 200 {
+		t.Errorf("got %d progress updates of %d code points, want 3 of 200", s.MaxProgressUpdates, s.ProgressUpdateMaxChars)
 	}
 }
 
@@ -422,6 +429,8 @@ func TestWrongTypesNameTheKeyAndExpectedType(t *testing.T) {
 		{`"file_max_bytes": 1.5`, "file_max_bytes: expected integer"},
 		{`"file_max_bytes": -1`, "file_max_bytes: must be positive"},
 		{`"search_result_limit": 0`, "search_result_limit: must be positive"},
+		{`"max_progress_updates": 0`, "max_progress_updates: must be positive"},
+		{`"progress_update_max_chars": -1`, "progress_update_max_chars: must be positive"},
 		{`"prompts": ["x"]`, "prompts: expected object of strings"},
 		{`"prompts": {"error.generic": 1}`, "prompts: expected object of strings"},
 		{`"prompts": {"error.generic": null}`, "prompts: expected object of strings"},

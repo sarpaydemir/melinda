@@ -64,6 +64,10 @@ type Settings struct {
 	FileMaxBytes int64 `json:"file_max_bytes"`
 	// SearchResultLimit is the most web search results the search_web tool reads.
 	SearchResultLimit int `json:"search_result_limit"`
+	// MaxProgressUpdates is the most interim messages posted while answering one message, and
+	// ProgressUpdateMaxChars the code points kept of each.
+	MaxProgressUpdates     int `json:"max_progress_updates"`
+	ProgressUpdateMaxChars int `json:"progress_update_max_chars"`
 
 	// Prompts replaces the texts of prompt catalog entries, by ID.
 	Prompts map[string]string `json:"prompts"`
@@ -163,32 +167,34 @@ func (c *Channels) UnmarshalJSON(b []byte) error {
 
 func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) (*Settings, []error) {
 	s := &Settings{
-		Temperature:         "0.7",
-		ToolCallTemperature: "0.1",
-		MaxTokens:           4096,
-		PublicKBMaxTokens:   6144,
-		ToolFinalMaxTokens:  8192,
-		MaxToolIterations:   defaultToolIterations,
-		MaxToolCalls:        defaultToolCalls,
-		ChatPlatform:        "mattermost",
-		ModelProvider:       "openai",
-		WebSearch:           "searxng",
-		WebFetch:            "httpfetch",
-		DebounceSeconds:     3,
-		BufferPrefix:        agentID + ":buffer:",
-		LastSeenKey:         agentID + ":last_seen",
-		BotIdentityKey:      agentID + ":bot_identity",
-		MemoryKeyPrefix:     agentID,
-		KBBatchKey:          agentID + ":public_kb_batch",
-		FactsCollection:     agentID + "_memory",
-		KBCollection:        agentID + "_public_kb",
-		AssistantLabel:      agentID,
-		FileMaxCount:        5,
-		FileMaxBytes:        20 << 20,
-		SearchResultLimit:   5,
-		agentID:             agentID,
-		secrets:             secrets,
-		doc:                 doc,
+		Temperature:            "0.7",
+		ToolCallTemperature:    "0.1",
+		MaxTokens:              4096,
+		PublicKBMaxTokens:      6144,
+		ToolFinalMaxTokens:     8192,
+		MaxToolIterations:      defaultToolIterations,
+		MaxToolCalls:           defaultToolCalls,
+		ChatPlatform:           "mattermost",
+		ModelProvider:          "openai",
+		WebSearch:              "searxng",
+		WebFetch:               "httpfetch",
+		DebounceSeconds:        3,
+		BufferPrefix:           agentID + ":buffer:",
+		LastSeenKey:            agentID + ":last_seen",
+		BotIdentityKey:         agentID + ":bot_identity",
+		MemoryKeyPrefix:        agentID,
+		KBBatchKey:             agentID + ":public_kb_batch",
+		FactsCollection:        agentID + "_memory",
+		KBCollection:           agentID + "_public_kb",
+		AssistantLabel:         agentID,
+		FileMaxCount:           5,
+		FileMaxBytes:           20 << 20,
+		SearchResultLimit:      5,
+		MaxProgressUpdates:     2,
+		ProgressUpdateMaxChars: 500,
+		agentID:                agentID,
+		secrets:                secrets,
+		doc:                    doc,
 	}
 	var problems []error
 	if raw := doc["model"]; raw == nil || string(raw) == "null" || string(raw) == `""` {
@@ -206,6 +212,12 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 	}
 	if s.SearchResultLimit < 1 {
 		problems = append(problems, errors.New("search_result_limit: must be positive"))
+	}
+	if s.MaxProgressUpdates < 1 {
+		problems = append(problems, errors.New("max_progress_updates: must be positive"))
+	}
+	if s.ProgressUpdateMaxChars < 1 {
+		problems = append(problems, errors.New("progress_update_max_chars: must be positive"))
 	}
 	// A null entry would otherwise decode as empty text.
 	var prompts map[string]*string
