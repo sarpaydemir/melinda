@@ -3,9 +3,9 @@ package textfmt_test
 import (
 	"math"
 	"math/big"
+	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
@@ -51,36 +51,40 @@ func TestEncodeASCIIRejectsNonFiniteFloatsAndUnknownTypes(t *testing.T) {
 	}
 }
 
-func TestEncodeASCIIHandlesDeepNestingInLinearTime(t *testing.T) {
+func TestEncodeASCIIHandlesDeepNestingInLinearSpace(t *testing.T) {
 	const depth = 10000
 	v := any(textfmt.Object{})
 	for range depth {
 		v = textfmt.Object{{Key: "a", Value: []any{v}}}
 	}
-	start := time.Now()
-	got, err := textfmt.EncodeASCII(v)
-	elapsed := time.Since(start)
+	got, allocated, err := allocatedBy(func() ([]byte, error) { return textfmt.EncodeASCII(v) })
 	if want := strings.Repeat(`{"a": [`, depth) + "{}" + strings.Repeat("]}", depth); string(got) != want || err != nil {
 		t.Errorf("EncodeASCII of %d levels = %d bytes, %v; want %d bytes", depth, len(got), err, len(want))
 	}
-	if elapsed > 100*time.Millisecond {
-		t.Errorf("EncodeASCII of %d levels took %v", depth, elapsed)
+	if allocated > 16*uint64(len(got)) {
+		t.Errorf("EncodeASCII of %d levels allocated %d bytes for %d bytes of output", depth, allocated, len(got))
 	}
 }
 
-func TestEncodeCompactHandlesDeepNestingInLinearTime(t *testing.T) {
+func TestEncodeCompactHandlesDeepNestingInLinearSpace(t *testing.T) {
 	const depth = 10000
 	v := any(textfmt.Object{})
 	for range depth {
 		v = textfmt.Object{{Key: "<a>", Value: []any{v}}}
 	}
-	start := time.Now()
-	got, err := textfmt.EncodeCompact(v)
-	elapsed := time.Since(start)
+	got, allocated, err := allocatedBy(func() ([]byte, error) { return textfmt.EncodeCompact(v) })
 	if want := strings.Repeat(`{"<a>":[`, depth) + "{}" + strings.Repeat("]}", depth); string(got) != want || err != nil {
 		t.Errorf("EncodeCompact of %d levels = %d bytes, %v; want %d bytes", depth, len(got), err, len(want))
 	}
-	if elapsed > 100*time.Millisecond {
-		t.Errorf("EncodeCompact of %d levels took %v", depth, elapsed)
+	if allocated > 16*uint64(len(got)) {
+		t.Errorf("EncodeCompact of %d levels allocated %d bytes for %d bytes of output", depth, allocated, len(got))
 	}
+}
+
+func allocatedBy(encode func() ([]byte, error)) ([]byte, uint64, error) {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	got, err := encode()
+	runtime.ReadMemStats(&after)
+	return got, after.TotalAlloc - before.TotalAlloc, err
 }
