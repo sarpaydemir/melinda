@@ -25,7 +25,7 @@ const redacted = "[REDACTED]"
 // sensitiveNames are attribute and group names, compared case-insensitively, whose text values are masked.
 var sensitiveNames = []string{
 	"authorization", "password", "secret", "token", "key", "api_key", "db_password",
-	"mattermost_token", "plane_api_key", "prefect_api_key", "prefect_api_auth_string",
+	"mattermost_token", "plane_api_key",
 	"key_secret", "mattermost_token_secret", "plane_api_secret",
 }
 

@@ -7,18 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/logging"
-	"github.com/sarpaydemir/dost/internal/testkit"
 	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/testkit/prefectfake"
 )
 
 type harness struct {
@@ -37,7 +35,7 @@ func openWith(t *testing.T, env config.Env, keys []config.SecretKey, validate fu
 	mask := new(logging.Secrets)
 	h := &harness{clock: fakeclock.New(time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)), logs: new(bytes.Buffer)}
 	h.log = logging.New(h.logs, slog.LevelDebug, false, mask)
-	p, err := config.NewProvider(context.Background(), env, keys, validate, mask, h.clock, h.log)
+	p, err := config.NewProvider(env, keys, validate, mask, h.clock, h.log)
 	return p, h, err
 }
 
@@ -98,42 +96,33 @@ func secretsOf(t *testing.T, s *config.Settings) secretValues {
 }
 
 func TestFirstConfiguredSourceWins(t *testing.T) {
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("chatbot_settings", map[string]any{"model": "from-prefect"})
 	file := settingsFile(t, `{"model": "from-file"}`)
 	for _, tc := range []struct {
 		environ []string
 		want    string
 	}{
-		{[]string{"DOST_SETTINGS_FILE=" + file, `DOST_SETTINGS_JSON={"model": "inline"}`, "DOST_PREFECT_API_URL=" + prefect.API()}, "from-file"},
-		{[]string{"DOST_SETTINGS_FILE=", `DOST_SETTINGS_JSON={"model": "inline"}`, "DOST_PREFECT_API_URL=" + prefect.API()}, "inline"},
-		{[]string{"DOST_SETTINGS_JSON=", "DOST_PREFECT_API_URL=" + prefect.API()}, "from-prefect"},
+		{[]string{"DOST_SETTINGS_FILE=" + file, `DOST_SETTINGS_JSON={"model": "inline"}`}, "from-file"},
+		{[]string{"DOST_SETTINGS_FILE=", `DOST_SETTINGS_JSON={"model": "inline"}`}, "inline"},
 	} {
 		p, _ := mustOpen(t, load(t, tc.environ...))
 		if got := p.Current(context.Background()).Model; got != tc.want {
 			t.Errorf("%q: model = %q, want %q", tc.environ, got, tc.want)
 		}
 	}
-	prefect.AssertCalls(t, "GET /api/variables/name/chatbot_settings")
 }
 
 func TestStartingWithoutASettingsSourceFails(t *testing.T) {
 	got := openErr(t, load(t, "DOST_SETTINGS_FILE=", "DOST_SETTINGS_JSON="))
-	for _, name := range []string{"DOST_SETTINGS_FILE", "DOST_SETTINGS_JSON", "DOST_PREFECT_API_URL"} {
-		if !strings.Contains(got, name) {
-			t.Errorf("error %q does not name %s", got, name)
-		}
+	if want := "no settings source: set DOST_SETTINGS_FILE or DOST_SETTINGS_JSON"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
 	}
 }
 
 // sources returns an environment per kind of settings source serving doc, keyed by the name its errors use.
 func sources(t *testing.T, doc string) map[string]config.Env {
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("chatbot_settings", json.RawMessage(doc))
 	return map[string]config.Env{
-		"DOST_SETTINGS_FILE":                  load(t, "DOST_SETTINGS_FILE="+settingsFile(t, doc)),
-		"DOST_SETTINGS_JSON":                  load(t, "DOST_SETTINGS_JSON="+doc),
-		`Prefect variable "chatbot_settings"`: load(t, "DOST_PREFECT_API_URL="+prefect.API()),
+		"DOST_SETTINGS_FILE": load(t, "DOST_SETTINGS_FILE="+settingsFile(t, doc)),
+		"DOST_SETTINGS_JSON": load(t, "DOST_SETTINGS_JSON="+doc),
 	}
 }
 
@@ -162,17 +151,11 @@ func TestEverySourceAcceptsAnObjectOrAStringHoldingOne(t *testing.T) {
 }
 
 func TestDocumentsThatAreNotObjectsNameTheirSource(t *testing.T) {
-	for _, doc := range []string{`[{"model": "m"}]`, `"[1]"`, `null`, `"null"`, `42`, `"model"`, `"\"{}\""`} {
+	for _, doc := range []string{`{"model": "m",}`, `[{"model": "m"}]`, `"[1]"`, `null`, `"null"`, `42`, `"model"`, `"\"{}\""`} {
 		for source, env := range sources(t, doc) {
 			if got := openErr(t, env); !strings.HasPrefix(got, source+": ") {
 				t.Errorf("%s holding %s: error %q does not name the source", source, doc, got)
 			}
-		}
-	}
-	for _, name := range []string{"DOST_SETTINGS_FILE", "DOST_SETTINGS_JSON"} {
-		env := sources(t, `{"model": "m",}`)[name]
-		if got := openErr(t, env); !strings.HasPrefix(got, name+": ") {
-			t.Errorf("%s with invalid JSON: error %q does not name the source", name, got)
 		}
 	}
 	if got := openErr(t, load(t, "DOST_SETTINGS_FILE=/nonexistent/settings.json")); !strings.HasPrefix(got, "DOST_SETTINGS_FILE: ") {
@@ -180,102 +163,43 @@ func TestDocumentsThatAreNotObjectsNameTheirSource(t *testing.T) {
 	}
 }
 
-func TestPrefectVariableIsReadByItsEscapedName(t *testing.T) {
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("team settings/v2", map[string]any{"model": "m"})
-	mustOpen(t, load(t, "DOST_PREFECT_API_URL="+prefect.API()+"/", "DOST_PREFECT_VARIABLE=team settings/v2"))
-	prefect.AssertCalls(t, "GET /api/variables/name/team%20settings%2Fv2")
-}
-
-func TestMissingPrefectVariable(t *testing.T) {
-	prefect := prefectfake.New(t)
-	got := openErr(t, load(t, "DOST_PREFECT_API_URL="+prefect.API()))
-	if got != `Prefect variable "chatbot_settings": settings variable not found` {
-		t.Errorf("error = %q", got)
-	}
-}
-
-func TestPrefectFailuresReportTheStatus(t *testing.T) {
-	prefect := prefectfake.New(t)
-	prefect.On(http.MethodGet, "/api/variables/name/{name}").Reply(testkit.JSON(http.StatusUnauthorized, map[string]string{"detail": "x"}))
-	if got := openErr(t, load(t, "DOST_PREFECT_API_URL="+prefect.API())); !strings.Contains(got, "401") {
-		t.Errorf("error = %q", got)
-	}
-}
-
-func TestPrefectRequestsCarryTheConfiguredAuthorization(t *testing.T) {
-	for _, tc := range []struct {
-		environ []string
-		want    string
-	}{
-		{nil, ""},
-		{[]string{"DOST_PREFECT_API_KEY=pnu_1"}, "Bearer pnu_1"},
-		{[]string{"DOST_PREFECT_API_AUTH_STRING=admin:pass"}, "Basic YWRtaW46cGFzcw=="},
-		{[]string{"DOST_PREFECT_API_KEY=pnu_1", "DOST_PREFECT_API_AUTH_STRING=admin:pass"}, "Basic YWRtaW46cGFzcw=="},
-	} {
-		prefect := prefectfake.New(t)
-		prefect.SetVariable("chatbot_settings", map[string]any{"model": "m", "key_secret": "model-key"})
-		prefect.SetSecret("model-key", "sk-1")
-		mustOpen(t, load(t, append(tc.environ, "DOST_PREFECT_API_URL="+prefect.API())...))
-		reqs := prefect.Requests()
-		if len(reqs) != 2 {
-			t.Fatalf("%q: %d requests, want the variable and the secret", tc.environ, len(reqs))
-		}
-		for _, r := range reqs {
-			if got := r.Header.Get("Authorization"); got != tc.want {
-				t.Errorf("%q: %s has Authorization %q, want %q", tc.environ, r.Call(), got, tc.want)
-			}
-		}
-	}
-}
-
 func TestSecretReferencesFillOnlyEmptyKeys(t *testing.T) {
+	t.Setenv("DOST_TEST_MODEL_KEY", "sk-ref")
+	t.Setenv("DOST_TEST_CHAT_TOKEN", "tok-ref")
+	t.Setenv("DOST_TEST_PLANE_KEY", "pk-ref")
 	for _, tc := range []struct {
-		doc   string
-		want  secretValues
-		calls []string
+		doc  string
+		want secretValues
 	}{
 		{
-			doc:   `{"key_secret": "model-key", "mattermost_token_secret": "chat-token"}`,
-			want:  secretValues{Key: "sk-ref", MattermostToken: "tok-ref"},
-			calls: []string{"model-key", "chat-token"},
+			doc:  `{"key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token_secret": "env:DOST_TEST_CHAT_TOKEN"}`,
+			want: secretValues{Key: "sk-ref", MattermostToken: "tok-ref"},
 		},
 		{
-			doc:   `{"key": "", "key_secret": "model-key", "mattermost_token": null, "mattermost_token_secret": "chat-token"}`,
-			want:  secretValues{Key: "sk-ref", MattermostToken: "tok-ref"},
-			calls: []string{"model-key", "chat-token"},
+			doc:  `{"key": "", "key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token": null, "mattermost_token_secret": "env:DOST_TEST_CHAT_TOKEN"}`,
+			want: secretValues{Key: "sk-ref", MattermostToken: "tok-ref"},
 		},
 		{
-			doc:  `{"key": "sk-inline", "key_secret": "model-key", "mattermost_token": "tok-inline", "mattermost_token_secret": "chat-token"}`,
+			doc:  `{"key": "sk-inline", "key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token": "tok-inline", "mattermost_token_secret": "env:DOST_TEST_CHAT_TOKEN"}`,
 			want: secretValues{Key: "sk-inline", MattermostToken: "tok-inline"},
 		},
 		{
 			doc: `{"key_secret": "", "mattermost_token_secret": null, "plane_api_secret": null}`,
 		},
 		{
-			doc:   `{"plane_api_key": "pk-inline", "plane_api_secret": "plane-key"}`,
-			want:  secretValues{PlaneAPIKey: "pk-ref"},
-			calls: []string{"plane-key"},
+			doc:  `{"plane_api_key": "pk-inline", "plane_api_secret": "env:DOST_TEST_PLANE_KEY"}`,
+			want: secretValues{PlaneAPIKey: "pk-ref"},
 		},
 		{
 			doc:  `{"plane_api_key": "pk-inline", "plane_api_secret": ""}`,
 			want: secretValues{PlaneAPIKey: "pk-inline"},
 		},
 	} {
-		prefect := prefectfake.New(t)
-		prefect.SetSecret("model-key", "sk-ref")
-		prefect.SetSecret("chat-token", "tok-ref")
-		prefect.SetSecret("plane-key", "pk-ref")
 		doc := `{"model": "m", ` + tc.doc[1:]
-		p, _ := mustOpen(t, load(t, "DOST_SETTINGS_JSON="+doc, "DOST_PREFECT_API_URL="+prefect.API()))
+		p, _ := mustOpen(t, load(t, "DOST_SETTINGS_JSON="+doc))
 		if got := secretsOf(t, p.Current(context.Background())); got != tc.want {
 			t.Errorf("%s: got %+v, want %+v", tc.doc, got, tc.want)
 		}
-		var want []string
-		for _, name := range tc.calls {
-			want = append(want, "GET /api/block_types/slug/secret/block_documents/name/"+name+"?include_secrets=true")
-		}
-		prefect.AssertCalls(t, want...)
 	}
 }
 
@@ -330,21 +254,16 @@ func TestEnvironmentAndFileReferences(t *testing.T) {
 
 func TestUnresolvableReferencesNameTheKey(t *testing.T) {
 	t.Setenv("DOST_TEST_EMPTY", "")
-	prefect := prefectfake.New(t)
-	withPrefect := "DOST_PREFECT_API_URL=" + prefect.API()
 	for _, tc := range []struct {
-		ref, prefect string
-		want         []string
+		ref  string
+		want []string
 	}{
 		{ref: `"key_secret": "env:DOST_TEST_UNSET"`, want: []string{"key_secret", "DOST_TEST_UNSET"}},
 		{ref: `"key_secret": "env:DOST_TEST_EMPTY"`, want: []string{"key_secret", "DOST_TEST_EMPTY"}},
 		{ref: `"mattermost_token_secret": "file:/nonexistent/token"`, want: []string{"mattermost_token_secret", "/nonexistent/token"}},
-		{ref: `"plane_api_secret": "plane-key"`, want: []string{"plane_api_secret", "plane-key", "DOST_PREFECT_API_URL"}},
-		{ref: `"key_secret": "secret/model-key"`, prefect: withPrefect, want: []string{"key_secret", `"model-key"`, "not found"}},
-		{ref: `"key_secret": 7`, want: []string{"key_secret"}},
 	} {
 		doc := `{"model": "m", ` + tc.ref + `}`
-		got := openErr(t, load(t, "DOST_SETTINGS_JSON="+doc, tc.prefect))
+		got := openErr(t, load(t, "DOST_SETTINGS_JSON="+doc))
 		for _, w := range tc.want {
 			if !strings.Contains(got, w) {
 				t.Errorf("%s: error %q does not mention %s", tc.ref, got, w)
@@ -353,77 +272,37 @@ func TestUnresolvableReferencesNameTheKey(t *testing.T) {
 	}
 }
 
-func TestPrefectSecretValuesReadAsTheirText(t *testing.T) {
-	for _, tc := range []struct {
-		value any
-		want  string
-	}{
-		{"sk-1", "sk-1"},
-		{`"sk-1"`, "sk-1"},
-		{`"\"sk-1\""`, `"sk-1"`},
-		{" sk-1\n", " sk-1\n"},
-		{"007", "007"},
-		{12345, "12345"},
-		{"12345", "12345"},
-		{"1e3", "1000.0"},
-		{true, "True"},
-		{"null", ""},
-		{map[string]any{"user": "u"}, "{'user': 'u'}"},
-	} {
-		prefect := prefectfake.New(t)
-		prefect.SetSecret("model-key", tc.value)
-		doc := `{"model": "m", "key_secret": "secret/model-key"}`
-		p, _ := mustOpen(t, load(t, "DOST_SETTINGS_JSON="+doc, "DOST_PREFECT_API_URL="+prefect.API()))
-		if got := secretsOf(t, p.Current(context.Background())).Key; got != tc.want {
-			t.Errorf("secret %#v: key = %q, want %q", tc.value, got, tc.want)
+func TestReferencesOtherThanEnvAndFileAreRejectedWithoutEchoingThem(t *testing.T) {
+	for _, ref := range []string{`"sk-pasted-here"`, `"secret/plane-key"`, `7`} {
+		doc := `{"model": "m", "plane_api_secret": ` + ref + `}`
+		got := openErr(t, load(t, "DOST_SETTINGS_JSON="+doc))
+		if want := "plane_api_secret: not an env:NAME or file:/path reference"; got != want {
+			t.Errorf("%s: error %q, want %q", ref, got, want)
 		}
-		prefect.AssertCalls(t, "GET /api/block_types/slug/secret/block_documents/name/model-key?include_secrets=true")
-	}
-}
-
-func TestReferencesInAPrefectDocumentAreSecretBlockNames(t *testing.T) {
-	t.Setenv("DOST_TEST_MODEL_KEY", "sk-env")
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("chatbot_settings", map[string]any{"model": "m", "key_secret": "env:DOST_TEST_MODEL_KEY"})
-	got := openErr(t, load(t, "DOST_PREFECT_API_URL="+prefect.API()))
-	if !strings.Contains(got, `"env:DOST_TEST_MODEL_KEY" not found`) {
-		t.Errorf("error = %q", got)
-	}
-}
-
-func TestSettingsSecretsAreMaskedInLogs(t *testing.T) {
-	t.Setenv("DOST_TEST_MODEL_KEY", "sk-env")
-	prefect := prefectfake.New(t)
-	prefect.SetSecret("plane-key", "pk-prefect")
-	doc := `{"model": "m", "key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token": "tok-inline", "plane_api_secret": "plane-key"}`
-	_, h := mustOpen(t, load(t, "DOST_SETTINGS_JSON="+doc, "DOST_PREFECT_API_URL="+prefect.API()))
-	h.log.Info("sk-env tok-inline pk-prefect")
-	if got := h.logs.String(); strings.Contains(got, "sk-env") || strings.Contains(got, "tok-inline") || strings.Contains(got, "pk-prefect") {
-		t.Errorf("secret logged: %s", got)
 	}
 }
 
 func TestReloadsAfterTheTTLWithSecretsResolvedAgain(t *testing.T) {
 	ctx := context.Background()
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("chatbot_settings", map[string]any{"model": "m1", "key_secret": "model-key"})
-	prefect.SetSecret("model-key", "sk-one")
-	p, h := mustOpen(t, load(t, "DOST_PREFECT_API_URL="+prefect.API(), "DOST_SETTINGS_TTL=10s"))
+	key := settingsFile(t, "sk-one")
+	path := settingsFile(t, `{"model": "m1", "key_secret": "file:`+key+`"}`)
+	p, h := mustOpen(t, load(t, "DOST_SETTINGS_FILE="+path, "DOST_SETTINGS_TTL=10s"))
 	first := p.Current(ctx)
-	prefect.SetVariable("chatbot_settings", map[string]any{"model": "m2", "key_secret": "model-key"})
-	prefect.SetSecret("model-key", "sk-two")
+	writeFile(t, path, `{"model": "m2", "key_secret": "file:`+key+`"}`)
+	writeFile(t, key, "sk-two")
 
 	h.clock.Advance(10*time.Second - time.Nanosecond)
-	if got := p.Current(ctx); got != first || len(prefect.Requests()) != 2 {
-		t.Fatalf("read before the TTL: model %q after %d requests, want the startup snapshot", got.Model, len(prefect.Requests()))
+	if got := p.Current(ctx); got != first {
+		t.Fatalf("read before the TTL: model %q, want the startup snapshot", got.Model)
 	}
 	h.clock.Advance(time.Nanosecond)
 	second := p.Current(ctx)
 	if second.Model != "m2" || secretsOf(t, second).Key != "sk-two" {
 		t.Errorf("after the TTL: model %q, key %q", second.Model, secretsOf(t, second).Key)
 	}
-	if got := p.Current(ctx); got != second || len(prefect.Requests()) != 4 {
-		t.Errorf("read right after a reload: %d requests, want the reloaded snapshot without more", len(prefect.Requests()))
+	writeFile(t, path, `{"model": "m3"}`)
+	if got := p.Current(ctx); got != second {
+		t.Errorf("read right after a reload: model %q, want the reloaded snapshot", got.Model)
 	}
 	h.log.Info("sk-two")
 	if strings.Contains(h.logs.String(), "sk-two") {
@@ -442,24 +321,27 @@ func TestZeroTTLReloadsOnEveryRead(t *testing.T) {
 
 func TestOneReloadAtATimeWhileOtherReadersKeepThePreviousSnapshot(t *testing.T) {
 	ctx := context.Background()
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("chatbot_settings", map[string]any{"model": "m1"})
-	p, h := mustOpen(t, load(t, "DOST_PREFECT_API_URL="+prefect.API()))
+	path := settingsFile(t, `{"model": "m1"}`)
+	var reloads atomic.Int32
+	entered, release := make(chan struct{}), make(chan struct{})
+	validate := func(s *config.Settings) error {
+		if s.Model == "m2" && reloads.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		return nil
+	}
+	p, h, err := open(t, load(t, "DOST_SETTINGS_FILE="+path), validate)
+	if err != nil {
+		t.Fatal(err)
+	}
 	previous := p.Current(ctx)
 
-	release := make(chan struct{})
-	prefect.On(http.MethodGet, "/api/variables/name/{name}").Reply(testkit.Response{Handler: func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-release:
-		case <-prefect.Context().Done():
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"name": "chatbot_settings", "value": {"model": "m2"}}`))
-	}})
+	writeFile(t, path, `{"model": "m2"}`)
 	h.clock.Advance(5 * time.Second)
 	reloaded := make(chan *config.Settings, 1)
 	go func() { reloaded <- p.Current(ctx) }()
-	prefect.Await(t, 2)
+	<-entered
 
 	if got := p.Current(ctx); got != previous {
 		t.Errorf("read during the reload: model %q, want the previous snapshot", got.Model)
@@ -468,8 +350,8 @@ func TestOneReloadAtATimeWhileOtherReadersKeepThePreviousSnapshot(t *testing.T) 
 	if got := <-reloaded; got.Model != "m2" {
 		t.Errorf("reading reader: model %q, want m2", got.Model)
 	}
-	if n := len(prefect.Requests()); n != 2 {
-		t.Errorf("%d requests, want one reload", n)
+	if n := reloads.Load(); n != 1 {
+		t.Errorf("%d reloads, want one", n)
 	}
 }
 
@@ -493,22 +375,6 @@ func TestAPanickingReloadDoesNotStopLaterReloads(t *testing.T) {
 	writeFile(t, path, `{"model": "m2"}`)
 	if got := h.tick(p).Model; got != "m2" {
 		t.Errorf("after a panicking reload: model %q, want m2", got)
-	}
-}
-
-func TestAReloadCancelledByTheReaderIsNotAnError(t *testing.T) {
-	prefect := prefectfake.New(t)
-	prefect.SetVariable("chatbot_settings", map[string]any{"model": "m1"})
-	p, h := mustOpen(t, load(t, "DOST_PREFECT_API_URL="+prefect.API()))
-	previous := p.Current(context.Background())
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	h.clock.Advance(5 * time.Second)
-	if got := p.Current(ctx); got != previous {
-		t.Errorf("cancelled reload: model %q, want the previous snapshot", got.Model)
-	}
-	if h.count("level=ERROR") != 0 || h.count("level=DEBUG") != 1 {
-		t.Errorf("want one debug record and no error:\n%s", h.logs)
 	}
 }
 

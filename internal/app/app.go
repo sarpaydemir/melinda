@@ -49,14 +49,14 @@ type startup struct {
 }
 
 // load validates the environment and loads the prompt catalog and the settings, reporting every problem at once.
-func load(ctx context.Context, env config.Env, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) (startup, error) {
+func load(env config.Env, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) (startup, error) {
 	for _, name := range env.Unknown {
 		log.Warn("unknown environment variable", "name", name)
 	}
 	components, errComponents := enable(env.Components)
 	dsn, errDSN := pg.DSN(env)
 	_, errPrompts := prompt.Load(table.prompts(), env.PromptsDir)
-	settings, errSettings := config.NewProvider(ctx, env, table.secretKeys(), validator(table), secrets, clk, log)
+	settings, errSettings := config.NewProvider(env, table.secretKeys(), validator(table), secrets, clk, log)
 	return startup{components: components, dsn: dsn, settings: settings}, errors.Join(errComponents, errDSN, errPrompts, errSettings)
 }
 
@@ -76,7 +76,7 @@ func validator(table adapters) func(*config.Settings) error {
 }
 
 func run(ctx context.Context, env config.Env, version string, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) error {
-	cfg, err := load(ctx, env, table, clk, secrets, log)
+	cfg, err := load(env, table, clk, secrets, log)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func run(ctx context.Context, env config.Env, version string, table adapters, cl
 }
 
 func check(ctx context.Context, env config.Env, verifyDB bool, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) (string, error) {
-	cfg, err := load(ctx, env, table, clk, secrets, log)
+	cfg, err := load(env, table, clk, secrets, log)
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +135,7 @@ func exportPrompts(ctx context.Context, env config.Env, dir string, force bool, 
 		return err
 	}
 	if env.SettingsSource() != "" {
-		settings, err := config.NewProvider(ctx, env, table.secretKeys(), validator(table), secrets, clk, log)
+		settings, err := config.NewProvider(env, table.secretKeys(), validator(table), secrets, clk, log)
 		if err != nil {
 			return err
 		}

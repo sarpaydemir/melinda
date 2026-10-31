@@ -71,7 +71,7 @@ func TestLevelFiltersRecords(t *testing.T) {
 func TestSensitiveAttributeNamesAreMasked(t *testing.T) {
 	for _, name := range []string{
 		"token", "mattermost_token", "key", "api_key", "plane_api_key", "password", "DB_PASSWORD",
-		"secret", "key_secret", "Authorization", "prefect_api_auth_string",
+		"secret", "key_secret", "Authorization",
 	} {
 		log, buf := jsonLogger()
 		log.Info("m", name, "s3cr3t")

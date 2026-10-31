@@ -16,32 +16,28 @@ import (
 
 // Env is the process configuration read once at startup from DOST_* environment variables.
 type Env struct {
-	AgentID              string
-	SettingsFile         string
-	SettingsJSON         string
-	SettingsTTL          time.Duration
-	PrefectAPIURL        string
-	PrefectVariable      string
-	PrefectAPIKey        string
-	PrefectAPIAuthString string
-	PromptsDir           string
-	DatabaseURL          string
-	DBHost               string
-	DBPort               int
-	DBUser               string
-	DBPassword           string
-	DBName               string
-	Timezone             *time.Location
-	LogLevel             slog.Level
-	LogJSON              bool // DOST_LOG_FORMAT=json
-	SearXNGURL           string
-	HTTPAddr             string   // empty disables the HTTP server
-	Components           []string // empty means all
-	ShutdownTimeout      time.Duration
-	PipelineWorkers      int
-	PipelineRunTimeout   time.Duration
-	DryRun               bool
-	Unknown              []string // set DOST_* variables that are not recognized
+	AgentID            string
+	SettingsFile       string
+	SettingsJSON       string
+	SettingsTTL        time.Duration
+	PromptsDir         string
+	DatabaseURL        string
+	DBHost             string
+	DBPort             int
+	DBUser             string
+	DBPassword         string
+	DBName             string
+	Timezone           *time.Location
+	LogLevel           slog.Level
+	LogJSON            bool // DOST_LOG_FORMAT=json
+	SearXNGURL         string
+	HTTPAddr           string   // empty disables the HTTP server
+	Components         []string // empty means all
+	ShutdownTimeout    time.Duration
+	PipelineWorkers    int
+	PipelineRunTimeout time.Duration
+	DryRun             bool
+	Unknown            []string // set DOST_* variables that are not recognized
 }
 
 // LoadEnv reads the DOST_* variables from environ ("NAME=value" entries). A variable that is set is used as
@@ -56,31 +52,27 @@ func LoadEnv(environ []string) (Env, error) {
 	}
 
 	env := Env{
-		AgentID:              parse(&r, "DOST_AGENT_ID", "dost", agentID),
-		SettingsFile:         r.get("DOST_SETTINGS_FILE", ""),
-		SettingsJSON:         r.get("DOST_SETTINGS_JSON", ""),
-		SettingsTTL:          parse(&r, "DOST_SETTINGS_TTL", "5s", duration),
-		PrefectAPIURL:        parse(&r, "DOST_PREFECT_API_URL", "", optionalHTTPURL),
-		PrefectVariable:      r.get("DOST_PREFECT_VARIABLE", "chatbot_settings"),
-		PrefectAPIKey:        r.get("DOST_PREFECT_API_KEY", ""),
-		PrefectAPIAuthString: r.get("DOST_PREFECT_API_AUTH_STRING", ""),
-		PromptsDir:           r.get("DOST_PROMPTS_DIR", ""),
-		DatabaseURL:          r.get("DOST_DATABASE_URL", ""),
-		DBHost:               r.get("DOST_DB_HOST", "localhost"),
-		DBPort:               parse(&r, "DOST_DB_PORT", "5432", port),
-		DBUser:               r.get("DOST_DB_USER", ""),
-		DBPassword:           r.get("DOST_DB_PASSWORD", ""),
-		DBName:               r.get("DOST_DB_NAME", ""),
-		Timezone:             parse(&r, "DOST_TIMEZONE", "UTC", location),
-		LogLevel:             parse(&r, "DOST_LOG_LEVEL", "INFO", logLevel),
-		LogJSON:              parse(&r, "DOST_LOG_FORMAT", "text", logJSON),
-		SearXNGURL:           parse(&r, "DOST_SEARXNG_URL", "http://searxng:8080", httpURL),
-		HTTPAddr:             parse(&r, "DOST_HTTP_ADDR", ":8080", listenAddr),
-		Components:           parse(&r, "DOST_COMPONENTS", "", list),
-		ShutdownTimeout:      parse(&r, "DOST_SHUTDOWN_TIMEOUT", "30s", positiveDuration),
-		PipelineWorkers:      parse(&r, "DOST_PIPELINE_WORKERS", "8", positiveInt),
-		PipelineRunTimeout:   parse(&r, "DOST_PIPELINE_RUN_TIMEOUT", "30m", positiveDuration),
-		DryRun:               parse(&r, "DOST_DRY_RUN", "false", boolean),
+		AgentID:            parse(&r, "DOST_AGENT_ID", "dost", agentID),
+		SettingsFile:       r.get("DOST_SETTINGS_FILE", ""),
+		SettingsJSON:       r.get("DOST_SETTINGS_JSON", ""),
+		SettingsTTL:        parse(&r, "DOST_SETTINGS_TTL", "5s", duration),
+		PromptsDir:         r.get("DOST_PROMPTS_DIR", ""),
+		DatabaseURL:        r.get("DOST_DATABASE_URL", ""),
+		DBHost:             r.get("DOST_DB_HOST", "localhost"),
+		DBPort:             parse(&r, "DOST_DB_PORT", "5432", port),
+		DBUser:             r.get("DOST_DB_USER", ""),
+		DBPassword:         r.get("DOST_DB_PASSWORD", ""),
+		DBName:             r.get("DOST_DB_NAME", ""),
+		Timezone:           parse(&r, "DOST_TIMEZONE", "UTC", location),
+		LogLevel:           parse(&r, "DOST_LOG_LEVEL", "INFO", logLevel),
+		LogJSON:            parse(&r, "DOST_LOG_FORMAT", "text", logJSON),
+		SearXNGURL:         parse(&r, "DOST_SEARXNG_URL", "http://searxng:8080", httpURL),
+		HTTPAddr:           parse(&r, "DOST_HTTP_ADDR", ":8080", listenAddr),
+		Components:         parse(&r, "DOST_COMPONENTS", "", list),
+		ShutdownTimeout:    parse(&r, "DOST_SHUTDOWN_TIMEOUT", "30s", positiveDuration),
+		PipelineWorkers:    parse(&r, "DOST_PIPELINE_WORKERS", "8", positiveInt),
+		PipelineRunTimeout: parse(&r, "DOST_PIPELINE_RUN_TIMEOUT", "30m", positiveDuration),
+		DryRun:             parse(&r, "DOST_DRY_RUN", "false", boolean),
 	}
 	if len(r.errs) > 0 {
 		return Env{}, errors.New("invalid environment: " + strings.Join(r.errs, "; "))
@@ -94,26 +86,21 @@ func LoadEnv(environ []string) (Env, error) {
 	return env, nil
 }
 
-// SettingsSource names the source the settings document is read from: the first of DOST_SETTINGS_FILE,
-// DOST_SETTINGS_JSON, and the Prefect variable that is configured. It is empty when none is.
+// SettingsSource names the source the settings document is read from: the first of DOST_SETTINGS_FILE and
+// DOST_SETTINGS_JSON that is set. It is empty when neither is.
 func (e Env) SettingsSource() string {
 	switch {
 	case e.SettingsFile != "":
 		return "DOST_SETTINGS_FILE"
 	case e.SettingsJSON != "":
 		return "DOST_SETTINGS_JSON"
-	case e.PrefectAPIURL != "":
-		return fmt.Sprintf("Prefect variable %q", e.PrefectVariable)
 	}
 	return ""
 }
 
 // Secrets returns the secret values in the environment, for masking in logs.
 func (e Env) Secrets() []string {
-	out := []string{e.DBPassword, e.PrefectAPIKey, e.PrefectAPIAuthString}
-	if _, pass, ok := strings.Cut(e.PrefectAPIAuthString, ":"); ok {
-		out = append(out, pass)
-	}
+	out := []string{e.DBPassword}
 	if u, err := url.Parse(e.DatabaseURL); err == nil {
 		if pass, ok := u.User.Password(); ok {
 			out = append(out, pass)
@@ -257,13 +244,6 @@ func httpURL(s string) (string, error) {
 		return "", errors.New("not an absolute http or https URL")
 	}
 	return s, nil
-}
-
-func optionalHTTPURL(s string) (string, error) {
-	if s == "" {
-		return "", nil
-	}
-	return httpURL(s)
 }
 
 func listenAddr(s string) (string, error) {

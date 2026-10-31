@@ -3,16 +3,12 @@ package config
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/logging"
 )
-
-// prefectTimeout bounds each Prefect request, as Prefect's own client does by default.
-const prefectTimeout = 60 * time.Second
 
 // Provider serves the current settings snapshot. The first read after the snapshot is DOST_SETTINGS_TTL old
 // reloads the document from its source and resolves its secret references again; a reload that fails keeps the
@@ -24,7 +20,6 @@ type Provider struct {
 	mask     *logging.Secrets
 	clock    clock.Clock
 	log      *slog.Logger
-	client   *http.Client
 
 	mu        sync.Mutex
 	current   *Settings
@@ -37,13 +32,12 @@ type Provider struct {
 // NewProvider loads the settings from the first configured source. keys are the secret keys the adapters declare,
 // and validate checks the selected adapters' settings in every snapshot. The values of the secret keys are added
 // to mask before each snapshot is checked.
-func NewProvider(ctx context.Context, env Env, keys []SecretKey, validate func(*Settings) error, mask *logging.Secrets, clk clock.Clock, log *slog.Logger) (*Provider, error) {
+func NewProvider(env Env, keys []SecretKey, validate func(*Settings) error, mask *logging.Secrets, clk clock.Clock, log *slog.Logger) (*Provider, error) {
 	p := &Provider{
 		env: env, keys: keys, validate: validate, mask: mask, clock: clk, log: log,
-		client:  &http.Client{Timeout: prefectTimeout},
 		ignored: map[string]bool{},
 	}
-	doc, err := p.read(ctx)
+	doc, err := p.read()
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +50,7 @@ func NewProvider(ctx context.Context, env Env, keys []SecretKey, validate func(*
 
 // Current returns the current snapshot. The first call after it expires reloads it and returns the result;
 // calls made during that reload return the previous snapshot.
-func (p *Provider) Current(ctx context.Context) *Settings {
+func (p *Provider) Current(context.Context) *Settings {
 	p.mu.Lock()
 	prev := p.current
 	if p.reloading || p.clock.Now().Before(p.expires) {
@@ -72,15 +66,11 @@ func (p *Provider) Current(ctx context.Context) *Settings {
 		p.expires = p.clock.Now().Add(p.env.SettingsTTL)
 	}()
 
-	next, ignored, err := p.reload(ctx, prev)
+	next, ignored, err := p.reload(prev)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	switch {
-	case err != nil && ctx.Err() != nil:
-		p.log.Debug("settings reload cancelled", "err", err)
-		return prev
-	case err != nil:
+	if err != nil {
 		if msg := err.Error(); msg != p.failure {
 			p.failure = msg
 			p.log.Error("settings reload failed; keeping the last good settings", "err", err)
@@ -98,8 +88,8 @@ func (p *Provider) Current(ctx context.Context) *Settings {
 	return next
 }
 
-func (p *Provider) reload(ctx context.Context, prev *Settings) (*Settings, []string, error) {
-	doc, err := p.read(ctx)
+func (p *Provider) reload(prev *Settings) (*Settings, []string, error) {
+	doc, err := p.read()
 	if err != nil {
 		return nil, nil, err
 	}

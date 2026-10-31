@@ -34,7 +34,6 @@ func TestLoadEnvDefaults(t *testing.T) {
 	want := config.Env{
 		AgentID:            "dost",
 		SettingsTTL:        5 * time.Second,
-		PrefectVariable:    "chatbot_settings",
 		DBHost:             "localhost",
 		DBPort:             5432,
 		Timezone:           time.UTC,
@@ -56,10 +55,6 @@ func TestLoadEnvReadsEveryVariable(t *testing.T) {
 		"DOST_SETTINGS_FILE=/etc/dost/settings.json",
 		`DOST_SETTINGS_JSON={"model":"m"}`,
 		"DOST_SETTINGS_TTL=1m",
-		"DOST_PREFECT_API_URL=http://prefect:4200/api",
-		"DOST_PREFECT_VARIABLE=team_settings",
-		"DOST_PREFECT_API_KEY=pk",
-		"DOST_PREFECT_API_AUTH_STRING=admin:pw",
 		"DOST_PROMPTS_DIR=/prompts",
 		"DOST_DATABASE_URL=postgres://u:p@db/x",
 		"DOST_DB_HOST=db",
@@ -79,30 +74,26 @@ func TestLoadEnvReadsEveryVariable(t *testing.T) {
 		"DOST_DRY_RUN=true",
 	)
 	want := config.Env{
-		AgentID:              "sales_bot2",
-		SettingsFile:         "/etc/dost/settings.json",
-		SettingsJSON:         `{"model":"m"}`,
-		SettingsTTL:          time.Minute,
-		PrefectAPIURL:        "http://prefect:4200/api",
-		PrefectVariable:      "team_settings",
-		PrefectAPIKey:        "pk",
-		PrefectAPIAuthString: "admin:pw",
-		PromptsDir:           "/prompts",
-		DatabaseURL:          "postgres://u:p@db/x",
-		DBHost:               "db",
-		DBPort:               6543,
-		DBUser:               "app",
-		DBPassword:           "dbpw",
-		DBName:               "data",
-		LogLevel:             slog.LevelDebug,
-		LogJSON:              true,
-		SearXNGURL:           "https://search.example.com",
-		HTTPAddr:             "127.0.0.1:9090",
-		Components:           []string{"gateway", "dispatcher", "flusher"},
-		ShutdownTimeout:      45 * time.Second,
-		PipelineWorkers:      2,
-		PipelineRunTimeout:   10 * time.Minute,
-		DryRun:               true,
+		AgentID:            "sales_bot2",
+		SettingsFile:       "/etc/dost/settings.json",
+		SettingsJSON:       `{"model":"m"}`,
+		SettingsTTL:        time.Minute,
+		PromptsDir:         "/prompts",
+		DatabaseURL:        "postgres://u:p@db/x",
+		DBHost:             "db",
+		DBPort:             6543,
+		DBUser:             "app",
+		DBPassword:         "dbpw",
+		DBName:             "data",
+		LogLevel:           slog.LevelDebug,
+		LogJSON:            true,
+		SearXNGURL:         "https://search.example.com",
+		HTTPAddr:           "127.0.0.1:9090",
+		Components:         []string{"gateway", "dispatcher", "flusher"},
+		ShutdownTimeout:    45 * time.Second,
+		PipelineWorkers:    2,
+		PipelineRunTimeout: 10 * time.Minute,
+		DryRun:             true,
 	}
 	if env.Timezone == nil || env.Timezone.String() != "Europe/Istanbul" {
 		t.Errorf("Timezone = %v, want Europe/Istanbul", env.Timezone)
@@ -247,18 +238,12 @@ func TestIntegers(t *testing.T) {
 }
 
 func TestURLs(t *testing.T) {
-	if got := load(t, "DOST_PREFECT_API_URL=").PrefectAPIURL; got != "" {
-		t.Errorf("empty DOST_PREFECT_API_URL = %q, want empty (unset)", got)
-	}
-	for _, name := range []string{"DOST_PREFECT_API_URL", "DOST_SEARXNG_URL"} {
-		for _, bad := range []string{"searxng:8080", "ftp://host", "http://", "/relative"} {
-			msg := loadErr(t, name+"="+bad)
-			if !strings.Contains(msg, name) {
-				t.Errorf("%s=%q: error %q does not name the variable", name, bad, msg)
-			}
+	for _, bad := range []string{"searxng:8080", "ftp://host", "http://", "/relative"} {
+		if msg := loadErr(t, "DOST_SEARXNG_URL="+bad); !strings.Contains(msg, "DOST_SEARXNG_URL") {
+			t.Errorf("DOST_SEARXNG_URL=%q: error %q does not name the variable", bad, msg)
 		}
 	}
-	msg := loadErr(t, "DOST_PREFECT_API_URL=prefect.example.com/user:hunter2")
+	msg := loadErr(t, "DOST_SEARXNG_URL=search.example.com/user:hunter2")
 	if strings.Contains(msg, "hunter2") {
 		t.Errorf("URL error %q echoes the value", msg)
 	}
@@ -325,11 +310,9 @@ func TestSecrets(t *testing.T) {
 	env := load(t,
 		"DOST_DB_PASSWORD=dbpw",
 		"DOST_DATABASE_URL=postgres://app:url%40pw@db:5432/data",
-		"DOST_PREFECT_API_KEY=pk",
-		"DOST_PREFECT_API_AUTH_STRING=admin:basicpw",
 	)
 	got := env.Secrets()
-	for _, want := range []string{"dbpw", "url@pw", "pk", "admin:basicpw", "basicpw"} {
+	for _, want := range []string{"dbpw", "url@pw"} {
 		if !slices.Contains(got, want) {
 			t.Errorf("Secrets() = %q, missing %q", got, want)
 		}
