@@ -343,7 +343,7 @@ func response(answer []byte) (model.Response, error) {
 	}
 	choice := members(choices[0])
 	if choice == nil {
-		return model.Response{}, errors.New("response choice is not an object")
+		return model.Response{}, fmt.Errorf("%w: choice is not an object", model.ErrUnreadable)
 	}
 	finish, native := reason(choice["finish_reason"]), reason(choice["native_finish_reason"])
 	resp := model.Response{
@@ -356,7 +356,7 @@ func response(answer []byte) (model.Response, error) {
 	raw := choice["message"]
 	message := members(raw)
 	if message == nil {
-		return resp, errors.New("response message is not an object")
+		return resp, fmt.Errorf("%w: message is not an object", model.ErrUnreadable)
 	}
 	text, err := content(message["content"])
 	if err != nil {
@@ -398,7 +398,7 @@ func content(raw json.RawMessage) (string, error) {
 		member, present := p["text"]
 		text, ok := value(member).(string)
 		if present && !ok {
-			return "", errors.New("response content has a text part whose text is not a string")
+			return "", fmt.Errorf("%w: content has a text part whose text is not a string", model.ErrUnreadable)
 		}
 		texts = append(texts, text)
 	}

@@ -53,6 +53,26 @@ func Truthy(v any) bool {
 	}
 }
 
+// TypeName is the name of the type of v, a value Decode returns, as the established output spells it: NoneType,
+// bool, str, int, float, list, or dict.
+func TypeName(v any) string {
+	switch v.(type) {
+	case bool:
+		return "bool"
+	case string:
+		return "str"
+	case int64, *big.Int:
+		return "int"
+	case float64:
+		return "float"
+	case []any:
+		return "list"
+	case Object:
+		return "dict"
+	}
+	return "NoneType"
+}
+
 // Int converts v to an int, or returns def when v is falsy or not convertible. True gives 1, a float truncates
 // toward zero, and a string may hold surrounding whitespace, a sign, and decimal digits of any script with single
 // underscores between them, up to 4300 digits. Values beyond the int range saturate.

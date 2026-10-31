@@ -67,6 +67,7 @@ func defaults() config.Settings {
 		ToolFinalMaxTokens:     8192,
 		MaxToolIterations:      15,
 		MaxToolCalls:           20,
+		ToolSummaryRole:        "user",
 		ChatPlatform:           "mattermost",
 		ModelProvider:          "openai",
 		WebSearch:              "searxng",
@@ -181,7 +182,8 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"buffer_prefix": null, "last_seen_key": null, "bot_identity_key": null, "memory_key_prefix": null,
 		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
 		"file_max_count": null, "file_max_bytes": null, "search_result_limit": null, "prompts": null,
-		"max_progress_updates": null, "progress_update_max_chars": null, "kb_learn_from_private_channels": null
+		"max_progress_updates": null, "progress_update_max_chars": null, "kb_learn_from_private_channels": null,
+		"tool_summary_role": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
@@ -259,7 +261,10 @@ func TestToolLimitsFallBackWhenZero(t *testing.T) {
 
 func TestLimitsAreSettings(t *testing.T) {
 	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000, "search_result_limit": 8,
-		"max_progress_updates": 3, "progress_update_max_chars": 200}`)
+		"max_progress_updates": 3, "progress_update_max_chars": 200, "tool_summary_role": "system"}`)
+	if s.ToolSummaryRole != "system" {
+		t.Errorf("tool_summary_role %q, want system", s.ToolSummaryRole)
+	}
 	if s.FileMaxCount != 2 || s.FileMaxBytes != 1000 || s.SearchResultLimit != 8 {
 		t.Errorf("got %d files of %d bytes and %d search results, want 2 of 1000 and 8",
 			s.FileMaxCount, s.FileMaxBytes, s.SearchResultLimit)
@@ -434,6 +439,8 @@ func TestWrongTypesNameTheKeyAndExpectedType(t *testing.T) {
 		{`"prompts": ["x"]`, "prompts: expected object of strings"},
 		{`"prompts": {"error.generic": 1}`, "prompts: expected object of strings"},
 		{`"prompts": {"error.generic": null}`, "prompts: expected object of strings"},
+		{`"tool_summary_role": "assistant"`, "tool_summary_role: must be user or system"},
+		{`"tool_summary_role": ""`, "tool_summary_role: must be user or system"},
 	} {
 		got := settingsErr(t, `{"model": "m", `+tc.entry+`}`)
 		if want := "invalid settings:\ncore: " + tc.want; got != want {

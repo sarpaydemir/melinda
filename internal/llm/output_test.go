@@ -84,7 +84,7 @@ func TestGenerateRepliesWithTheContentOrAFailure(t *testing.T) {
 		{"request failed", model.Response{}, errors.New(`response has no choices: {"id": "x"}`),
 			failure + " [ERR_LLM_INVOKE_FAILED_INITIAL]",
 			`[map[error:response has no choices: {"id": "x"} level:ERROR msg:model request failed]]`},
-		{"unreadable message at the token limit", truncatedEmpty, errors.New("response message is not an object"),
+		{"unreadable message at the token limit", truncatedEmpty, errors.New("response cannot be read: message is not an object"),
 			failure + " [ERR_LLM_RESPONSE_TRUNCATED]", "[]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

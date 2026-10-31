@@ -38,7 +38,10 @@ type Settings struct {
 	ToolFinalMaxTokens   int         `json:"tool_final_max_tokens"`
 	MaxToolIterations    int         `json:"max_tool_iterations"`
 	MaxToolCalls         int         `json:"max_tool_calls"`
-	Persona              string      `json:"persona"`
+	// ToolSummaryRole is the role, user or system, of the message that gives the model the results of the tools it
+	// called.
+	ToolSummaryRole string `json:"tool_summary_role"`
+	Persona         string `json:"persona"`
 	// AdminIDs is admin_ids, which the document may give as a list or a comma-separated string.
 	AdminIDs             []string `json:"-"`
 	NameExcludedChannels Channels `json:"name_excluded_channels"`
@@ -207,6 +210,7 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 		ToolFinalMaxTokens:     8192,
 		MaxToolIterations:      defaultToolIterations,
 		MaxToolCalls:           defaultToolCalls,
+		ToolSummaryRole:        "user",
 		ChatPlatform:           "mattermost",
 		ModelProvider:          "openai",
 		WebSearch:              "searxng",
@@ -234,6 +238,9 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 		problems = append(problems, errors.New("model is required"))
 	}
 	problems = append(problems, s.decode(s)...)
+	if s.ToolSummaryRole != "user" && s.ToolSummaryRole != "system" {
+		problems = append(problems, errors.New("tool_summary_role: must be user or system"))
+	}
 	if s.DebounceSeconds < 0 {
 		problems = append(problems, errors.New("debounce_seconds: must not be negative"))
 	}

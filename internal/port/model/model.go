@@ -4,17 +4,22 @@ package model
 import (
 	"context"
 	"encoding/json"
+	"errors"
 )
 
 // Provider is a model provider as the engine uses it. A value is built from one settings snapshot and is safe for
 // concurrent use. Retries are the adapter's; a returned error is final.
 type Provider interface {
-	// Chat returns the model's answer. When the answer's message cannot be read, the error comes with the stop facts.
+	// Chat returns the model's answer. When the answer's message cannot be read, the error wraps ErrUnreadable and
+	// comes with the stop facts.
 	Chat(ctx context.Context, r Request) (Response, error)
 	Embed(ctx context.Context, model, text string) ([]float32, error)
 	// Image generates one image. The error's text is shown to the model.
 	Image(ctx context.Context, model, prompt string) (Image, error)
 }
+
+// ErrUnreadable is wrapped by the error of an answer whose choice or message cannot be read.
+var ErrUnreadable = errors.New("response cannot be read")
 
 // Request is one chat completion request.
 type Request struct {

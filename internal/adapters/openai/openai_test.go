@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -473,11 +474,11 @@ func TestChatReadsTheAnswer(t *testing.T) {
 		{`{"id":"` + strings.Repeat("ü", 2500) + `"}`,
 			`response has no choices: {"id": "` + strings.Repeat("ü", 1992) + `... [truncated]`, 1},
 		{`{"choices":[{"message":{"content":"hi"}},5]}`, "", 1},
-		{`{"choices":[null]}`, "response choice is not an object", 1},
-		{`{"choices":["hi"]}`, "response choice is not an object", 1},
-		{`{"choices":[{"finish_reason":"stop"}]}`, "response message is not an object", 1},
-		{`{"choices":[{"message":null}]}`, "response message is not an object", 1},
-		{`{"choices":[{"message":"hi"}]}`, "response message is not an object", 1},
+		{`{"choices":[null]}`, "response cannot be read: choice is not an object", 1},
+		{`{"choices":["hi"]}`, "response cannot be read: choice is not an object", 1},
+		{`{"choices":[{"finish_reason":"stop"}]}`, "response cannot be read: message is not an object", 1},
+		{`{"choices":[{"message":null}]}`, "response cannot be read: message is not an object", 1},
+		{`{"choices":[{"message":"hi"}]}`, "response cannot be read: message is not an object", 1},
 		{`{"choices":[{"message":{"content":"hi","tool_calls":"x"}}]}`, "", 1},
 	} {
 		fake := openaifake.New(t)
@@ -489,6 +490,8 @@ func TestChatReadsTheAnswer(t *testing.T) {
 			t.Errorf("%s: got %q, %v; want hi", tc.body, resp.Message.Content, err)
 		case tc.err != "" && (err == nil || err.Error() != tc.err):
 			t.Errorf("%s: got %v, want %q", tc.body, err, tc.err)
+		case strings.HasPrefix(tc.err, "response cannot be read") != errors.Is(err, model.ErrUnreadable):
+			t.Errorf("%s: %v wraps ErrUnreadable: %t", tc.body, err, errors.Is(err, model.ErrUnreadable))
 		}
 		if n := len(fake.Requests()); n != tc.attempts {
 			t.Errorf("%s: %d attempts, want %d", tc.body, n, tc.attempts)
@@ -514,13 +517,13 @@ func TestChatKeepsACallOfAnUnexpectedShapeWithoutItsID(t *testing.T) {
 
 func TestChatReportsStopFactsWithAnUnreadableMessage(t *testing.T) {
 	for message, want := range map[string]string{
-		`,"message":"hi"`: "response message is not an object",
-		``:                "response message is not an object",
-		`,"message":null`: "response message is not an object",
-		`,"message":{"content":[{"type":"text","text":5}]}`: "response content has a text part whose text is not a string",
+		`,"message":"hi"`: "response cannot be read: message is not an object",
+		``:                "response cannot be read: message is not an object",
+		`,"message":null`: "response cannot be read: message is not an object",
+		`,"message":{"content":[{"type":"text","text":5}]}`: "response cannot be read: content has a text part whose text is not a string",
 	} {
 		resp, err := answer(t, `"finish_reason":"length"`+message)
-		if err == nil || err.Error() != want || !resp.Truncated || !resp.CutOff {
+		if !errors.Is(err, model.ErrUnreadable) || err.Error() != want || !resp.Truncated || !resp.CutOff {
 			t.Errorf("%s: got %+v, %v; want truncated with %q", message, resp, err, want)
 		}
 	}
@@ -547,8 +550,8 @@ func TestChatReadsMessageContent(t *testing.T) {
 		{`[{"type":"text"},{"type":"text","text":"x"}]`, "x", ""},
 		{`[{"type":"TEXT","text":"x"},"text",{"text":"y"},null]`, "", ""},
 		{`[{"type":"text","text":""},{"type":"text","text":""}]`, "", ""},
-		{`[{"type":"text","text":null}]`, "", "response content has a text part whose text is not a string"},
-		{`[{"type":"text","text":5}]`, "", "response content has a text part whose text is not a string"},
+		{`[{"type":"text","text":null}]`, "", "response cannot be read: content has a text part whose text is not a string"},
+		{`[{"type":"text","text":5}]`, "", "response cannot be read: content has a text part whose text is not a string"},
 	} {
 		resp, err := answer(t, `"message":{"content":`+tc.content+`}`)
 		switch {

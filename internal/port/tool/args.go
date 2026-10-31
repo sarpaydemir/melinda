@@ -1,22 +1,28 @@
 package tool
 
 import (
+	"encoding/json"
 	"fmt"
-	"math/big"
 
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
+// Decode decodes the JSON arguments of a call, keeping key order and number kinds. Text that is not JSON decodes
+// as an empty object.
+func Decode(args json.RawMessage) any {
+	v, err := textfmt.Decode(args, true)
+	if err != nil {
+		return textfmt.Object{}
+	}
+	return v
+}
+
 // Args are the decoded arguments of a call.
 type Args struct{ members textfmt.Object }
 
-// Arguments decodes c.Args, keeping key order and number kinds. Text that is not JSON decodes as no arguments;
-// JSON that is not an object is an error.
+// Arguments decodes c.Args as Decode does; arguments that are not an object are an error.
 func (c Call) Arguments() (Args, error) {
-	v, err := textfmt.Decode(c.Args, true)
-	if err != nil {
-		return Args{}, nil
-	}
+	v := Decode(c.Args)
 	members, ok := v.(textfmt.Object)
 	if !ok {
 		return Args{}, typeError(v, "get")
@@ -46,20 +52,5 @@ func (a Args) Int(key string, def int) int { return textfmt.Int(a.members.Get(ke
 
 // typeError is the established error text for using method on a value of v's type.
 func typeError(v any, method string) error {
-	name := "NoneType"
-	switch v.(type) {
-	case bool:
-		name = "bool"
-	case string:
-		name = "str"
-	case int64, *big.Int:
-		name = "int"
-	case float64:
-		name = "float"
-	case []any:
-		name = "list"
-	case textfmt.Object:
-		name = "dict"
-	}
-	return fmt.Errorf("'%s' object has no attribute '%s'", name, method)
+	return fmt.Errorf("'%s' object has no attribute '%s'", textfmt.TypeName(v), method)
 }
