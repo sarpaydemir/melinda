@@ -1,0 +1,490 @@
+//go:build integration
+
+package app
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"encoding/json"
+	"log/slog"
+	"maps"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/dost/internal/store/pg"
+	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/dost/internal/testkit/golden"
+	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
+	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+)
+
+// Conversation goldens: each scenario runs every conversation component against the chat and model fakes, a fake
+// clock, and a fresh database, and records every model request body, every reply post body, the stored
+// key-value rows after each step (generations normalized), and the chat_sessions rows at the end (ts normalized).
+// With DOST_COMPAT_PROFILE set, each scenario also runs with the profile's prompts and settings and must produce
+// the profile's goldens/conversation/<scenario>.json exactly.
+
+// turnTS is a saved turn's time: microseconds are left out when they are zero.
+var turnTS = regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{6})?\+00:00$`)
+
+var (
+	start  = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	baseMS = start.UnixMilli()
+)
+
+type scenario struct {
+	name     string
+	settings string // extra settings document members
+	bot      string // the agent's username; "agent" when empty
+	replies  []testkit.Response
+	unsorted bool // runs answer concurrently: requests and posts are compared as sorted lists
+	play     func(h *harness)
+}
+
+func TestConversationGoldens(t *testing.T) {
+	for _, sc := range scenarios {
+		t.Run(sc.name, func(t *testing.T) {
+			t.Parallel()
+			golden.AssertJSON(t, "golden/conversation/"+sc.name, play(t, sc, nil, ""))
+		})
+	}
+}
+
+func TestConversationCompatGoldens(t *testing.T) {
+	dir := os.Getenv("DOST_COMPAT_PROFILE")
+	if dir == "" {
+		t.Skip("DOST_COMPAT_PROFILE is not set")
+	}
+	goldens := filepath.Join(dir, "goldens", "conversation")
+	var settings map[string]json.RawMessage
+	if b, err := os.ReadFile(filepath.Join(goldens, "settings.json")); err != nil || json.Unmarshal(b, &settings) != nil {
+		t.Skipf("the profile has no conversation settings (%v)", err)
+	}
+	for _, sc := range scenarios {
+		want, err := os.ReadFile(filepath.Join(goldens, sc.name+".json"))
+		if err != nil {
+			continue
+		}
+		t.Run(sc.name, func(t *testing.T) {
+			t.Parallel()
+			got := play(t, sc, settings, filepath.Join(dir, "prompts"))
+			if ok, err := testkit.JSONEqual(got, want); err != nil || !ok {
+				t.Errorf("differs from the profile golden (%v):\n got: %s\nwant: %s", err, got, want)
+			}
+		})
+	}
+}
+
+var scenarios = []scenario{
+	{name: "dm", replies: texts("Hi Ada!"), play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "hello", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "dm_burst", replies: texts("All three, got it."), play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "one", 0))
+		h.clock.Advance(time.Second)
+		h.post(post("p2", "u1", "dm1", "", "two", 1000))
+		h.clock.Advance(time.Second)
+		h.post(post("p3", "u1", "dm1", "", "three", 2000))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "dm_pause", replies: texts("First answer.", "Second answer."), play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "first", 0))
+		h.flush(3*time.Second, 1)
+		h.clock.Advance(7 * time.Second)
+		h.post(post("p2", "u1", "dm1", "", "second", 10000))
+		h.flush(3*time.Second, 2)
+	}},
+	{name: "channel_mention", replies: texts("Not much."), play: func(h *harness) {
+		h.post(post("p1", "u1", "ch1", "", "@agent what is up?", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "thread_name", replies: texts("Sure."), play: func(h *harness) {
+		h.chat.AddPost(post("r1", "u2", "ch1", "", "kickoff", -60000))
+		h.post(post("p1", "u1", "ch1", "r1", "Agent can you help?", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "thread_two_users", replies: texts("Hello Ada.", "Hello Grace."), play: func(h *harness) {
+		h.chat.AddPost(post("r1", "u2", "ch1", "", "kickoff", -60000))
+		h.post(post("p1", "u1", "ch1", "r1", "@agent first", 0))
+		h.clock.Advance(time.Second)
+		h.post(post("p2", "u2", "ch1", "r1", "@agent second", 1000))
+		h.flush(2*time.Second, 1)
+		h.flush(time.Second, 2)
+	}},
+	{name: "not_answered", play: func(h *harness) {
+		h.post(post("p1", "bot", "dm1", "", "my own post", 0))
+		system := post("p2", "u1", "ch1", "", "@agent joined", 1000)
+		system.Type = "system_join_channel"
+		h.post(system)
+		deleted := post("p3", "u1", "dm1", "", "deleted", 2000)
+		deleted.DeleteAt = baseMS + 2500
+		h.post(deleted)
+		h.post(post("p4", "u1", "ch1", "", "hello everyone", 3000))
+		h.clock.Advance(3 * time.Second)
+		h.snapshot("flushed")
+	}},
+	{name: "excluded_channel", settings: `"name_excluded_channels":["` + id("ch1") + `"]`, replies: texts("Hi all."), play: func(h *harness) {
+		h.post(post("p1", "u1", "ch1", "", "hello everyone", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "dotted_capital_i", bot: "İlke", replies: texts("Answered."), play: func(h *harness) {
+		h.post(post("p1", "u1", "ch1", "", "@ilke lowercase", 0))
+		h.post(post("p2", "u1", "ch1", "", "@İlke capital", 1000))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "model_failure", replies: []testkit.Response{
+		openaifake.HTTPError(500, "upstream"), openaifake.HTTPError(500, "upstream"), openaifake.HTTPError(500, "upstream"),
+	}, play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "hello", 0))
+		h.clock.Advance(3 * time.Second)
+		h.advanceArmed(time.Second)
+		h.advanceArmed(2 * time.Second)
+		h.awaitRuns(1)
+		h.snapshot("flushed")
+	}},
+	{name: "truncated_reply", replies: []testkit.Response{
+		openaifake.Text("A long answer that was cut", openaifake.Finish("length")),
+	}, play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "write a lot", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "recovery", unsorted: true, play: func(h *harness) {
+		h.model.Chat().DefaultFunc(echo)
+		h.post(post("p1", "u1", "dm1", "", "live", 0))
+		h.flush(3*time.Second, 1)
+		h.clock.Advance(7 * time.Second)
+		connections := h.chat.Connections()
+		h.chat.Drop()
+		edited := post("p0", "u1", "dm1", "", "older (edited)", -30000)
+		edited.UpdateAt = baseMS + 10000
+		h.chat.AddPost(edited)
+		h.chat.AddPost(post("p2", "u1", "dm1", "", "missed", 11000))
+		h.chat.AddPost(post("p3", "u2", "ch1", "", "@agent missed mention", 12000))
+		both := h.chat.AddPost(post("p4", "u1", "dm1", "", "pushed and listed", 13000))
+		h.advanceArmed(time.Second)
+		h.chat.AwaitWebsocket(h.t, func() bool { return h.chat.Connections() > connections })
+		h.awaitLastSeen(both.CreateAt)
+		h.chat.Push(h.chat.Event(both))
+		h.await("live duplicate skipped", func() bool {
+			return strings.Contains(h.logs.String(), `msg="message already buffered; skipped" component=dispatcher post_id=`+id("p4"))
+		})
+		h.snapshot("recovered")
+		h.flush(3*time.Second, 3)
+	}},
+	{name: "restart", replies: texts("Back again."), play: func(h *harness) {
+		h.flush(3*time.Second, 1)
+	}},
+}
+
+// restartBuffer is the buffer a previous run left for p1 before stopping, as the dispatcher stores it.
+var restartBuffer = strings.NewReplacer("p1", id("p1"), "u1", id("u1"), "dm1", id("dm1")).Replace(
+	`{"generation":"0f0e0d0c-0b0a-4908-8706-050403020100","flush_after":"2026-10-31T12:00:03+00:00",` +
+		`"payload":{"event":"posted","data":{"channel_type":"D","post":"{\"id\": \"p1\", \"create_at\": 1793448000000, ` +
+		`\"update_at\": 1793448000000, \"delete_at\": 0, \"user_id\": \"u1\", \"channel_id\": \"dm1\", \"root_id\": \"\", ` +
+		`\"message\": \"before restart\", \"type\": \"\", \"post_id\": \"p1\", \"channel_type\": \"D\", \"is_dm\": true, ` +
+		`\"is_thread\": false, \"scope\": \"private\", \"reply_root_id\": \"\", \"context_id\": \"p1\"}"},` +
+		`"broadcast":{"channel_id":"dm1"},"seq":1},` +
+		`"messages":[{"post_id":"p1","user_id":"u1","message":"before restart","file_ids":[]}]}`)
+
+func texts(replies ...string) []testkit.Response {
+	var out []testkit.Response
+	for _, r := range replies {
+		out = append(out, openaifake.Text(r))
+	}
+	return out
+}
+
+// echo answers with the last message of the request, so concurrent runs get replies that do not depend on order.
+func echo(r testkit.Request) testkit.Response {
+	var body struct {
+		Messages []struct {
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	_ = json.Unmarshal(r.Body, &body)
+	return openaifake.Text("Answer to " + body.Messages[len(body.Messages)-1].Content)
+}
+
+func post(short, user, channel, root, message string, offsetMS int64) mattermostfake.Post {
+	return mattermostfake.Post{ID: id(short), UserID: id(user), ChannelID: id(channel), RootID: id(root),
+		Message: message, CreateAt: baseMS + offsetMS}
+}
+
+// id pads a short name to the 26 characters of a platform ID.
+func id(short string) string {
+	if short == "" {
+		return ""
+	}
+	return short + strings.Repeat("0", 26-len(short))
+}
+
+type harness struct {
+	t     *testing.T
+	clock *fakeclock.Clock
+	chat  *mattermostfake.Fake
+	model *openaifake.Fake
+	db    *pg.DB
+	logs  *logWatch
+	steps []any
+}
+
+// play runs sc and returns its golden document. settings are extra settings members and prompts a prompt profile
+// directory, both optional.
+func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompts string) []byte {
+	dsn := testdb.New(t)
+	h := &harness{t: t, clock: fakeclock.New(start), logs: &logWatch{match: "\x00", seen: make(chan struct{})}}
+	h.chat = mattermostfake.New(t, "chat-token", mattermostfake.User{ID: id("bot"), Username: cmp.Or(sc.bot, "agent")})
+	h.chat.AddUser(mattermostfake.User{ID: id("u1"), Username: "ada", FirstName: "Ada", LastName: "Lovelace", Position: "Engineer"},
+		mattermostfake.User{ID: id("u2"), Username: "grace", FirstName: "Grace"})
+	h.chat.AddTeam(mattermostfake.Team{ID: id("t1"), Name: "team", DisplayName: "Team"})
+	h.chat.AddChannel(
+		mattermostfake.Channel{ID: id("dm1"), Type: "D", Name: id("bot") + "__" + id("u1"), Members: []string{id("bot"), id("u1")}},
+		mattermostfake.Channel{ID: id("ch1"), TeamID: id("t1"), Type: "O", Name: "town", DisplayName: "Town",
+			Members: []string{id("bot"), id("u1"), id("u2")}})
+	h.model = openaifake.New(t)
+	h.model.Chat().Reply(sc.replies...)
+
+	doc := map[string]json.RawMessage{
+		"model": raw(`"chat-model"`), "api_base": raw(`"` + h.model.URL() + `"`), "key": raw(`"model-key"`),
+		"mattermost_endpoint": raw(`"` + h.chat.URL() + `"`), "mattermost_token": raw(`"chat-token"`),
+		"mattermost_bot_id": raw(`"` + id("bot") + `"`), "enabled_tools": raw(`[]`),
+	}
+	if sc.settings != "" {
+		var extra map[string]json.RawMessage
+		if err := json.Unmarshal([]byte("{"+sc.settings+"}"), &extra); err != nil {
+			t.Fatal(err)
+		}
+		maps.Copy(doc, extra)
+	}
+	maps.Copy(doc, settings)
+	settingsJSON, _ := json.Marshal(doc)
+	environ := []string{"DOST_DATABASE_URL=" + dsn, "DOST_HTTP_ADDR=", "DOST_TIMEZONE=+03:00",
+		"DOST_SETTINGS_JSON=" + string(settingsJSON)}
+	if prompts != "" {
+		environ = append(environ, "DOST_PROMPTS_DIR="+prompts)
+	}
+	env := environment(t, environ...)
+
+	var err error
+	if h.db, err = pg.Open(t.Context(), dsn, clock.Real(), slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatal(err)
+	}
+	defer h.db.Close()
+	if sc.name == "restart" {
+		if _, err := h.db.Exec(t.Context(), `INSERT INTO key_value_store (type, key, value, created_at, updated_at) `+
+			`VALUES ('none', $1, $2, now(), now())`, bufferKey(doc)+"dm:"+id("u1"), restartBuffer); err != nil {
+			t.Fatal(err)
+		}
+		h.snapshot("start")
+	}
+
+	secrets := new(logging.Secrets)
+	log := logging.New(h.logs, slog.LevelDebug, false, secrets)
+	table := builtin(http.DefaultTransport, h.clock, "dost/test", "http://searxng.invalid", log)
+	ctx, stop := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, env, "test", table, h.clock, secrets, log) }()
+	h.chat.AwaitWebsocket(t, func() bool { return h.chat.Connections() > 0 })
+	h.await("startup recovery", func() bool { return strings.Contains(h.logs.String(), `msg="recovery finished"`) })
+
+	sc.play(h)
+	stop()
+	if err := <-done; err != nil {
+		t.Errorf("Run = %v, want nil; logs:\n%s", err, h.logs)
+	}
+	if n := h.count(`SELECT count(*) FROM dost_inflight_runs`); n != 0 {
+		t.Errorf("in-flight records left = %d, want 0", n)
+	}
+
+	var requests, posts []string
+	for _, r := range h.model.Requests() {
+		requests = append(requests, string(r.Body))
+	}
+	for _, r := range h.chat.Requests() {
+		if r.Call() == "POST /api/v4/posts" {
+			posts = append(posts, string(r.Body))
+		}
+	}
+	if sc.unsorted {
+		slices.Sort(requests)
+		slices.Sort(posts)
+	}
+	return canonical(t, map[string]any{
+		"steps": h.steps, "model_requests": orEmpty(requests), "posts": orEmpty(posts), "chat_sessions": h.sessions(),
+	})
+}
+
+// post delivers p live and waits until the dispatcher has read it.
+func (h *harness) post(p mattermostfake.Post) {
+	h.t.Helper()
+	p = h.chat.Posted(p)
+	h.awaitLastSeen(p.CreateAt)
+	h.snapshot(strings.TrimRight(p.ID, "0"))
+}
+
+// flush advances the clock by d and waits until runs have finished in all.
+func (h *harness) flush(d time.Duration, runs int) {
+	h.t.Helper()
+	h.clock.Advance(d)
+	h.awaitRuns(runs)
+	h.snapshot("flushed")
+}
+
+// advanceArmed waits until the earliest timer is due in d, as a retry or reconnect wait is when armed, and advances
+// the clock by d.
+func (h *harness) advanceArmed(d time.Duration) {
+	h.t.Helper()
+	h.await("a timer due in "+d.String(), func() bool { next, ok := h.clock.Next(); return ok && next == d })
+	h.clock.Advance(d)
+}
+
+func (h *harness) awaitRuns(n int) {
+	h.t.Helper()
+	h.await("finished runs", func() bool { return strings.Count(h.logs.String(), `msg="run finished"`) >= n })
+}
+
+func (h *harness) awaitLastSeen(createAt int64) {
+	h.t.Helper()
+	want := json.Number(strconv.FormatInt(createAt, 10))
+	h.await("last-seen marker", func() bool {
+		for _, v := range h.store() {
+			if m, ok := v.(map[string]any); ok && len(m) == 1 && m["create_at"] == want {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func (h *harness) await(what string, cond func() bool) {
+	h.t.Helper()
+	deadline := time.Now().Add(testkit.AwaitTimeout)
+	for !cond() {
+		if time.Now().After(deadline) {
+			h.t.Fatalf("timed out waiting for %s; logs:\n%s", what, h.logs)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func (h *harness) snapshot(after string) {
+	h.steps = append(h.steps, map[string]any{"after": after, "store": h.store()})
+}
+
+// store returns the key-value rows, with buffer generations replaced by a placeholder.
+func (h *harness) store() map[string]any {
+	out := map[string]any{}
+	for key, v := range h.rows(`SELECT key, value::text FROM key_value_store`) {
+		if m, ok := v.(map[string]any); ok && m["generation"] != nil {
+			m["generation"] = "<generation>"
+		}
+		out[key] = v
+	}
+	return out
+}
+
+// sessions returns the chat_sessions rows, each item's ts checked and replaced by a placeholder.
+func (h *harness) sessions() map[string]any {
+	out := h.rows(`SELECT key, value::text FROM chat_sessions`)
+	for key, v := range out {
+		items, _ := v.([]any)
+		for _, item := range items {
+			turn := item.(map[string]any)
+			if ts, _ := turn["ts"].(string); !turnTS.MatchString(ts) {
+				h.t.Errorf("%s: ts = %q, want an ISO time in UTC", key, ts)
+			}
+			turn["ts"] = "<ts>"
+		}
+	}
+	return out
+}
+
+func (h *harness) rows(query string) map[string]any {
+	h.t.Helper()
+	rows, err := h.db.Query(h.t.Context(), query)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]any{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			h.t.Fatal(err)
+		}
+		out[key] = decode(h.t, []byte(value))
+	}
+	if err := rows.Err(); err != nil {
+		h.t.Fatal(err)
+	}
+	return out
+}
+
+func (h *harness) count(query string) int {
+	h.t.Helper()
+	rows, err := h.db.Query(h.t.Context(), query)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer rows.Close()
+	var n int
+	for rows.Next() {
+		if err := rows.Scan(&n); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	return n
+}
+
+func bufferKey(doc map[string]json.RawMessage) string {
+	var prefix string
+	if json.Unmarshal(doc["buffer_prefix"], &prefix) != nil || prefix == "" {
+		return "dost:buffer:"
+	}
+	return prefix
+}
+
+func decode(t *testing.T, b []byte) any {
+	t.Helper()
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	var v any
+	if err := d.Decode(&v); err != nil {
+		t.Fatalf("%v: %s", err, b)
+	}
+	return v
+}
+
+// canonical encodes v with sorted keys and without HTML escaping.
+func canonical(t *testing.T, v any) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	if err := e.Encode(v); err != nil {
+		t.Fatal(err)
+	}
+	return bytes.TrimSpace(b.Bytes())
+}
+
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func raw(s string) json.RawMessage { return json.RawMessage(s) }
