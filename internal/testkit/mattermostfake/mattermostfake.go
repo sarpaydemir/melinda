@@ -144,6 +144,14 @@ func (f *Fake) AddTeam(teams ...Team) {
 	f.teams = append(f.teams, teams...)
 }
 
+// AddFile stores a file a user attached to a post in a channel, for the file routes to serve.
+func (f *Fake) AddFile(id, userID, channelID, name, mimeType string, data []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.files[id] = file{info: fileInfo{ID: id, UserID: userID, ChannelID: channelID, Name: name,
+		Extension: strings.ToLower(strings.TrimPrefix(path.Ext(name), ".")), Size: len(data), MimeType: mimeType}, data: data}
+}
+
 // AddChannel adds channels the bot belongs to.
 func (f *Fake) AddChannel(channels ...Channel) {
 	f.mu.Lock()

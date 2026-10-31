@@ -30,11 +30,11 @@ import (
 	"github.com/sarpaydemir/dost/internal/testkit/testdb"
 )
 
-// Conversation goldens: each scenario runs every conversation component against the chat and model fakes, a fake
-// clock, and a fresh database, and records every model request body, every reply post body, the stored
-// key-value rows after each step (generations normalized), and the chat_sessions rows at the end (ts normalized).
-// With DOST_COMPAT_PROFILE set, each scenario also runs with the profile's prompts and settings and must produce
-// the profile's goldens/conversation/<scenario>.json exactly.
+// Conversation goldens: each scenario runs every component against the chat and model fakes, a fake clock, and a
+// fresh database, and records every model request body, every reply post body, the stored key-value rows after
+// each step (generations normalized), and at the end the chat_sessions rows (new turns' ts normalized) and the
+// vector rows. With DOST_COMPAT_PROFILE set, each scenario also runs with the profile's prompts and settings and
+// must produce the profile's goldens/<area>/<scenario>.json exactly.
 
 // turnTS is a saved turn's time: microseconds are left out when they are zero.
 var turnTS = regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{6})?\+00:00$`)
@@ -49,30 +49,35 @@ type scenario struct {
 	settings string // extra settings document members
 	bot      string // the agent's username; "agent" when empty
 	replies  []testkit.Response
-	unsorted bool // runs answer concurrently: requests and posts are compared as sorted lists
+	unsorted bool             // runs answer concurrently: requests and posts are compared as sorted lists
+	seed     func(h *harness) // writes rows before the agent starts
 	play     func(h *harness)
 }
 
-func TestConversationGoldens(t *testing.T) {
-	for _, sc := range scenarios {
+func TestConversationGoldens(t *testing.T) { assertGoldens(t, "conversation", scenarios) }
+
+func TestConversationCompatGoldens(t *testing.T) { assertCompatGoldens(t, "conversation", scenarios) }
+
+func assertGoldens(t *testing.T, area string, scs []scenario) {
+	for _, sc := range scs {
 		t.Run(sc.name, func(t *testing.T) {
 			t.Parallel()
-			golden.AssertJSON(t, "golden/conversation/"+sc.name, play(t, sc, nil, ""))
+			golden.AssertJSON(t, "golden/"+area+"/"+sc.name, play(t, sc, nil, ""))
 		})
 	}
 }
 
-func TestConversationCompatGoldens(t *testing.T) {
+func assertCompatGoldens(t *testing.T, area string, scs []scenario) {
 	dir := os.Getenv("DOST_COMPAT_PROFILE")
 	if dir == "" {
 		t.Skip("DOST_COMPAT_PROFILE is not set")
 	}
-	goldens := filepath.Join(dir, "goldens", "conversation")
+	goldens := filepath.Join(dir, "goldens", area)
 	var settings map[string]json.RawMessage
 	if b, err := os.ReadFile(filepath.Join(goldens, "settings.json")); err != nil || json.Unmarshal(b, &settings) != nil {
-		t.Skipf("the profile has no conversation settings (%v)", err)
+		t.Skipf("the profile has no %s settings (%v)", area, err)
 	}
-	for _, sc := range scenarios {
+	for _, sc := range scs {
 		want, err := os.ReadFile(filepath.Join(goldens, sc.name+".json"))
 		if err != nil {
 			continue
@@ -191,7 +196,11 @@ var scenarios = []scenario{
 		h.snapshot("recovered")
 		h.flush(3*time.Second, 3)
 	}},
-	{name: "restart", replies: texts("Back again."), play: func(h *harness) {
+	{name: "restart", replies: texts("Back again."), seed: func(h *harness) {
+		h.exec(`INSERT INTO key_value_store (type, key, value, created_at, updated_at) VALUES ('none', $1, $2, now(), now())`,
+			h.setting("buffer_prefix", "dost:buffer:")+"dm:"+id("u1"), restartBuffer)
+		h.snapshot("start")
+	}, play: func(h *harness) {
 		h.flush(3*time.Second, 1)
 	}},
 }
@@ -244,6 +253,7 @@ type harness struct {
 	chat  *mattermostfake.Fake
 	model *openaifake.Fake
 	db    *pg.DB
+	doc   map[string]json.RawMessage // the settings document
 	logs  *logWatch
 	steps []any
 }
@@ -263,6 +273,7 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 			Members: []string{id("bot"), id("u1"), id("u2")}})
 	h.model = openaifake.New(t)
 	h.model.Chat().Reply(sc.replies...)
+	h.model.Embeddings().DefaultFunc(embed)
 
 	doc := map[string]json.RawMessage{
 		"model": raw(`"chat-model"`), "api_base": raw(`"` + h.model.URL() + `"`), "key": raw(`"model-key"`),
@@ -277,6 +288,7 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 		maps.Copy(doc, extra)
 	}
 	maps.Copy(doc, settings)
+	h.doc = doc
 	settingsJSON, _ := json.Marshal(doc)
 	environ := []string{"DOST_DATABASE_URL=" + dsn, "DOST_HTTP_ADDR=", "DOST_TIMEZONE=+03:00",
 		"DOST_SETTINGS_JSON=" + string(settingsJSON)}
@@ -290,12 +302,8 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 		t.Fatal(err)
 	}
 	defer h.db.Close()
-	if sc.name == "restart" {
-		if _, err := h.db.Exec(t.Context(), `INSERT INTO key_value_store (type, key, value, created_at, updated_at) `+
-			`VALUES ('none', $1, $2, now(), now())`, bufferKey(doc)+"dm:"+id("u1"), restartBuffer); err != nil {
-			t.Fatal(err)
-		}
-		h.snapshot("start")
+	if sc.seed != nil {
+		sc.seed(h)
 	}
 
 	secrets := new(logging.Secrets)
@@ -329,9 +337,13 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 		slices.Sort(requests)
 		slices.Sort(posts)
 	}
-	return canonical(t, map[string]any{
+	out := map[string]any{
 		"steps": h.steps, "model_requests": orEmpty(requests), "posts": orEmpty(posts), "chat_sessions": h.sessions(),
-	})
+	}
+	if v := h.vectors(); len(v) > 0 {
+		out["vectors"] = v
+	}
+	return canonical(t, out)
 }
 
 // post delivers p live and waits until the dispatcher has read it.
@@ -403,17 +415,16 @@ func (h *harness) store() map[string]any {
 	return out
 }
 
-// sessions returns the chat_sessions rows, each item's ts checked and replaced by a placeholder.
+// sessions returns the chat_sessions rows, each ts in the saved turns' format replaced by a placeholder.
 func (h *harness) sessions() map[string]any {
 	out := h.rows(`SELECT key, value::text FROM chat_sessions`)
-	for key, v := range out {
+	for _, v := range out {
 		items, _ := v.([]any)
 		for _, item := range items {
 			turn := item.(map[string]any)
-			if ts, _ := turn["ts"].(string); !turnTS.MatchString(ts) {
-				h.t.Errorf("%s: ts = %q, want an ISO time in UTC", key, ts)
+			if ts, _ := turn["ts"].(string); turnTS.MatchString(ts) {
+				turn["ts"] = "<ts>"
 			}
-			turn["ts"] = "<ts>"
 		}
 	}
 	return out
@@ -456,12 +467,20 @@ func (h *harness) count(query string) int {
 	return n
 }
 
-func bufferKey(doc map[string]json.RawMessage) string {
-	var prefix string
-	if json.Unmarshal(doc["buffer_prefix"], &prefix) != nil || prefix == "" {
-		return "dost:buffer:"
+// setting returns a string setting of the document, or def when it has none.
+func (h *harness) setting(key, def string) string {
+	var v string
+	if json.Unmarshal(h.doc[key], &v) != nil || v == "" {
+		return def
 	}
-	return prefix
+	return v
+}
+
+func (h *harness) exec(sql string, args ...any) {
+	h.t.Helper()
+	if _, err := h.db.Exec(h.t.Context(), sql, args...); err != nil {
+		h.t.Fatal(err)
+	}
 }
 
 func decode(t *testing.T, b []byte) any {
