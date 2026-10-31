@@ -2,7 +2,6 @@ package mattermost_test
 
 import (
 	"encoding/json"
-	"log/slog"
 	"maps"
 	"net/http"
 	"reflect"
@@ -10,13 +9,14 @@ import (
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 )
 
 // decoder returns the platform for decoding only; it never reaches a server.
 func decoder(t testing.TB) chat.Platform {
 	t.Helper()
-	p, err := mattermost.Open(settings(t, `{"model":"m","mattermost_endpoint":"https://chat.example","mattermost_token":"t","mattermost_bot_id":"b"}`), http.DefaultTransport, slog.New(slog.DiscardHandler))
+	p, err := mattermost.Open(settings(t, `{"model":"m","mattermost_endpoint":"https://chat.example","mattermost_token":"t","mattermost_bot_id":"b"}`), http.DefaultTransport, clock.Real(), discard)
 	if err != nil {
 		t.Fatal(err)
 	}

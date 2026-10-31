@@ -43,7 +43,7 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string, log
 	return adapters{
 		platforms: map[string]platformAdapter{
 			"mattermost": {
-				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport, log) },
+				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport, clk, log) },
 				tools:   func(*config.Settings) []tool.Tool { return mattermost.Tools() },
 				prompts: mattermost.Prompts(),
 				secrets: []config.SecretKey{{Key: "mattermost_token"}},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 
@@ -19,6 +20,8 @@ type wsState struct {
 	conns       map[*websocket.Conn]struct{}
 	connections int
 	pings       int
+	noPongs     bool
+	closes      []websocket.StatusCode
 }
 
 // Push queues websocket frames. They are delivered in order to authenticated connections; a frame stays
@@ -76,6 +79,19 @@ func (f *Fake) Pings() int {
 	return f.ws.pings
 }
 
+// WithholdPongs makes the fake stop answering pings; they are still counted.
+func (f *Fake) WithholdPongs() {
+	f.update(func() { f.ws.noPongs = true })
+}
+
+// Closes returns, for each websocket connection that has ended, the close status the client sent, or -1 when it
+// sent none.
+func (f *Fake) Closes() []websocket.StatusCode {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.ws.closes)
+}
+
 // AwaitWebsocket blocks until cond holds, checking it after every websocket connection, ping, and push.
 func (f *Fake) AwaitWebsocket(t testing.TB, cond func() bool) {
 	t.Helper()
@@ -106,8 +122,12 @@ func (f *Fake) serveWS(w http.ResponseWriter, r *http.Request) {
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 		OnPingReceived: func(context.Context, []byte) bool {
-			f.update(func() { f.ws.pings++ })
-			return true
+			answer := false
+			f.update(func() {
+				f.ws.pings++
+				answer = !f.ws.noPongs
+			})
+			return answer
 		},
 	})
 	if err != nil {
@@ -120,9 +140,11 @@ func (f *Fake) serveWS(w http.ResponseWriter, r *http.Request) {
 	})
 	var delivering sync.WaitGroup
 	authenticated := false
+	var status websocket.StatusCode
 	for {
 		_, frame, err := c.Read(ctx)
 		if err != nil {
+			status = websocket.CloseStatus(err)
 			break
 		}
 		if !authenticated && f.authenticate(ctx, c, frame) {
@@ -133,7 +155,10 @@ func (f *Fake) serveWS(w http.ResponseWriter, r *http.Request) {
 	cancel()
 	delivering.Wait()
 	_ = c.CloseNow()
-	f.update(func() { delete(f.ws.conns, c) })
+	f.update(func() {
+		delete(f.ws.conns, c)
+		f.ws.closes = append(f.ws.closes, status)
+	})
 }
 
 // authenticate answers an authentication challenge and reports whether its token was accepted.

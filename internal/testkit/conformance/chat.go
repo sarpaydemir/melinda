@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/dost/internal/testkit"
 )
 
 // ChatHarness is a chat platform adapter wired to a fake platform that has the agent's account, one other
@@ -39,6 +40,10 @@ type ChatHarness struct {
 	SystemEvents []json.RawMessage
 	// NonMessages are events of the platform that carry no message.
 	NonMessages []json.RawMessage
+	// Inbound queues events for the fake to send, in order, to the intake session once it has connected.
+	Inbound func(events ...json.RawMessage)
+	// Drop ends every intake session as a network failure would.
+	Drop func()
 }
 
 // prompt is how long a call may take to return once its context ends.
@@ -92,6 +97,49 @@ func Chat(t *testing.T, newHarness func(*testing.T) ChatHarness) {
 			if m, ok := h.Platform.Decode(ev); ok {
 				t.Errorf("Decode(%s) = %+v, want no message", ev, m)
 			}
+		}
+	})
+
+	t.Run("ListenConnectsThenDeliversInArrivalOrder", func(t *testing.T) {
+		h := newHarness(t)
+		texts := []string{"first", "second", "third"}
+		for _, text := range texts {
+			h.Inbound(h.Event(chat.Direct, "", text))
+		}
+		s := listen(t, h, true)
+		if got := s.next(t); got != "connected" {
+			t.Fatalf("first callback = %q, want connected", got)
+		}
+		for _, want := range texts {
+			if got := s.next(t); got != want {
+				t.Errorf("delivered %q, want %q", got, want)
+			}
+		}
+	})
+
+	t.Run("ListenFailsWhenTheSessionDrops", func(t *testing.T) {
+		h := newHarness(t)
+		s := listen(t, h, true)
+		s.next(t)
+		h.Drop()
+		if err := s.result(t); err == nil {
+			t.Error("Listen returned nil after the session dropped")
+		}
+	})
+
+	t.Run("ListenReturnsPromptlyOnCancellation", func(t *testing.T) {
+		h := newHarness(t)
+		h.Inbound(h.Event(chat.Direct, "", "waiting"))
+		s := listen(t, h, false)
+		s.next(t)
+		s.next(t) // the delivery that intake does not accept
+		s.cancel()
+		start := time.Now()
+		if err := s.result(t); err != nil {
+			t.Errorf("Listen after cancellation = %v, want nil", err)
+		}
+		if d := time.Since(start); d > prompt {
+			t.Errorf("Listen returned %v after its context ended", d)
 		}
 	})
 
@@ -261,6 +309,63 @@ func idsByConversation(ms []chat.Message) map[string][]string {
 		ids[m.ConversationID] = append(ids[m.ConversationID], m.ID)
 	}
 	return ids
+}
+
+// session is a running Listen call.
+type session struct {
+	// seen receives "connected" and the text of each delivered message, in callback order.
+	seen   chan string
+	done   chan struct{}
+	err    error // written before done is closed
+	cancel context.CancelFunc
+}
+
+// listen starts Listen on h's platform. When accept is false, intake never accepts a delivery: deliver reports it
+// and then blocks until its context ends.
+func listen(t *testing.T, h ChatHarness, accept bool) *session {
+	ctx, cancel := context.WithCancel(t.Context())
+	s := &session{seen: make(chan string, 16), done: make(chan struct{}), cancel: cancel}
+	deliver := func(ctx context.Context, event json.RawMessage) error {
+		m, _ := h.Platform.Decode(event)
+		s.seen <- m.Text
+		if !accept {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}
+	go func() {
+		defer close(s.done)
+		s.err = h.Platform.Listen(ctx, func() { s.seen <- "connected" }, deliver)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-s.done
+	})
+	return s
+}
+
+func (s *session) next(t *testing.T) string {
+	t.Helper()
+	select {
+	case v := <-s.seen:
+		return v
+	case <-s.done:
+		t.Fatalf("Listen returned %v while a callback was expected", s.err)
+	case <-time.After(testkit.AwaitTimeout):
+		t.Fatal("timed out waiting for a Listen callback")
+	}
+	return ""
+}
+
+func (s *session) result(t *testing.T) error {
+	t.Helper()
+	select {
+	case <-s.done:
+	case <-time.After(testkit.AwaitTimeout):
+		t.Fatal("timed out waiting for Listen to return")
+	}
+	return s.err
 }
 
 // calls makes every call that does I/O and returns their errors by method name.

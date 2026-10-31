@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/testkit"
 	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
@@ -128,7 +129,7 @@ func TestReplayLogsAFailingListingAndContinues(t *testing.T) {
 		mm.AddPost(mattermostfake.Post{ChannelID: news, UserID: ayse.ID, CreateAt: seenAt.UnixMilli() + 2, Message: "@helper news"}).ID,
 	}
 	var logs bytes.Buffer
-	p := openLogging(t, mm, "", slog.New(slog.NewTextHandler(&logs, nil)))
+	p := openWith(t, mm, "", token, clock.Real(), slog.New(slog.NewTextHandler(&logs, nil)))
 
 	if got := postIDs(t, replay(t, p)); !slices.Equal(got, posted) {
 		t.Errorf("replayed %q, want %q from the channels that could be read", got, posted)

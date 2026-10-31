@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -143,4 +144,30 @@ func TestWebsocketRecordsPingsAndSurvivesDrops(t *testing.T) {
 	}
 	mm.AwaitWebsocket(t, func() bool { return mm.Connections() == 2 })
 	mm.AssertCalls(t, "GET /api/v4/websocket", "GET /api/v4/websocket", "GET /api/v4/websocket")
+}
+
+func TestWebsocketWithholdsPongsAndRecordsCloseStatuses(t *testing.T) {
+	mm := mattermostfake.New(t, token, bot)
+	c := authenticate(t, mm, token)
+	read(t, c)
+	c.CloseRead(t.Context())
+	mm.WithholdPongs()
+	pinged := make(chan error, 1)
+	go func() { pinged <- c.Ping(t.Context()) }()
+	mm.AwaitWebsocket(t, func() bool { return mm.Pings() == 1 })
+	if err := c.Close(websocket.StatusNormalClosure, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-pinged; err == nil {
+		t.Error("a ping was answered while pongs were withheld")
+	}
+	mm.AwaitWebsocket(t, func() bool { return len(mm.Closes()) == 1 })
+
+	dropped := authenticate(t, mm, token)
+	read(t, dropped)
+	_ = dropped.CloseNow()
+	mm.AwaitWebsocket(t, func() bool { return len(mm.Closes()) == 2 })
+	if got, want := mm.Closes(), []websocket.StatusCode{websocket.StatusNormalClosure, -1}; !slices.Equal(got, want) {
+		t.Errorf("close statuses = %v, want %v", got, want)
+	}
 }

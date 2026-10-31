@@ -68,6 +68,17 @@ func (c *Clock) Timers() int {
 	return len(c.armed)
 }
 
+// Next returns how long until the earliest armed timer fires, and false when no timer is armed.
+func (c *Clock) Next() (time.Duration, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.armed) == 0 {
+		return 0, false
+	}
+	earliest := slices.MinFunc(c.armed, func(a, b *timer) int { return a.when.Compare(b.when) })
+	return earliest.when.Sub(c.now), true
+}
+
 // AwaitTimers blocks until at least n timers are armed, so a test can advance past a timer that another
 // goroutine is about to arm.
 func (c *Clock) AwaitTimers(t testing.TB, n int) {

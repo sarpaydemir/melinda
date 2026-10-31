@@ -5,7 +5,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 )
@@ -20,37 +22,44 @@ type settings struct {
 
 // platform is Mattermost as a chat platform.
 type platform struct {
-	client   *Client
-	identity chat.User
-	log      *slog.Logger
+	client    *Client
+	identity  chat.User
+	wsURL     string
+	transport http.RoundTripper
+	clock     clock.Clock
+	log       *slog.Logger
 }
 
-// Open builds the platform from a settings snapshot; its requests go through transport.
-func Open(s *config.Settings, transport http.RoundTripper, log *slog.Logger) (chat.Platform, error) {
+// Open builds the platform from a settings snapshot; its requests go through transport, clk times the websocket
+// keepalive, and it logs to log.
+func Open(s *config.Settings, transport http.RoundTripper, clk clock.Clock, log *slog.Logger) (chat.Platform, error) {
 	var c settings
 	if err := s.Decode(&c); err != nil {
 		return nil, err
 	}
-	var missing []error
+	var errs []error
+	if c.Endpoint != "" && !strings.HasPrefix(c.Endpoint, "http://") && !strings.HasPrefix(c.Endpoint, "https://") {
+		errs = append(errs, errors.New("mattermost_endpoint: must start with http:// or https://"))
+	}
 	for _, k := range []struct{ key, value string }{
 		{"mattermost_endpoint", c.Endpoint}, {"mattermost_token", c.Token}, {"mattermost_bot_id", c.BotID},
 	} {
 		if k.value == "" {
-			missing = append(missing, errors.New(k.key+": required"))
+			errs = append(errs, errors.New(k.key+": required"))
 		}
 	}
-	if len(missing) > 0 {
-		return nil, errors.Join(missing...)
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 	return &platform{
-		client:   NewClient(c.Endpoint, c.Token, transport),
-		identity: chat.User{ID: c.BotID, Username: c.BotUsername},
-		log:      log,
+		client:    NewClient(c.Endpoint, c.Token, transport),
+		identity:  chat.User{ID: c.BotID, Username: c.BotUsername},
+		wsURL:     wsURL(c.Endpoint),
+		transport: transport,
+		clock:     clk,
+		log:       log,
 	}, nil
 }
-
-// Listen is not supported yet.
-func (p *platform) Listen(context.Context, func(), chat.Deliver) error { return errors.ErrUnsupported }
 
 func (p *platform) Identity() chat.User { return p.identity }
 

@@ -100,3 +100,16 @@ func TestSleepWakesWhenAdvanced(t *testing.T) {
 		t.Errorf("armed timers after Sleep = %d, want 0", n)
 	}
 }
+
+func TestNextIsTheWaitForTheEarliestTimer(t *testing.T) {
+	c := fakeclock.New(start)
+	if d, ok := c.Next(); ok {
+		t.Errorf("Next with no timer = %v, true", d)
+	}
+	c.NewTimer(time.Hour)
+	c.NewTimer(3 * time.Second)
+	c.Advance(time.Second)
+	if d, ok := c.Next(); !ok || d != 2*time.Second {
+		t.Errorf("Next = %v, %v; want 2s", d, ok)
+	}
+}

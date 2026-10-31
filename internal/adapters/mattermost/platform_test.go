@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
+	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/testkit"
@@ -28,18 +29,21 @@ func settings(t testing.TB, doc string) *config.Settings {
 	return s
 }
 
+var discard = slog.New(slog.DiscardHandler)
+
 func open(t *testing.T, mm *mattermostfake.Fake, username string) chat.Platform {
 	t.Helper()
-	return openLogging(t, mm, username, slog.New(slog.DiscardHandler))
+	return openWith(t, mm, username, token, clock.Real(), discard)
 }
 
-func openLogging(t *testing.T, mm *mattermostfake.Fake, username string, log *slog.Logger) chat.Platform {
+// openWith opens the platform on mm as the bot, authenticating with tok, timing keepalive with clk, and logging to log.
+func openWith(t *testing.T, mm *mattermostfake.Fake, username, tok string, clk clock.Clock, log *slog.Logger) chat.Platform {
 	t.Helper()
 	doc, _ := json.Marshal(map[string]string{
-		"model": "m", "mattermost_endpoint": mm.URL(), "mattermost_token": token,
+		"model": "m", "mattermost_endpoint": mm.URL(), "mattermost_token": tok,
 		"mattermost_bot_id": bot.ID, "mattermost_bot_username": username,
 	})
-	p, err := mattermost.Open(settings(t, string(doc)), transport(t), log)
+	p, err := mattermost.Open(settings(t, string(doc)), transport(t), clk, log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,9 +57,11 @@ func TestOpenRequiresEndpointTokenAndBotID(t *testing.T) {
 			"mattermost_endpoint: required\nmattermost_token: required"},
 		{`{"model":"m","mattermost_endpoint":"https://chat.example","mattermost_token":"t","mattermost_bot_id":7}`,
 			"mattermost_bot_id: expected string"},
+		{`{"model":"m","mattermost_endpoint":"chat.example:8065","mattermost_token":"t","mattermost_bot_id":"b"}`,
+			"mattermost_endpoint: must start with http:// or https://"},
 	}
 	for _, tt := range tests {
-		_, err := mattermost.Open(settings(t, tt.doc), http.DefaultTransport, slog.New(slog.DiscardHandler))
+		_, err := mattermost.Open(settings(t, tt.doc), http.DefaultTransport, clock.Real(), discard)
 		if err == nil || err.Error() != tt.want {
 			t.Errorf("Open(%s) error:\n%v\nwant:\n%s", tt.doc, err, tt.want)
 		}
@@ -133,6 +139,12 @@ func TestChatConformance(t *testing.T) {
 			Stall: func() {
 				mm.Guard(func(testkit.Request) (testkit.Response, bool) { return testkit.Status(200).WithDelay(time.Hour), true })
 			},
+			Inbound: func(events ...json.RawMessage) {
+				for _, e := range events {
+					mm.Push(e)
+				}
+			},
+			Drop: mm.Drop,
 		}
 	})
 }
