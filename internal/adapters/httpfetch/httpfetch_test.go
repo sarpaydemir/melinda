@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -263,6 +264,49 @@ func FuzzExtractBoundsTheTitleAndText(f *testing.F) {
 				utf8.RuneCountInString(text), utf8.ValidString(text))
 		}
 	})
+}
+
+// TestFormattingLeftOpenAcrossManyBlocksIsReadInBoundedMemory covers pages that leave formatting elements open across
+// many short blocks, where an HTML5 tree builder would reopen every one of them in every block.
+func TestFormattingLeftOpenAcrossManyBlocksIsReadInBoundedMemory(t *testing.T) {
+	var opened, anchors strings.Builder
+	for i := range 100 {
+		fmt.Fprintf(&opened, "<b a=%d>", i)
+		fmt.Fprintf(&anchors, "<a a=%d>", i)
+	}
+	closed, blocks := strings.Repeat("</b>", 100), strings.Repeat("<p>x", 50<<10)
+	for name, page := range map[string]string{
+		"left open":                  "<p>" + opened.String() + blocks,
+		"anchors left open":          "<p>" + anchors.String() + blocks,
+		"closed inside a table":      "<p>" + opened.String() + "<table>" + closed + "</table>" + blocks,
+		"closed inside a select":     "<p>" + opened.String() + "<select>" + closed + "</select>" + blocks,
+		"opened inside noscript":     "<noscript><p>" + opened.String() + blocks,
+		"opened inside an svg style": "<p><svg><style>" + opened.String() + "</style></svg>" + blocks,
+		"closed after an svg end tag that is ignored": "<p>" + opened.String() + "<svg><foreignObject><div></svg>" +
+			closed + "</div></foreignObject></svg></p>" + blocks,
+		"closed after a table end tag that is ignored": "<p>" + opened.String() + "<table><template></table>" +
+			closed + "</template></table></p>" + blocks,
+		"closed after an svg title": "<p>" + opened.String() + "<svg><title></desc><span></svg>" + closed +
+			"</span></title></svg></p>" + blocks,
+	} {
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		_, text := extract(page)
+		runtime.ReadMemStats(&after)
+		if want := strings.Repeat("x\n", maxText/2); text != want {
+			t.Errorf("%s: text = %.20q (%d bytes), want %d lines of x", name, text, len(text), maxText/2)
+		}
+		if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 32<<20 {
+			t.Errorf("%s: reading a %d KiB page allocated %d MiB", name, len(page)>>10, alloc>>20)
+		}
+	}
+}
+
+func TestAnchorsLeftOpenAroundManyBlocksAreRead(t *testing.T) {
+	page := strings.Repeat("<a name=s>s<p>p</p>", 600)
+	if _, text := extract(page); text != strings.TrimSuffix(strings.Repeat("s\np\n", 600), "\n") {
+		t.Errorf("text = %.20q (%d bytes), want 600 pairs of s and p lines", text, len(text))
+	}
 }
 
 func TestOnlyTextualContentTypesAreRead(t *testing.T) {

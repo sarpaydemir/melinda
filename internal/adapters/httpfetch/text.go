@@ -1,6 +1,7 @@
 package httpfetch
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 
@@ -13,6 +14,8 @@ import (
 const (
 	maxText  = 5000
 	maxTitle = 8000
+	// renamed follows the name of each formatting tag the parser reads, and is dropped from the text read.
+	renamed = "\x01"
 )
 
 var (
@@ -20,6 +23,10 @@ var (
 	dropped = []string{"script", "style", "nav", "footer", "header", "iframe"}
 	// unread are the elements whose text is not part of the page text.
 	unread = []string{"template", "rt", "rp"}
+	// formattingTag matches every start or end tag of a formatting element, in any context the tokenizer may read it.
+	formattingTag = regexp.MustCompile(`(</?)([bB]|[bB][iI][gG]|[cC][oO][dD][eE]|[eE][mM]|[fF][oO][nN][tT]|[iI]|` +
+		`[nN][oO][bB][rR]|[sS]|[sS][mM][aA][lL][lL]|[sS][tT][rR][iI][kK][eE]|[sS][tT][rR][oO][nN][gG]|[tT][tT]|[uU])` +
+		`([\t\n\f\r />]|$)`)
 )
 
 // decode returns body as text in the named charset; UTF-8, with invalid bytes replaced, when the name is empty or
@@ -35,10 +42,12 @@ func decode(body []byte, name string) string {
 
 // extract reads a page: the text of its first title element, clipped to maxTitle code points, and its text, one
 // trimmed non-empty line per line of each text node, clipped to maxText code points. A byte order mark at the start
-// is not text. A page the parser rejects, such as one nested too deeply, has no title and no text.
+// and U+0001 are not text. A page the parser rejects, such as one nested too deeply, has no title and no text.
 func extract(page string) (title, text string) {
 	page = strings.TrimPrefix(page, "\uFEFF")
 	title = "No Title"
+	// Renamed, formatting elements are never reopened in later blocks, which can grow the tree far past the page.
+	page = formattingTag.ReplaceAllString(page, "${1}${2}"+renamed+"$3")
 	doc, err := html.ParseWithOptions(strings.NewReader(page), html.ParseOptionEnableScripting(false))
 	if err != nil {
 		return title, ""
@@ -53,12 +62,12 @@ func extract(page string) (title, text string) {
 				return
 			}
 			if n.Data == "title" && !found {
-				title, found = titleText(n), true
+				title, found = strings.ReplaceAll(titleText(n), renamed, ""), true
 			}
 			read = read && !slices.Contains(unread, n.Data)
 		case html.TextNode:
 			if read {
-				for line := range strings.SplitSeq(n.Data, "\n") {
+				for line := range strings.SplitSeq(strings.ReplaceAll(n.Data, renamed, ""), "\n") {
 					if line = textfmt.Strip(line); line != "" {
 						lines = append(lines, line)
 					}
