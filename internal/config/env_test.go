@@ -35,6 +35,7 @@ func TestLoadEnvDefaults(t *testing.T) {
 		AgentID:            "dost",
 		SettingsTTL:        5 * time.Second,
 		PrefectVariable:    "chatbot_settings",
+		DBHost:             "localhost",
 		DBPort:             5432,
 		Timezone:           time.UTC,
 		LogLevel:           slog.LevelInfo,

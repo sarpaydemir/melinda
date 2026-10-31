@@ -66,7 +66,7 @@ func LoadEnv(environ []string) (Env, error) {
 		PrefectAPIAuthString: r.get("DOST_PREFECT_API_AUTH_STRING", ""),
 		PromptsDir:           r.get("DOST_PROMPTS_DIR", ""),
 		DatabaseURL:          r.get("DOST_DATABASE_URL", ""),
-		DBHost:               r.get("DOST_DB_HOST", ""),
+		DBHost:               r.get("DOST_DB_HOST", "localhost"),
 		DBPort:               parse(&r, "DOST_DB_PORT", "5432", port),
 		DBUser:               r.get("DOST_DB_USER", ""),
 		DBPassword:           r.get("DOST_DB_PASSWORD", ""),
