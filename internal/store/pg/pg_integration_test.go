@@ -21,7 +21,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/testkit/testdb"
 )
 
-var allTables = []string{"chat_sessions", "key_value_store", "langchain_pg_collection", "langchain_pg_embedding"}
+var allTables = []string{"chat_sessions", "dost_inflight_runs", "key_value_store", "langchain_pg_collection", "langchain_pg_embedding"}
 
 func open(t *testing.T, dsn string) *DB {
 	t.Helper()
