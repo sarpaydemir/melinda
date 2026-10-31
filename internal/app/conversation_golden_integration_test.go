@@ -27,14 +27,18 @@ import (
 	"github.com/sarpaydemir/dost/internal/testkit/golden"
 	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
 	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
+	"github.com/sarpaydemir/dost/internal/testkit/planefake"
+	"github.com/sarpaydemir/dost/internal/testkit/searxngfake"
 	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+	"github.com/sarpaydemir/dost/internal/testkit/webfake"
 )
 
 // Conversation goldens: each scenario runs every component against the chat and model fakes, a fake clock, and a
 // fresh database, and records every model request body, every reply post body, the stored key-value rows after
 // each step (generations normalized), and at the end the chat_sessions rows (new turns' ts normalized) and the
 // vector rows. With DOST_COMPAT_PROFILE set, each scenario also runs with the profile's prompts and settings and
-// must produce the profile's goldens/<area>/<scenario>.json exactly.
+// must produce the profile's goldens/<area>/<scenario>.json exactly. Scenarios that reach the web, Plane, or file
+// uploads also record those requests, with the page server's address written as webHost.
 
 // turnTS is a saved turn's time: microseconds are left out when they are zero.
 var turnTS = regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{6})?\+00:00$`)
@@ -206,7 +210,97 @@ var scenarios = []scenario{
 	}, play: func(h *harness) {
 		h.flush(3*time.Second, 1)
 	}},
+	{name: "tools_search_fetch", settings: `"enabled_tools":null`, play: func(h *harness) {
+		h.search.Search().Reply(searxngfake.Results(
+			searxngfake.Result{Title: "Go 1.26 is released", URL: h.web.URL() + "/go126", Content: "The Go team announces Go 1.26."},
+			searxngfake.Result{Title: "Release notes", URL: "https://go.dev/doc/go1.26", Content: "Notes for {Go} 1.26"}))
+		h.web.On("GET", "/go126").Default(webfake.HTML(`<html><head><title>Go 1.26 Released</title>` +
+			`<style>p { color: red }</style></head><body><nav>Menu</nav><h1>Go 1.26</h1>` +
+			`<p>Go 1.26   brings  faster builds.</p><p>  Ünicode &amp; more  </p><script>track()</script>` +
+			`<footer>Footer</footer></body></html>`))
+		h.model.Chat().Reply(
+			openaifake.ToolCalls(openaifake.ToolCall{ID: "call_1", Name: "search_web", Arguments: `{"query": "go 1.26 release"}`}),
+			openaifake.ToolCalls(openaifake.ToolCall{ID: "call_2", Name: "visit_page", Arguments: `{"url": "` + h.web.URL() + `/go126"}`}),
+			openaifake.Text("Go 1.26 brings faster builds."))
+		h.post(post("p1", "u1", "dm1", "", "what is new in go 1.26?", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "tools_plane", settings: `"enabled_tools":null`, play: func(h *harness) {
+		h.plane.Route("POST", "/projects/{p}/work-items/").Reply(testkit.JSON(201,
+			map[string]any{"id": planeItem, "sequence_id": 42, "name": "Fix login"}))
+		for _, list := range []string{"labels", "states", "project-members"} {
+			h.plane.Route("GET", "/projects/{p}/"+list+"/").Default(testkit.JSON(200, map[string]any{"results": []any{}}))
+		}
+		h.plane.Route("GET", "/projects/{p}/cycles/").Default(testkit.JSON(200,
+			map[string]any{"results": []any{map[string]any{"id": planeCycle, "name": "Ekim 2026"}}}))
+		h.plane.Route("POST", "/projects/{p}/cycles/{c}/cycle-issues/").Default(testkit.JSON(201, map[string]any{}))
+		h.plane.Route("POST", "/projects/{p}/work-items/{w}/comments/").Reply(
+			testkit.JSON(201, map[string]any{"id": "comment-1"}), testkit.JSON(201, map[string]any{"id": "comment-2"}))
+		h.model.Chat().Reply(
+			openaifake.ToolCalls(openaifake.ToolCall{ID: "call_1", Name: "plane_create_issue", Arguments: `{"project_id": "` +
+				planeProject + `", "name": "Fix login", "description": "Users cannot sign in.\nSeen on <mobile> & web."}`}),
+			openaifake.ToolCalls(openaifake.ToolCall{ID: "call_2", Name: "plane_create_comment", Arguments: `{"project_id": "` +
+				planeProject + `", "work_item_id": "` + planeItem + `", "body": "Assigned to the web team."}`}),
+			openaifake.Text("Created FIX-42 and added the comment."))
+		h.post(post("p1", "u1", "dm1", "", "open a ticket for the login bug and note it is assigned", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "tools_image", settings: `"enabled_tools":null,"image_generation_model":"image-model"`, replies: []testkit.Response{
+		openaifake.ToolCalls(openaifake.ToolCall{ID: "call_1", Name: "generate_image", Arguments: `{"prompt": "a red bicycle"}`}),
+		openaifake.Text("", openaifake.Images("data:image/png;base64,"+onePixelPNG)),
+		openaifake.Text("Here is your bicycle."),
+	}, play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "draw a red bicycle", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "tools_budget", settings: `"enabled_tools":null,"max_tool_calls":2`, replies: []testkit.Response{
+		openaifake.ToolCalls(
+			openaifake.ToolCall{ID: "call_1", Name: "search_web", Arguments: `{"query": "one"}`},
+			openaifake.ToolCall{ID: "call_2", Name: "search_web", Arguments: `{"query": "two"}`},
+			openaifake.ToolCall{ID: "call_3", Name: "search_web", Arguments: `{"query": "three"}`}),
+		openaifake.Text("Here is what I found."),
+	}, play: func(h *harness) {
+		h.search.Search().Default(searxngfake.Results(searxngfake.Result{Title: "A", URL: "https://a.example", Content: "a"}))
+		h.post(post("p1", "u1", "dm1", "", "search one, two and three", 0))
+		h.flush(3*time.Second, 1)
+	}},
+	{name: "tools_fallback", settings: `"enabled_tools":null,"tool_fallback_model":"fallback-model"`, replies: []testkit.Response{
+		openaifake.HTTPError(500, "upstream"), openaifake.HTTPError(500, "upstream"), openaifake.HTTPError(500, "upstream"),
+		openaifake.ToolCalls(openaifake.ToolCall{ID: "call_1", Name: "search_web", Arguments: `{"query": "weather"}`}),
+		openaifake.Text("Sunny."),
+	}, play: func(h *harness) {
+		h.search.Search().Default(searxngfake.Results(searxngfake.Result{Title: "Forecast", URL: "https://w.example", Content: "Sunny"}))
+		h.post(post("p1", "u1", "dm1", "", "weather?", 0))
+		h.clock.Advance(3 * time.Second)
+		h.advanceArmed(time.Second)
+		h.advanceArmed(2 * time.Second)
+		h.awaitRuns(1)
+		h.snapshot("flushed")
+	}},
+	{name: "brand_analysis", settings: `"automations":[{"name":"marka","pattern":"/marka\\s+(.+)",` +
+		`"handler":"brand_analysis","args":{"brand_name":1}}]`, play: func(h *harness) {
+		h.search.Search().Reply(
+			searxngfake.Results(searxngfake.Result{Title: "Kahve", URL: h.web.URL() + "/kahve", Content: "Coffee"}),
+			searxngfake.Results(searxngfake.Result{Title: "Kahve (@kahve)", URL: "https://www.instagram.com/kahve/", Content: "Photos"}))
+		h.web.On("GET", "/kahve").Default(webfake.HTML(`<html><head><title>Kahve</title></head><body>` +
+			`<p>Coffee and chocolate since 1999.</p></body></html>`))
+		h.model.Chat().Reply(
+			openaifake.Text("```json\n{\"summary\": \"A coffee chain.\", \"findings\": [\"old\"], \"products\": [\"Coffee\", \"Chocolate\"]}\n```"),
+			openaifake.Text(`{"summary": "Product photos.", "themes": ["coffee", "{season}"]}`),
+			openaifake.Text(`{"categories": ["Drinks", "Desserts"], "target": "Young adults", "price": "Mid-range"}`),
+			openaifake.Text(`{"slogans": [{"text": "Brew joy", "why": "Short"}, {"text": "Sip {more}", "why": "Playful"}]}`),
+			openaifake.Text(`{"videos": [{"title": "Morning", "idea": "A morning ritual", "duration": "30s"}]}`))
+		h.post(post("p1", "u1", "ch1", "", "@agent /marka Kahve", 0))
+		h.flush(3500*time.Millisecond, 1) // a clock between whole seconds
+	}},
 }
+
+const (
+	planeProject = "11111111-1111-4111-8111-111111111111"
+	planeItem    = "22222222-2222-4222-8222-222222222222"
+	planeCycle   = "33333333-3333-4333-8333-333333333333"
+	onePixelPNG  = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 // restartBuffer is the buffer a previous run left for p1 before stopping, as the dispatcher stores it.
 var restartBuffer = strings.NewReplacer("p1", id("p1"), "u1", id("u1"), "dm1", id("dm1")).Replace(
@@ -251,14 +345,17 @@ func id(short string) string {
 }
 
 type harness struct {
-	t     *testing.T
-	clock *fakeclock.Clock
-	chat  *mattermostfake.Fake
-	model *openaifake.Fake
-	db    *pg.DB
-	doc   map[string]json.RawMessage // the settings document
-	logs  *logWatch
-	steps []any
+	t      *testing.T
+	clock  *fakeclock.Clock
+	chat   *mattermostfake.Fake
+	model  *openaifake.Fake
+	search *searxngfake.Fake
+	web    *testkit.Server
+	plane  *planefake.Fake
+	db     *pg.DB
+	doc    map[string]json.RawMessage // the settings document
+	logs   *logWatch
+	steps  []any
 }
 
 // play runs sc and returns its golden document. settings are extra settings members and prompts a prompt profile
@@ -277,11 +374,14 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 	h.model = openaifake.New(t)
 	h.model.Chat().Reply(sc.replies...)
 	h.model.Embeddings().DefaultFunc(embed)
+	h.search, h.web, h.plane = searxngfake.New(t), testkit.NewServer(t), planefake.New(t, "ws", "plane-key")
 
 	doc := map[string]json.RawMessage{
 		"model": raw(`"chat-model"`), "api_base": raw(`"` + h.model.URL() + `"`), "key": raw(`"model-key"`),
 		"mattermost_endpoint": raw(`"` + h.chat.URL() + `"`), "mattermost_token": raw(`"chat-token"`),
 		"mattermost_bot_id": raw(`"` + id("bot") + `"`), "enabled_tools": raw(`[]`),
+		"plane_endpoint": raw(`"` + h.plane.URL() + `"`), "plane_api_key": raw(`"plane-key"`),
+		"plane_workspace_slug": raw(`"ws"`), "web_fetch_allow_private": raw(`true`),
 	}
 	if sc.settings != "" {
 		var extra map[string]json.RawMessage
@@ -294,7 +394,7 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 	h.doc = doc
 	secrets := new(logging.Secrets)
 	log := logging.New(h.logs, slog.LevelDebug, false, secrets)
-	table := builtin(http.DefaultTransport, h.clock, "dost/test", "http://searxng.invalid", log)
+	table := builtin(http.DefaultTransport, h.clock, "dost/test", h.search.URL(), log)
 	var environ []string
 	if sc.setup != nil {
 		environ = sc.setup(h, doc, &table)
@@ -335,22 +435,60 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 	for _, r := range h.model.Requests() {
 		requests = append(requests, string(r.Body))
 	}
+	var uploads, searches, fetches, plane []string
 	for _, r := range h.chat.Requests() {
-		if r.Call() == "POST /api/v4/posts" {
+		switch r.Call() {
+		case "POST /api/v4/posts":
 			posts = append(posts, string(r.Body))
+		case "POST /api/v4/files":
+			uploads = append(uploads, upload(t, r))
 		}
 	}
 	if sc.unsorted {
 		slices.Sort(requests)
 		slices.Sort(posts)
 	}
+	for _, r := range h.search.Requests() {
+		searches = append(searches, r.Call())
+	}
+	for _, r := range h.web.Requests() {
+		fetches = append(fetches, r.Call()+" | User-Agent: "+r.Header.Get("User-Agent")+" | Accept: "+
+			r.Header.Get("Accept")+" | Accept-Language: "+r.Header.Get("Accept-Language"))
+	}
+	for _, r := range h.plane.Requests() {
+		plane = append(plane, strings.TrimSpace(r.Call()+" "+string(r.Body)))
+	}
+	slices.Sort(plane) // project metadata is read concurrently
 	out := map[string]any{
 		"steps": h.steps, "model_requests": orEmpty(requests), "posts": orEmpty(posts), "chat_sessions": h.sessions(),
 	}
 	if v := h.vectors(); len(v) > 0 {
 		out["vectors"] = v
 	}
-	return canonical(t, out)
+	for key, list := range map[string][]string{"uploads": uploads, "searches": searches, "page_fetches": fetches,
+		"plane_requests": plane} {
+		if list != nil {
+			out[key] = list
+		}
+	}
+	return bytes.ReplaceAll(canonical(t, out), []byte(h.web.URL()), []byte(webHost))
+}
+
+// webHost stands for the page server's address in goldens.
+const webHost = "http://web.test"
+
+// upload describes a file upload: its channel and each file's name, type, and size.
+func upload(t *testing.T, r testkit.Request) string {
+	t.Helper()
+	m, err := r.Multipart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := "channel_id=" + strings.Join(m.Values["channel_id"], ",")
+	for _, f := range m.Files {
+		out += " " + f.Field + "=" + f.Filename + " " + f.ContentType + " " + strconv.Itoa(len(f.Data))
+	}
+	return out
 }
 
 // post delivers p live and waits until the dispatcher has read it.

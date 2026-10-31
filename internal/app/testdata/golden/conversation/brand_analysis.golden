@@ -1,0 +1,227 @@
+{
+  "chat_sessions": {
+    "dost:thread:p1000000000000000000000000": [
+      {
+        "assistant": "**Website:**\n**URL:** http://web.test/kahve\n**Summary:** A coffee chain.",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 1,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 1"
+      },
+      {
+        "assistant": "**Instagram:**\n**Handle:** @kahve\n**Summary:** Product photos.",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 2,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 2"
+      },
+      {
+        "assistant": "**Analysis:**\n**Categories:** Drinks, Desserts\n**Audience:** Young adults\n**Segment:** Mid-range",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 3,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 3"
+      },
+      {
+        "assistant": "**Slogans:**\n• **Brew joy** - Short\n• **Sip {more}** - Playful",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 4,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 4"
+      },
+      {
+        "assistant": "**Videos:**\n• **Morning** (30s): A morning ritual",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 5,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 5"
+      },
+      {
+        "assistant": "Brand analysis of Kahve, in full:\n\n**Categories:** Drinks, Desserts\n**Audience:** Young adults\n**Price segment:** Mid-range\n\n**All slogans:**\n• Brew joy - Short\n• Sip {more} - Playful\n\n**All video concepts:**\n• Morning (30s) - A morning ritual",
+        "context_id": "p1000000000000000000000000",
+        "is_dm": false,
+        "message_count": 1,
+        "scope": "public",
+        "ts": "<ts>",
+        "user": "u1000000000000000000000000: @agent /marka Kahve",
+        "user_id": "u1000000000000000000000000"
+      }
+    ],
+    "dost:u1000000000000000000000000": [
+      {
+        "assistant": "**Website:**\n**URL:** http://web.test/kahve\n**Summary:** A coffee chain.",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 1,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 1"
+      },
+      {
+        "assistant": "**Instagram:**\n**Handle:** @kahve\n**Summary:** Product photos.",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 2,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 2"
+      },
+      {
+        "assistant": "**Analysis:**\n**Categories:** Drinks, Desserts\n**Audience:** Young adults\n**Segment:** Mid-range",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 3,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 3"
+      },
+      {
+        "assistant": "**Slogans:**\n• **Brew joy** - Short\n• **Sip {more}** - Playful",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 4,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 4"
+      },
+      {
+        "assistant": "**Videos:**\n• **Morning** (30s): A morning ritual",
+        "context_id": "p1000000000000000000000000",
+        "scope": "public",
+        "step": 5,
+        "ts": "<ts>",
+        "user": "/brand Kahve - step 5"
+      },
+      {
+        "assistant": "Brand analysis of Kahve, in full:\n\n**Categories:** Drinks, Desserts\n**Audience:** Young adults\n**Price segment:** Mid-range\n\n**All slogans:**\n• Brew joy - Short\n• Sip {more} - Playful\n\n**All video concepts:**\n• Morning (30s) - A morning ritual",
+        "context_id": "p1000000000000000000000000",
+        "is_dm": false,
+        "message_count": 1,
+        "scope": "public",
+        "ts": "<ts>",
+        "user": "u1000000000000000000000000: @agent /marka Kahve",
+        "user_id": "u1000000000000000000000000"
+      }
+    ]
+  },
+  "model_requests": [
+    "{\"model\":\"chat-model\",\"messages\":[{\"role\":\"user\",\"content\":\"You analyse brands. Work from the information below and answer with valid JSON only. Fill every field, making an informed guess where the information runs out.\\n\\nBrand: Kahve\\nWebsite: http://web.test/kahve\\nPage text (first 5000 characters): Title: Kahve\\nURL: http://web.test/kahve\\n\\nKahve\\nCoffee and chocolate since 1999.\\n\\nDescribe the brand in this JSON shape:\\n{\\\"summary\\\": \\\"two or three sentences about the brand\\\", \\\"findings\\\": [\\\"finding\\\", \\\"finding\\\", \\\"finding\\\"], \\\"products\\\": [\\\"product\\\", \\\"product\\\"]}\\n\\nAnswer with the JSON alone.\"}],\"temperature\":0.7,\"max_tokens\":4096}",
+    "{\"model\":\"chat-model\",\"messages\":[{\"role\":\"user\",\"content\":\"You analyse brands. Work from the information below and answer with valid JSON only. Fill every field, making an informed guess where the information runs out.\\n\\nBrand: Kahve\\nInstagram: @kahve\\n\\nDescribe the brand's presence on Instagram in this JSON shape:\\n{\\\"summary\\\": \\\"two or three sentences about its Instagram strategy\\\", \\\"themes\\\": [\\\"theme\\\", \\\"theme\\\", \\\"theme\\\"]}\\n\\nAnswer with the JSON alone.\"}],\"temperature\":0.7,\"max_tokens\":4096}",
+    "{\"model\":\"chat-model\",\"messages\":[{\"role\":\"user\",\"content\":\"You analyse brands. Work from the information below and answer with valid JSON only. Fill every field, making an informed guess where the information runs out.\\n\\nBrand: Kahve\\nWebsite summary: A coffee chain.\\nProducts found: ['Coffee', 'Chocolate']\\nInstagram summary: Product photos.\\nInstagram themes: ['coffee', '{season}']\\n\\nFrom this, analyse the brand's products in this JSON shape:\\n{\\\"categories\\\": [\\\"category\\\", \\\"category\\\"], \\\"target\\\": \\\"who the brand sells to\\\", \\\"price\\\": \\\"price segment (budget/mid-range/premium)\\\"}\\n\\nAnswer with the JSON alone.\"}],\"temperature\":0.7,\"max_tokens\":4096}",
+    "{\"model\":\"chat-model\",\"messages\":[{\"role\":\"user\",\"content\":\"You analyse brands. Work from the information below and answer with valid JSON only. Fill every field, making an informed guess where the information runs out.\\n\\nBrand: Kahve\\nCategories: ['Drinks', 'Desserts']\\nAudience: Young adults\\nWebsite summary: A coffee chain.\\n\\nWrite five creative slogans for the brand in this JSON shape:\\n{\\\"slogans\\\": [{\\\"text\\\": \\\"the slogan\\\", \\\"why\\\": \\\"why it works\\\"}]}\\n\\nAnswer with the JSON alone.\"}],\"temperature\":0.7,\"max_tokens\":4096}",
+    "{\"model\":\"chat-model\",\"messages\":[{\"role\":\"user\",\"content\":\"You analyse brands. Work from the information below and answer with valid JSON only. Fill every field, making an informed guess where the information runs out.\\n\\nBrand: Kahve\\nSlogans: ['Brew joy', 'Sip {more}']\\nAudience: Young adults\\n\\nPropose three video ad concepts in this JSON shape:\\n{\\\"videos\\\": [{\\\"title\\\": \\\"video title\\\", \\\"idea\\\": \\\"the concept\\\", \\\"duration\\\": \\\"length (15s/30s/60s)\\\"}]}\\n\\nAnswer with the JSON alone.\"}],\"temperature\":0.7,\"max_tokens\":4096}"
+  ],
+  "page_fetches": [
+    "GET /kahve | User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117.0 | Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8 | Accept-Language: en-US,en;q=0.9"
+  ],
+  "posts": [
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"Starting the brand analysis of Kahve...\",\"root_id\":\"p1000000000000000000000000\"}",
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"**Step 1: Website**\\n\\n**URL:** http://web.test/kahve\\n**Summary:** A coffee chain.\",\"root_id\":\"p1000000000000000000000000\"}",
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"**Step 2: Instagram**\\n\\n**Handle:** @kahve\\n**Summary:** Product photos.\",\"root_id\":\"p1000000000000000000000000\"}",
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"**Step 3: Analysis**\\n\\n**Categories:** Drinks, Desserts\\n**Audience:** Young adults\\n**Segment:** Mid-range\",\"root_id\":\"p1000000000000000000000000\"}",
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"**Step 4: Slogans**\\n\\n• **Brew joy** - Short\\n• **Sip {more}** - Playful\",\"root_id\":\"p1000000000000000000000000\"}",
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"**Step 5: Videos**\\n\\n• **Morning** (30s): A morning ritual\",\"root_id\":\"p1000000000000000000000000\"}",
+    "{\"channel_id\":\"ch100000000000000000000000\",\"message\":\"Brand analysis of Kahve finished.\",\"root_id\":\"p1000000000000000000000000\"}"
+  ],
+  "searches": [
+    "GET /search?q=Kahve+official+website&format=json&safesearch=0",
+    "GET /search?q=Kahve+instagram&format=json&safesearch=0"
+  ],
+  "steps": [
+    {
+      "after": "p1",
+      "store": {
+        "dost:bot_identity": {
+          "bot_id": "bot00000000000000000000000",
+          "expires_at": "2026-11-01T12:00:00+00:00",
+          "username": "agent"
+        },
+        "dost:buffer:thread:p1000000000000000000000000:u1000000000000000000000000": {
+          "flush_after": "2026-10-31T12:00:03+00:00",
+          "generation": "<generation>",
+          "messages": [
+            {
+              "file_ids": [],
+              "message": "@agent /marka Kahve",
+              "post_id": "p1000000000000000000000000",
+              "user_id": "u1000000000000000000000000"
+            }
+          ],
+          "payload": {
+            "broadcast": {
+              "channel_id": "ch100000000000000000000000"
+            },
+            "data": {
+              "channel_type": "O",
+              "post": "{\"id\": \"p1000000000000000000000000\", \"create_at\": 1793448000000, \"update_at\": 1793448000000, \"delete_at\": 0, \"user_id\": \"u1000000000000000000000000\", \"channel_id\": \"ch100000000000000000000000\", \"root_id\": \"\", \"message\": \"@agent /marka Kahve\", \"type\": \"\", \"post_id\": \"p1000000000000000000000000\", \"channel_type\": \"O\", \"is_dm\": false, \"is_thread\": false, \"scope\": \"public\", \"reply_root_id\": \"p1000000000000000000000000\", \"context_id\": \"p1000000000000000000000000\"}"
+            },
+            "event": "posted",
+            "seq": 1
+          }
+        },
+        "dost:last_seen": {
+          "create_at": 1793448000000
+        }
+      }
+    },
+    {
+      "after": "flushed",
+      "store": {
+        "dost:bot_identity": {
+          "bot_id": "bot00000000000000000000000",
+          "expires_at": "2026-11-01T12:00:00+00:00",
+          "username": "agent"
+        },
+        "dost:last_seen": {
+          "create_at": 1793448000000
+        },
+        "dost:public_kb_batch": {
+          "messages": [
+            {
+              "channel_id": "brand_analysis",
+              "create_at": 1793448003.5,
+              "message": "Kahve - Website\n**URL:** http://web.test/kahve\n**Summary:** A coffee chain.",
+              "post_id": "brand:Kahve:1:1793448003"
+            },
+            {
+              "channel_id": "brand_analysis",
+              "create_at": 1793448003.5,
+              "message": "Kahve - Instagram\n**Handle:** @kahve\n**Summary:** Product photos.",
+              "post_id": "brand:Kahve:2:1793448003"
+            },
+            {
+              "channel_id": "brand_analysis",
+              "create_at": 1793448003.5,
+              "message": "Kahve - Analysis\n**Categories:** Drinks, Desserts\n**Audience:** Young adults\n**Segment:** Mid-range",
+              "post_id": "brand:Kahve:3:1793448003"
+            },
+            {
+              "channel_id": "brand_analysis",
+              "create_at": 1793448003.5,
+              "message": "Kahve - Slogans\n• **Brew joy** - Short\n• **Sip {more}** - Playful",
+              "post_id": "brand:Kahve:4:1793448003"
+            },
+            {
+              "channel_id": "brand_analysis",
+              "create_at": 1793448003.5,
+              "message": "Kahve - Videos\n• **Morning** (30s): A morning ritual",
+              "post_id": "brand:Kahve:5:1793448003"
+            },
+            {
+              "channel_id": "ch100000000000000000000000",
+              "context_id": "p1000000000000000000000000",
+              "create_at": 1793448000000,
+              "is_thread": false,
+              "message": "u1000000000000000000000000: @agent /marka Kahve\ndost: Brand analysis of Kahve, in full:\n\n**Categories:** Drinks, Desserts\n**Audience:** Young adults\n**Price segment:** Mid-range\n\n**All slogans:**\n• Brew joy - Short\n• Sip {more} - Playful\n\n**All video concepts:**\n• Morning (30s) - A morning ritual",
+              "post_id": "p1000000000000000000000000",
+              "root_id": "",
+              "status": "pending",
+              "user_id": "u1000000000000000000000000"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
