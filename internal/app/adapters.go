@@ -46,7 +46,7 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 		platforms: map[string]platformAdapter{
 			"mattermost": {
 				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport, clk, log) },
-				tools:   func(*config.Settings) []tool.Tool { return mattermost.Tools() },
+				tools:   func(s *config.Settings, c *prompt.Catalog) []tool.Tool { return mattermost.Tools(s, c, transport, log) },
 				prompts: mattermost.Prompts(),
 				secrets: []config.SecretKey{{Key: "mattermost_token"}},
 			},
@@ -63,7 +63,7 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 			},
 		},
 		tools: []toolSource{{
-			tools:   func(*config.Settings) []tool.Tool { return plane.Tools() },
+			tools:   func(*config.Settings, *prompt.Catalog) []tool.Tool { return plane.Tools() },
 			prompts: plane.Prompts(),
 			secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}},
 		}},
@@ -80,14 +80,14 @@ type entry[T any] struct {
 // the catalog entries of those tools' texts.
 type platformAdapter struct {
 	open    func(*config.Settings) (chat.Platform, error)
-	tools   func(*config.Settings) []tool.Tool
+	tools   func(*config.Settings, *prompt.Catalog) []tool.Tool
 	prompts []prompt.Entry
 	secrets []config.SecretKey
 }
 
 // toolSource contributes tools on every platform, and the catalog entries of their texts.
 type toolSource struct {
-	tools   func(*config.Settings) []tool.Tool
+	tools   func(*config.Settings, *prompt.Catalog) []tool.Tool
 	prompts []prompt.Entry
 	secrets []config.SecretKey
 }
@@ -141,14 +141,15 @@ type selected struct {
 	fetch    func(*config.Settings) (web.Fetcher, error)
 	// tools contribute tools in the order they are offered, after the built-in knowledge tools and before the
 	// built-in conversation tools.
-	tools []func(*config.Settings) []tool.Tool
+	tools []func(*config.Settings, *prompt.Catalog) []tool.Tool
 }
 
-// contributed are the tools the selected adapters contribute with s, in the order they are offered.
-func (sel selected) contributed(s *config.Settings) []tool.Tool {
+// contributed are the tools the selected adapters contribute with s and the catalog c of their texts, in the order
+// they are offered.
+func (sel selected) contributed(s *config.Settings, c *prompt.Catalog) []tool.Tool {
 	var contributed []tool.Tool
 	for _, contribute := range sel.tools {
-		contributed = append(contributed, contribute(s)...)
+		contributed = append(contributed, contribute(s, c)...)
 	}
 	return contributed
 }
@@ -180,7 +181,7 @@ func selection(s *config.Settings) names {
 // every unknown name and invalid adapter setting at once.
 func (a adapters) validate(s *config.Settings) error {
 	sel, err := a.choose(selection(s))
-	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s))
+	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s, nil)) // only their names are read
 	return errors.Join(err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s), errTools)
 }
 

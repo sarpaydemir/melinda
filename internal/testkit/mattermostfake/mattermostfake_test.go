@@ -175,6 +175,20 @@ func TestChannelMemberIDs(t *testing.T) {
 	}
 }
 
+func TestTeamMemberIDs(t *testing.T) {
+	mm := mattermostfake.New(t, token, bot)
+	mm.AddTeam(mattermostfake.Team{ID: "t1", Members: []string{"bot", "u1"}})
+
+	var members []map[string]string
+	call(t, mm, "POST", "/api/v4/teams/t1/members/ids", `["u1","u2"]`, &members)
+	if len(members) != 1 || members[0]["team_id"] != "t1" || members[0]["user_id"] != "u1" {
+		t.Errorf("members = %v, want only u1", members)
+	}
+	if code := call(t, mm, "POST", "/api/v4/teams/unknown/members/ids", `["u1"]`, nil); code != 403 {
+		t.Errorf("unknown team: status %d, want 403", code)
+	}
+}
+
 func TestUploadFiles(t *testing.T) {
 	mm := mattermostfake.New(t, token, bot)
 	var body bytes.Buffer

@@ -23,6 +23,7 @@ type Call struct {
 	ConversationID string
 	// UserID is the user being answered.
 	UserID string
+	// Direct is set when the conversation is one-to-one between the user being answered and the agent.
 	Direct bool
 	// Requester names the user being answered in records the tool writes, or returns "" when there is none.
 	Requester func(context.Context) string

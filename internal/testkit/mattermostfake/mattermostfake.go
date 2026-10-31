@@ -30,9 +30,10 @@ type User struct {
 
 // Team is a Mattermost team.
 type Team struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	DisplayName string   `json:"display_name"`
+	Members     []string `json:"-"`
 }
 
 // Channel is a Mattermost channel.
@@ -115,6 +116,7 @@ func New(t testing.TB, token string, bot User) *Fake {
 	f.On("POST", "/api/v4/users/ids").DefaultFunc(f.getUsersByIDs)
 	f.On("GET", "/api/v4/users/me/teams").DefaultFunc(f.myTeams)
 	f.On("GET", "/api/v4/users/me/teams/{team_id}/channels").DefaultFunc(f.myChannels)
+	f.On("POST", "/api/v4/teams/{team_id}/members/ids").DefaultFunc(f.teamMemberIDs)
 	f.On("POST", "/api/v4/channels/{channel_id}/members/ids").DefaultFunc(f.memberIDs)
 	f.On("GET", "/api/v4/channels/{channel_id}/posts").DefaultFunc(f.channelPosts)
 	f.On("POST", "/api/v4/posts").DefaultFunc(f.createPost)
@@ -243,20 +245,38 @@ func (f *Fake) myChannels(r testkit.Request) testkit.Response {
 
 func (f *Fake) memberIDs(r testkit.Request) testkit.Response {
 	c, ok := f.channel(r.Params["channel_id"])
-	if !ok {
+	return members(r, ok, "channel_id", c.ID, c.Members)
+}
+
+// teamMemberIDs answers 403 for a team the bot is not in, as for a team it cannot view.
+func (f *Fake) teamMemberIDs(r testkit.Request) testkit.Response {
+	f.mu.Lock()
+	i := slices.IndexFunc(f.teams, func(t Team) bool { return t.ID == r.Params["team_id"] })
+	var team Team
+	if i >= 0 {
+		team = f.teams[i]
+	}
+	f.mu.Unlock()
+	return members(r, i >= 0, "team_id", team.ID, team.Members)
+}
+
+// members answers a members/ids request of a team or channel with the requested users among its members, or
+// 403 when the bot cannot see it.
+func members(r testkit.Request, visible bool, key, id string, members []string) testkit.Response {
+	if !visible {
 		return appError(http.StatusForbidden, "api.context.permissions.app_error")
 	}
 	var ids []string
 	if err := json.Unmarshal(r.Body, &ids); err != nil {
 		return appError(http.StatusBadRequest, "api.context.invalid_body_param.app_error")
 	}
-	members := []map[string]string{}
-	for _, id := range ids {
-		if slices.Contains(c.Members, id) {
-			members = append(members, map[string]string{"channel_id": c.ID, "user_id": id})
+	out := []map[string]string{}
+	for _, uid := range ids {
+		if slices.Contains(members, uid) {
+			out = append(out, map[string]string{key: id, "user_id": uid})
 		}
 	}
-	return testkit.JSON(200, members)
+	return testkit.JSON(200, out)
 }
 
 // channelPosts answers with posts updated after `since` (milliseconds), or else with the newest `per_page`

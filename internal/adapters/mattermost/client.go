@@ -208,7 +208,21 @@ func (c *Client) GetMyChannels(ctx context.Context, teamID string) ([]Channel, e
 // GetChannelMemberIDs returns which of the given users belong to a channel; empty IDs are skipped. A channel the
 // bot may not see has no members.
 func (c *Client) GetChannelMemberIDs(ctx context.Context, channelID string, userIDs []string) ([]string, error) {
-	path, err := idPath("/channels/%s/members/ids", channelID)
+	ids, err := c.memberIDs(ctx, "/channels/%s/members/ids", channelID, userIDs)
+	if apiErr, ok := errors.AsType[*APIError](err); ok && apiErr.Status == http.StatusForbidden {
+		return nil, nil
+	}
+	return ids, err
+}
+
+// GetTeamMemberIDs returns which of the given users belong to a team; empty IDs are skipped.
+func (c *Client) GetTeamMemberIDs(ctx context.Context, teamID string, userIDs []string) ([]string, error) {
+	return c.memberIDs(ctx, "/teams/%s/members/ids", teamID, userIDs)
+}
+
+// memberIDs returns which of userIDs are members of the team or channel that format and id name.
+func (c *Client) memberIDs(ctx context.Context, format, id string, userIDs []string) ([]string, error) {
+	path, err := idPath(format, id)
 	if err != nil {
 		return nil, err
 	}
@@ -220,9 +234,6 @@ func (c *Client) GetChannelMemberIDs(ctx context.Context, channelID string, user
 		UserID string `json:"user_id"`
 	}
 	members, err := call[[]member](ctx, c, "POST", path, ids)
-	if apiErr, ok := errors.AsType[*APIError](err); ok && apiErr.Status == http.StatusForbidden {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, err
 	}

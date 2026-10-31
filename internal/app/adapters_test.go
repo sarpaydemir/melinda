@@ -15,6 +15,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/port/model"
 	"github.com/sarpaydemir/dost/internal/port/tool"
 	"github.com/sarpaydemir/dost/internal/port/web"
+	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/testkit/searxngfake"
 )
 
@@ -26,8 +27,8 @@ func (namedTool) Parameters() json.RawMessage {
 }
 func (namedTool) Call(context.Context, tool.Call) (string, error) { return "", nil }
 
-func toolsNamed(names ...string) func(*config.Settings) []tool.Tool {
-	return func(*config.Settings) []tool.Tool {
+func toolsNamed(names ...string) func(*config.Settings, *prompt.Catalog) []tool.Tool {
+	return func(*config.Settings, *prompt.Catalog) []tool.Tool {
 		var ts []tool.Tool
 		for _, n := range names {
 			ts = append(ts, namedTool(n))
@@ -63,7 +64,7 @@ func testTable() adapters {
 
 func offered(s selected) []string {
 	var names []string
-	for _, t := range s.contributed(nil) {
+	for _, t := range s.contributed(nil, nil) {
 		names = append(names, t.Name())
 	}
 	return names

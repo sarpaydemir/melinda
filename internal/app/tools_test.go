@@ -36,11 +36,11 @@ func TestDefaultToolsAreTheEstablishedArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s))
+	catalog, err := prompt.Load(table.prompts(), filepath.Join("testdata", "profile"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := prompt.Load(table.prompts(), filepath.Join("testdata", "profile"))
+	set, err := tools.Offer(tool.Call{}, s.EnabledTools, tools.Builtin{}, sel.contributed(s, catalog))
 	if err != nil {
 		t.Fatal(err)
 	}

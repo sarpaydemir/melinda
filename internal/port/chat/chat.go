@@ -2,10 +2,13 @@
 package chat
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
 // Platform is a chat platform as the engine uses it. A value is built from one settings snapshot and is safe for
@@ -105,4 +108,15 @@ type User struct {
 	FullName  string
 	Nickname  string
 	Position  string
+}
+
+// Label names the user as "First Last (@username)": the full name, else the nickname, the username, or the ID,
+// followed by the username when there is one, each without surrounding whitespace.
+func (u User) Label() string {
+	username := textfmt.Strip(u.Username)
+	name := cmp.Or(textfmt.Strip(textfmt.Strip(u.FirstName)+" "+textfmt.Strip(u.LastName)), textfmt.Strip(u.Nickname), username, u.ID)
+	if username == "" {
+		return name
+	}
+	return name + " (@" + username + ")"
 }

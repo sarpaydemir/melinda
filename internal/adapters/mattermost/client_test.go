@@ -38,7 +38,7 @@ var (
 func newFake(t *testing.T) *mattermostfake.Fake {
 	mm := mattermostfake.New(t, token, bot)
 	mm.AddUser(ayse)
-	mm.AddTeam(mattermostfake.Team{ID: team, Name: "core", DisplayName: "Core"})
+	mm.AddTeam(mattermostfake.Team{ID: team, Name: "core", DisplayName: "Core", Members: []string{ayse.ID}})
 	mm.AddChannel(
 		mattermostfake.Channel{ID: channel, TeamID: team, Type: "O", Name: "town", DisplayName: "Town", Members: []string{ayse.ID}},
 		mattermostfake.Channel{ID: id("dm"), Type: "D", Name: bot.ID + "__" + ayse.ID},
@@ -137,6 +137,10 @@ func TestRequestsOnTheWire(t *testing.T) {
 			_, err := c.GetChannelMemberIDs(ctx, channel, []string{"", ayse.ID})
 			return err
 		}, wire{"POST /api/v4/channels/" + channel + "/members/ids", auth, js, `["` + ayse.ID + `"]`}},
+		{"team members", func(ctx context.Context, c *mattermost.Client, _ *mattermostfake.Fake) error {
+			_, err := c.GetTeamMemberIDs(ctx, team, []string{"", ayse.ID})
+			return err
+		}, wire{"POST /api/v4/teams/" + team + "/members/ids", auth, js, `["` + ayse.ID + `"]`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -217,6 +221,8 @@ func TestLookupsDecodeResponses(t *testing.T) {
 	}, err)
 	members, err := c.GetChannelMemberIDs(ctx, channel, []string{bot.ID, ayse.ID})
 	check("members", members, []string{ayse.ID}, err)
+	members, err = c.GetTeamMemberIDs(ctx, team, []string{bot.ID, ayse.ID})
+	check("team members", members, []string{ayse.ID}, err)
 
 	list, err := c.GetChannelPosts(ctx, channel, 0, 10)
 	if err != nil {
@@ -387,7 +393,8 @@ func TestEveryCallUsesTheSharedTransportWithItsTimeout(t *testing.T) {
 	_, err10 := c.SearchPosts(ctx, "hi")
 	_, err11 := c.GetUsersByIDs(ctx, []string{ayse.ID})
 	_, err12 := c.GetChannelMemberIDs(ctx, channel, []string{ayse.ID})
-	if err := errors.Join(err, err2, err3, err4, err5, err6, err7, err8, err9, err10, err11, err12); err != nil {
+	_, err13 := c.GetTeamMemberIDs(ctx, team, []string{ayse.ID})
+	if err := errors.Join(err, err2, err3, err4, err5, err6, err7, err8, err9, err10, err11, err12, err13); err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]time.Duration{
@@ -403,6 +410,7 @@ func TestEveryCallUsesTheSharedTransportWithItsTimeout(t *testing.T) {
 		"POST /api/v4/posts/search":                         30 * time.Second,
 		"POST /api/v4/users/ids":                            30 * time.Second,
 		"POST /api/v4/channels/" + channel + "/members/ids": 30 * time.Second,
+		"POST /api/v4/teams/" + team + "/members/ids":       30 * time.Second,
 	}
 	if len(rec.left) != len(want) || len(mm.Requests()) != len(want) {
 		t.Errorf("transport saw %d calls and the server %d, want %d each", len(rec.left), len(mm.Requests()), len(want))
@@ -440,6 +448,10 @@ func TestInvalidIDsAreRejectedWithoutARequest(t *testing.T) {
 			_, err := c.GetChannelMemberIDs(ctx, id, []string{ayse.ID})
 			return err
 		},
+		"team members": func(ctx context.Context, c *mattermost.Client, id string) error {
+			_, err := c.GetTeamMemberIDs(ctx, id, []string{ayse.ID})
+			return err
+		},
 	}
 	invalid := []string{"", "me", id("x")[1:], id("x") + "0", strings.ToUpper(id("abc")), "../../../users/me/teams/xx",
 		"abc%2f..%2f..%2fusers00000", "abcdefghijklmnopqrstuvwx/y", "abcdefghijklmnopqrstuvwxy?", strings.Repeat("x", 5000)}
@@ -467,6 +479,10 @@ func TestEmptyInputsSendNoRequest(t *testing.T) {
 	members, err := c.GetChannelMemberIDs(t.Context(), channel, nil)
 	if err != nil || len(members) != 0 {
 		t.Errorf("members among no users = %v, %v", members, err)
+	}
+	members, err = c.GetTeamMemberIDs(t.Context(), team, []string{""})
+	if err != nil || len(members) != 0 {
+		t.Errorf("team members among no users = %v, %v", members, err)
 	}
 	mm.AssertCalls(t)
 }
