@@ -1,2 +1,2 @@
-// Package prompt holds the prompt catalog, its str.format-compatible renderer, and system prompt assembly.
+// Package prompt holds the prompt catalog, its template renderer, and system prompt assembly.
 package prompt
