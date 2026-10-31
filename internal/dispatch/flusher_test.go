@@ -101,26 +101,28 @@ func (p *pipelineFake) taken() [][]string {
 	return out
 }
 
-// journalFake takes buffers from an in-memory store; its first failures takes fail as an unreachable database would.
+// journalFake keeps records in memory, oldest first, and takes buffers from an in-memory store. Its first failures
+// takes fail as an unreachable database would; the lost takes after them commit and then fail as a dropped connection
+// would.
 type journalFake struct {
-	store             *kvtest.Memory
-	failures          int
-	resubmit, expired []journal.Record
-	resubmitErr       error
+	store          *kvtest.Memory
+	failures, lost int
+	listErr        error
 
-	mu          sync.Mutex
-	attempts    []time.Time
-	records     []journal.Record
-	resubmitted bool
+	mu       sync.Mutex
+	attempts []time.Time
+	records  []journal.Record
+	listed   bool
 }
 
 func (j *journalFake) Take(ctx context.Context, key, generation string) (json.RawMessage, bool, error) {
 	j.mu.Lock()
 	j.attempts = append(j.attempts, time.Now())
-	fail := len(j.attempts) <= j.failures
+	n := len(j.attempts)
 	j.mu.Unlock()
-	if fail {
-		return nil, false, errors.New("read tcp 10.0.0.5:5432: connection reset by peer")
+	reset := errors.New("read tcp 10.0.0.5:5432: connection reset by peer")
+	if n <= j.failures {
+		return nil, false, reset
 	}
 	v, ok, err := j.store.DeleteIf(ctx, key, func(cur json.RawMessage) bool {
 		var b struct {
@@ -128,22 +130,31 @@ func (j *journalFake) Take(ctx context.Context, key, generation string) (json.Ra
 		}
 		return json.Unmarshal(cur, &b) == nil && b.Generation == generation
 	})
-	if ok {
-		j.mu.Lock()
-		j.records = append(j.records, journal.Record{Key: key, Generation: generation, Buffer: v})
-		j.mu.Unlock()
+	if !ok {
+		return v, ok, err
+	}
+	j.mu.Lock()
+	j.records = append(j.records, journal.Record{Key: key, Generation: generation, Buffer: v})
+	j.mu.Unlock()
+	if n <= j.failures+j.lost {
+		return nil, false, reset
 	}
 	return v, ok, err
 }
 
-func (j *journalFake) Resubmit(_ context.Context, limit int) ([]journal.Record, []journal.Record, error) {
+func (j *journalFake) List(context.Context) ([]journal.Record, error) {
 	j.mu.Lock()
-	j.resubmitted = true
-	j.mu.Unlock()
-	if limit != 2 {
-		return nil, nil, fmt.Errorf("resubmission limit %d, want 2", limit)
-	}
-	return j.resubmit, j.expired, j.resubmitErr
+	defer j.mu.Unlock()
+	j.listed = true
+	return slices.Clone(j.records), j.listErr
+}
+
+func (j *journalFake) Release(_ context.Context, generation string) (bool, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	n := len(j.records)
+	j.records = slices.DeleteFunc(j.records, func(r journal.Record) bool { return r.Generation == generation })
+	return len(j.records) < n, nil
 }
 
 func (j *journalFake) attemptTimes() []time.Time {
@@ -536,12 +547,11 @@ func TestJournaledRunsAreResubmittedBeforeStoredBuffersAreFlushed(t *testing.T) 
 	synctest.Test(t, func(t *testing.T) {
 		ff := newFlushFixture(t)
 		k1, k2 := prefix+"dm:u1", prefix+"dm:u2"
-		ff.runs.resubmit = []journal.Record{
-			{Key: k1, Generation: "g-a", Buffer: json.RawMessage(stored("g-a", at(-time.Hour), "p1", "p2"))},
+		ff.runs.records = []journal.Record{
+			{Key: k1, Generation: "g-a", Buffer: json.RawMessage(stored("g-a", at(-time.Hour), "p1", "p2")), Starts: 2},
+			{Key: prefix + "dm:u3", Generation: "g-c", Buffer: json.RawMessage(stored("g-c", at(-time.Hour), "p8", "p9")), Starts: 3},
+			{Key: prefix + "dm:u4", Generation: "g-m", Buffer: json.RawMessage(`["not a buffer"]`)},
 			{Key: k2, Generation: "g-b", Buffer: json.RawMessage(stored("g-b", at(-time.Hour), "p3"))},
-		}
-		ff.runs.expired = []journal.Record{
-			{Key: prefix + "dm:u3", Generation: "g-c", Buffer: json.RawMessage(stored("g-c", at(-time.Hour), "p8", "p9"))},
 		}
 		ff.set(k1, stored("g-d", at(-time.Minute), "p4"))
 		ff.pipeline.setWaiting(k1, 4)
@@ -551,6 +561,13 @@ func TestJournaledRunsAreResubmittedBeforeStoredBuffersAreFlushed(t *testing.T) 
 		ff.assertTaken([]string{"p1", "p2"}, []string{"p3"})
 		if v := ff.value(k1); v == "" {
 			t.Error("stored buffer taken during Start")
+		}
+		var left []string
+		for _, r := range ff.runs.journaled() {
+			left = append(left, r.Generation)
+		}
+		if want := []string{"g-a", "g-b"}; !slices.Equal(left, want) {
+			t.Errorf("journal after Start holds %q, want the resubmitted %q", left, want)
 		}
 
 		ff.pipeline.setWaiting(k1, 0)
@@ -568,8 +585,38 @@ func TestJournaledRunsAreResubmittedBeforeStoredBuffersAreFlushed(t *testing.T) 
 				dropped += line
 			}
 		}
-		if !strings.Contains(dropped, "conversation_key="+prefix+"dm:u3") || !strings.Contains(dropped, `post_ids="[p8 p9]"`) {
-			t.Errorf("expired record not logged at error level with its conversation key and post IDs:\n%s", ff.logs.String())
+		if !strings.Contains(dropped, "conversation_key="+prefix+"dm:u3") || !strings.Contains(dropped, `post_ids="[p8 p9]"`) ||
+			!strings.Contains(dropped, "conversation_key="+prefix+"dm:u4") {
+			t.Errorf("run started three times and malformed run not logged at error level with their conversation keys:\n%s", ff.logs.String())
+		}
+	})
+}
+
+func TestJournaledRunNotHandedOverIsResubmittedAtTheNextSweepAndOnlyOnce(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ff := newFlushFixture(t)
+		ff.runs.lost = 1
+		ff.start()
+		ff.deliver(msg("p1", "user-a", "take result lost", direct))
+		after(3 * time.Second)
+		ff.deliver(msg("p2", "user-b", "handed over", direct))
+		after(3 * time.Second)
+		ff.assertTaken([]string{"p2"})
+		if v := ff.value(prefix + "dm:user-a"); v != "" {
+			t.Fatalf("buffer of the lost take = %s, want it taken", v)
+		}
+
+		after(54*time.Second - time.Nanosecond)
+		ff.assertTaken([]string{"p2"})
+		after(time.Nanosecond)
+		ff.assertTaken([]string{"p2"}, []string{"p1"})
+		after(10 * time.Minute)
+		ff.assertTaken([]string{"p2"}, []string{"p1"})
+		if n := len(ff.runs.attemptTimes()); n != 2 {
+			t.Errorf("%d takes attempted, want one per buffer", n)
+		}
+		if err := ff.shutdown(); err != nil {
+			t.Fatalf("Run = %v", err)
 		}
 	})
 }
@@ -696,19 +743,19 @@ func TestStartHoldsTheLockBeforeTouchingTheStore(t *testing.T) {
 		started := make(chan error, 1)
 		go func() { started <- ff.f.Start(t.Context()) }()
 		synctest.Wait()
-		if ff.runs.resubmitted {
+		if ff.runs.listed {
 			t.Error("journal read before the lock was held")
 		}
 		close(ff.lock.gate)
 		if err := <-started; err != nil {
 			t.Fatalf("Start: %v", err)
 		}
-		if !ff.runs.resubmitted || !ff.lock.isHeld() {
-			t.Errorf("after Start: journal read %v, lock held %v; want both", ff.runs.resubmitted, ff.lock.isHeld())
+		if !ff.runs.listed || !ff.lock.isHeld() {
+			t.Errorf("after Start: journal read %v, lock held %v; want both", ff.runs.listed, ff.lock.isHeld())
 		}
 
 		failing := newFlushFixture(t)
-		failing.runs.resubmitErr = errors.New("connection refused")
+		failing.runs.listErr = errors.New("connection refused")
 		if err := failing.f.Start(t.Context()); err == nil {
 			t.Error("Start with an unreachable journal succeeded")
 		}

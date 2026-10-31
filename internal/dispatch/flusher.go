@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -24,8 +25,12 @@ const (
 	maxWaiting = 4
 	// busyRetry is how long a buffer left to merge waits before the flusher looks at it again.
 	busyRetry = time.Second
-	// maxResubmissions is how many times a journaled run is resubmitted at startup before it is dropped.
-	maxResubmissions = 2
+	// maxStarts is how many times a journaled run may start without being released before a sweep drops it: the
+	// first run and two resubmissions, so an input that crashes the process does so at most three times.
+	maxStarts = 3
+	// sweepEvery is how often a running flusher resubmits the journaled runs it has not handed to the pipeline, such as
+	// one whose take committed but whose result was lost.
+	sweepEvery = time.Minute
 )
 
 type buffers interface {
@@ -36,7 +41,8 @@ type buffers interface {
 type inflight interface {
 	// Take deletes the buffer under key if its generation is generation and journals it, in one transaction.
 	Take(ctx context.Context, key, generation string) (json.RawMessage, bool, error)
-	Resubmit(ctx context.Context, limit int) (records, expired []journal.Record, err error)
+	List(ctx context.Context) ([]journal.Record, error)
+	Release(ctx context.Context, generation string) (bool, error)
 }
 
 type instanceLock interface {
@@ -53,7 +59,8 @@ type timer struct {
 }
 
 // Flusher hands each conversation's buffer to the pipeline once its debounce window has closed. One goroutine owns
-// every timer and take, and only while the process holds the agent's instance lock.
+// every timer, take, and resubmission, and only while the process holds the agent's instance lock, so it knows which
+// journaled runs it has handed over.
 type Flusher struct {
 	prefix   string
 	buffers  buffers
@@ -65,6 +72,7 @@ type Flusher struct {
 
 	notices chan Notice
 	due     map[string]timer
+	handed  map[string]bool // generations handed to the pipeline whose records may still be journaled
 }
 
 // NewFlusher returns a flusher for the buffers under prefix. Start acquires lock, and it stays held after Run
@@ -72,7 +80,7 @@ type Flusher struct {
 func NewFlusher(prefix string, buffers buffers, runs inflight, lock instanceLock, pipeline Scheduler, clk clock.Clock, log *slog.Logger) *Flusher {
 	return &Flusher{
 		prefix: prefix, buffers: buffers, runs: runs, lock: lock, pipeline: pipeline, clk: clk, log: log,
-		notices: make(chan Notice, noticeSize), due: map[string]timer{},
+		notices: make(chan Notice, noticeSize), due: map[string]timer{}, handed: map[string]bool{},
 	}
 }
 
@@ -98,26 +106,8 @@ func (f *Flusher) Start(ctx context.Context) error {
 }
 
 func (f *Flusher) resume(ctx context.Context) error {
-	records, expired, err := f.runs.Resubmit(ctx, maxResubmissions)
-	if err != nil {
+	if err := f.sweep(ctx); err != nil {
 		return err
-	}
-	for _, r := range expired {
-		b, _ := parse(r.Buffer)
-		f.log.Error("run dropped after repeated restarts", logging.KeyConversation, r.Key, "generation", r.Generation, "post_ids", b.postIDs())
-	}
-	for _, r := range records {
-		b, err := parse(r.Buffer)
-		if err != nil {
-			f.log.Error("journaled run is malformed; not resubmitted", logging.KeyConversation, r.Key, "generation", r.Generation, "error", err)
-			continue
-		}
-		submit, _, err := f.pipeline.Reserve(ctx)
-		if err != nil {
-			return err
-		}
-		submit(b.job(r.Key))
-		f.log.Info("run resubmitted", logging.KeyConversation, r.Key, "generation", r.Generation, "post_ids", b.postIDs())
 	}
 	all, err := f.buffers.List(ctx, f.prefix)
 	if err != nil {
@@ -134,8 +124,45 @@ func (f *Flusher) resume(ctx context.Context) error {
 	return nil
 }
 
-// Run flushes buffers as they fall due until ctx ends or the instance lock is lost. Pending timers and queued notices
-// are dropped; their buffers stay stored for the next start.
+// sweep resubmits, oldest first, every journaled run that this process has not handed to the pipeline. A run that
+// is malformed or has started maxStarts times is dropped instead.
+func (f *Flusher) sweep(ctx context.Context) error {
+	records, err := f.runs.List(ctx)
+	if err != nil {
+		return err
+	}
+	journaled := make(map[string]bool, len(records))
+	for _, r := range records {
+		journaled[r.Generation] = true
+		if f.handed[r.Generation] {
+			continue
+		}
+		b, err := parse(r.Buffer)
+		switch {
+		case err != nil:
+			f.log.Error("journaled run is malformed; dropped", logging.KeyConversation, r.Key, "generation", r.Generation, "error", err)
+		case r.Starts >= maxStarts:
+			f.log.Error("run dropped after repeated restarts", logging.KeyConversation, r.Key, "generation", r.Generation, "post_ids", b.postIDs())
+		default:
+			submit, _, err := f.pipeline.Reserve(ctx)
+			if err != nil {
+				return err
+			}
+			submit(b.job(r.Key))
+			f.handed[r.Generation] = true
+			f.log.Info("run resubmitted", logging.KeyConversation, r.Key, "generation", r.Generation, "post_ids", b.postIDs())
+			continue
+		}
+		if _, err := f.runs.Release(ctx, r.Generation); err != nil {
+			return err
+		}
+	}
+	maps.DeleteFunc(f.handed, func(generation string, _ bool) bool { return !journaled[generation] })
+	return nil
+}
+
+// Run flushes buffers as they fall due and resubmits journaled runs left behind every minute, until ctx ends or the
+// instance lock is lost. Pending timers and queued notices are dropped; their buffers stay stored for the next start.
 func (f *Flusher) Run(ctx context.Context) error {
 	ctx, lost := context.WithCancelCause(ctx)
 	defer lost(nil)
@@ -157,6 +184,8 @@ func (f *Flusher) Run(ctx context.Context) error {
 func (f *Flusher) loop(ctx context.Context) {
 	t := f.clk.NewTimer(0)
 	defer t.Stop()
+	sweep := f.clk.NewTimer(sweepEvery)
+	defer sweep.Stop()
 	for {
 		var fire <-chan time.Time
 		key, at, ok := f.next()
@@ -173,6 +202,11 @@ func (f *Flusher) loop(ctx context.Context) {
 			f.due[n.Key] = timer{generation: n.Generation, at: n.FlushAfter}
 		case <-fire:
 			f.flush(ctx, key)
+		case <-sweep.C():
+			if err := f.sweep(ctx); err != nil && ctx.Err() == nil {
+				f.log.Warn("journal sweep failed; retried at the next one", "error", err)
+			}
+			sweep.Reset(sweepEvery)
 		}
 	}
 }
@@ -226,6 +260,7 @@ func (f *Flusher) flush(ctx context.Context, key string) {
 		return
 	}
 	submit(b.job(key))
+	f.handed[t.generation] = true
 	f.log.Info("conversation taken", logging.KeyConversation, key, "generation", t.generation, "fragments", len(b.fragments), "post_ids", b.postIDs())
 }
 

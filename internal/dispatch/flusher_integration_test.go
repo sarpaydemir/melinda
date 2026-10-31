@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/dispatch"
+	"github.com/sarpaydemir/dost/internal/pipeline"
 	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/store/journal"
 	"github.com/sarpaydemir/dost/internal/store/kv"
@@ -97,11 +99,16 @@ func (a *agent) answer(j routing.Job) {
 		a.t.Error(err)
 	}
 	if released {
-		a.mu.Lock()
-		a.answered = append(a.answered, j)
-		a.mu.Unlock()
-		a.changed.Notify()
+		a.reply(j)
 	}
+}
+
+// reply records that j was answered.
+func (a *agent) reply(j routing.Job) {
+	a.mu.Lock()
+	a.answered = append(a.answered, j)
+	a.mu.Unlock()
+	a.changed.Notify()
 }
 
 func (a *agent) answers() []routing.Job {
@@ -130,7 +137,7 @@ func (a *agent) left() string {
 
 // flusher returns a flusher for a new process of the agent, with its lock. The lock retries on the real clock: the
 // server frees it only once the previous holder's backend has exited.
-func (a *agent) flusher(runs hookedJournal, pipe scheduler) (*dispatch.Flusher, *pg.Lock) {
+func (a *agent) flusher(runs hookedJournal, pipe dispatch.Scheduler) (*dispatch.Flusher, *pg.Lock) {
 	lock := a.db.NewLock(agentID, clock.Real(), slog.New(slog.DiscardHandler))
 	return dispatch.NewFlusher(prefix, a.store, runs, lock, pipe, a.clk, slog.New(slog.DiscardHandler)), lock
 }
@@ -286,4 +293,110 @@ func TestRunOfAProcessThatLostTheLockAnswersNothingOnceAnotherTookOver(t *testin
 	a.restart()
 	a.answer(j) // the first process's run reaches its first outbound write
 	a.assertAnsweredOnce()
+}
+
+func TestTakeWhoseResultIsLostIsAnsweredOnceWithoutARestart(t *testing.T) {
+	a := newAgent(t)
+	taken := make(chan error, 1)
+	lost := hookedJournal{Store: a.runs, take: func(ctx context.Context, key, generation string) (json.RawMessage, bool, error) {
+		_, _, err := a.runs.Take(ctx, key, generation)
+		taken <- err
+		return nil, false, errors.New("read tcp 10.0.0.5:5432: connection reset by peer")
+	}}
+	f, lock := a.flusher(lost, scheduler{accept: a.answer})
+	defer lock.Release()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if err := f.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- f.Run(ctx) }()
+	if err := receiveWithin(t, taken, "the take"); err != nil {
+		t.Fatalf("Take: %v", err)
+	}
+	if got := a.left(); got != "record" {
+		t.Fatalf("after the lost take the store holds %s, want record", got)
+	}
+
+	a.clk.AwaitTimers(t, 2) // the take's retry and the journal sweep
+	a.clk.Advance(time.Minute)
+	a.changed.Await(t, "an answer and nothing left", func() bool { return len(a.answers()) > 0 && a.left() == "none" })
+	cancel()
+	if err := receiveWithin(t, done, "Run"); err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	a.assertAnsweredOnce()
+}
+
+func TestCrashLoopOnOneRunLeavesTheRestartsOfTheRunQueuedBehindIt(t *testing.T) {
+	a := newAgent(t)
+	ctx, key := t.Context(), prefix+"dm:u1"
+	if _, ok, err := a.runs.Take(ctx, key, "g1"); !ok || err != nil {
+		t.Fatalf("take g1: %v, %v", ok, err)
+	}
+	if err := a.store.Set(ctx, key, json.RawMessage(stored("g2", "2026-10-31T09:59:30+00:00", "p3"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := a.runs.Take(ctx, key, "g2"); !ok || err != nil {
+		t.Fatalf("take g2: %v, %v", ok, err)
+	}
+	crashed := make(chan error, 1)
+	answer := func(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error {
+		if j.Generation == "g1" { // its input crashes the process
+			crashed <- nil
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		if err := beforeWrite(ctx); err != nil {
+			return err
+		}
+		a.reply(j)
+		return nil
+	}
+
+	for crash := 1; crash <= 3; crash++ {
+		a.process(answer, func() { _ = receiveWithin(t, crashed, "the run of g1") })
+		records, err := a.runs.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		starts := map[string]int{}
+		for _, r := range records {
+			starts[r.Generation] = r.Starts
+		}
+		if want := map[string]int{"g1": crash, "g2": 0}; !maps.Equal(starts, want) {
+			t.Fatalf("after crash %d the runs have started %v times, want %v", crash, starts, want)
+		}
+	}
+	a.process(answer, func() {
+		a.changed.Await(t, "an answer and nothing left", func() bool { return len(a.answers()) > 0 && a.left() == "none" })
+	})
+	if got := a.answers(); len(got) != 1 || got[0].Generation != "g2" || !slices.Equal(got[0].MessageIDs, []string{"p3"}) {
+		t.Errorf("answered runs = %+v, want one run of g2 with p3", got)
+	}
+}
+
+// process runs a process of the agent whose pipeline answers with answer until until returns, then stops it the way a
+// crash does: no run starts or writes after that, and every run keeps its record.
+func (a *agent) process(answer func(context.Context, routing.Job, func(context.Context) error) error, until func()) {
+	a.t.Helper()
+	intake, stopIntake := context.WithCancel(context.Background())
+	work, abortWork := context.WithCancel(context.Background())
+	running, stopRunning := context.WithCancel(context.Background())
+	s := pipeline.NewScheduler(intake, work, answer, a.runs, 2, time.Hour, a.clk, slog.New(slog.DiscardHandler))
+	ran := make(chan error, 1)
+	go func() { ran <- s.Run(running) }()
+	f, lock := a.flusher(hookedJournal{Store: a.runs}, s)
+	defer lock.Release()
+	if err := f.Start(a.t.Context()); err != nil {
+		a.t.Fatalf("Start: %v", err)
+	}
+	until()
+	stopIntake()
+	abortWork()
+	stopRunning()
+	if err := receiveWithin(a.t, ran, "the pipeline to stop"); err != nil {
+		a.t.Fatalf("pipeline Run = %v", err)
+	}
 }

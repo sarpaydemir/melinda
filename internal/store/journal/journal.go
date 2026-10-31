@@ -20,17 +20,8 @@ INSERT INTO dost_inflight_runs (agent_id, generation, conversation_key, buffer, 
 SELECT $3, $2, $1, value, $4 FROM taken
 RETURNING buffer`
 
-	expireSQL = `WITH expired AS (
-	DELETE FROM dost_inflight_runs WHERE agent_id = $1 AND resubmissions >= $2
-	RETURNING conversation_key, generation, buffer, taken_at
-)
-SELECT conversation_key, generation, buffer FROM expired ORDER BY taken_at, generation`
-
-	countSQL = `WITH counted AS (
-	UPDATE dost_inflight_runs SET resubmissions = resubmissions + 1 WHERE agent_id = $1
-	RETURNING conversation_key, generation, buffer, taken_at
-)
-SELECT conversation_key, generation, buffer FROM counted ORDER BY taken_at, generation`
+	listSQL = `SELECT conversation_key, generation, buffer, resubmissions FROM dost_inflight_runs WHERE agent_id = $1
+ORDER BY taken_at, generation`
 )
 
 // Record is a taken buffer whose run has not been released.
@@ -38,6 +29,7 @@ type Record struct {
 	Key        string
 	Generation string
 	Buffer     json.RawMessage
+	Starts     int // runs started from the record, kept in its resubmissions column
 }
 
 // Store keeps one agent's records.
@@ -75,20 +67,15 @@ func (s *Store) Release(ctx context.Context, generation string) (bool, error) {
 	return err == nil && tag.RowsAffected() == 1, err
 }
 
-// Resubmit counts one more resubmission of every record and returns the records oldest first. Records already
-// resubmitted limit times are deleted instead and returned as expired, also oldest first.
-func (s *Store) Resubmit(ctx context.Context, limit int) (records, expired []Record, err error) {
-	err = s.db.WithTx(ctx, func(tx pgx.Tx) error {
-		rows, _ := tx.Query(ctx, expireSQL, s.agent, limit)
-		if expired, err = pgx.CollectRows(rows, pgx.RowToStructByPos[Record]); err != nil {
-			return err
-		}
-		rows, _ = tx.Query(ctx, countSQL, s.agent)
-		records, err = pgx.CollectRows(rows, pgx.RowToStructByPos[Record])
-		return err
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	return records, expired, nil
+// Started counts one more start of the run of generation's record; a missing record is not an error.
+func (s *Store) Started(ctx context.Context, generation string) error {
+	_, err := s.db.Exec(ctx, `UPDATE dost_inflight_runs SET resubmissions = resubmissions + 1 WHERE agent_id = $1 AND generation = $2`,
+		s.agent, generation)
+	return err
+}
+
+// List returns every record, oldest first.
+func (s *Store) List(ctx context.Context) ([]Record, error) {
+	rows, _ := s.db.Query(ctx, listSQL, s.agent)
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[Record])
 }

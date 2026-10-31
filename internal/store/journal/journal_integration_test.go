@@ -235,44 +235,37 @@ func TestReleaseDeletesOnlyThisAgentsRecordAndToleratesRepeats(t *testing.T) {
 	}
 }
 
-func TestResubmitListsOldestFirstCountsEachAndExpiresAfterTheLimit(t *testing.T) {
+func TestListReturnsTheAgentsRecordsOldestFirstWithTheStartsOfTheirRuns(t *testing.T) {
 	f := newFixture(t)
 	a, b := f.journal("agent-a"), f.journal("agent-b")
 	for _, r := range []struct{ key, generation string }{{"k1", "g-b"}, {"k2", "g-a"}} {
 		f.set(r.key, buffer(r.generation, r.key))
 		f.take(a, r.key, r.generation)
 	}
-	f.set("kb", buffer("g-x", "kb"))
-	f.take(b, "kb", "g-x")
+	f.set("kb", buffer("g-a", "kb"))
+	f.take(b, "kb", "g-a")
 	f.clk.Advance(time.Second)
 	f.set("k3", buffer("g-0", "k3"))
 	f.take(a, "k3", "g-0")
+	for _, generation := range []string{"g-a", "g-0", "g-a", "missing"} {
+		if err := a.Started(t.Context(), generation); err != nil {
+			t.Fatalf("Started(%s): %v", generation, err)
+		}
+	}
 
-	keys := func(rs []journal.Record) []string {
-		var out []string
-		for _, r := range rs {
-			out = append(out, r.Key+"/"+r.Generation)
-		}
-		return out
+	records, err := a.List(t.Context())
+	if err != nil {
+		t.Fatalf("List: %v", err)
 	}
-	oldestFirst := []string{"k2/g-a", "k1/g-b", "k3/g-0"}
-	for round := 1; round <= 3; round++ {
-		records, expired, err := a.Resubmit(t.Context(), 2)
-		if err != nil {
-			t.Fatalf("Resubmit %d: %v", round, err)
-		}
-		wantRecords, wantExpired := oldestFirst, []string(nil)
-		if round == 3 {
-			wantRecords, wantExpired = nil, oldestFirst
-		}
-		if !slices.Equal(keys(records), wantRecords) || !slices.Equal(keys(expired), wantExpired) {
-			t.Errorf("Resubmit %d = %q, expired %q; want %q, expired %q", round, keys(records), keys(expired), wantRecords, wantExpired)
-		}
-		for _, r := range slices.Concat(records, expired) {
-			assertJSON(t, "buffer of "+r.Key, r.Buffer, buffer(r.Generation, r.Key))
-		}
+	var got []string
+	for _, r := range records {
+		got = append(got, fmt.Sprintf("%s/%s started %d", r.Key, r.Generation, r.Starts))
+		assertJSON(t, "buffer of "+r.Key, r.Buffer, buffer(r.Generation, r.Key))
 	}
-	if rows := f.rows(); len(rows) != 1 || rows[0].Agent != "agent-b" || rows[0].Resubmissions != 0 {
-		t.Errorf("records = %+v, want only agent-b's, never resubmitted", rows)
+	if want := []string{"k2/g-a started 2", "k1/g-b started 0", "k3/g-0 started 1"}; !slices.Equal(got, want) {
+		t.Errorf("List = %q, want %q", got, want)
+	}
+	if records, err := b.List(t.Context()); err != nil || len(records) != 1 || records[0].Key != "kb" || records[0].Starts != 0 {
+		t.Errorf("agent-b's List = %+v, %v; want its own record, never started", records, err)
 	}
 }

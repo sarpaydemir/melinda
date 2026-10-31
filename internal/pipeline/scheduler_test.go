@@ -24,15 +24,34 @@ const runTimeout = 30 * time.Minute
 // script is what a fake run does; it returns the run's result.
 type script func(ctx context.Context, beforeWrite func(context.Context) error) error
 
-// recordsFake holds in-flight records by generation. Its next failures releases fail as an unreachable database
-// would. A slow release yields to other goroutines many times before it answers.
+// recordsFake holds in-flight records by generation and the starts counted in them. Its next failures releases fail
+// as an unreachable database would, and every count fails with countErr when it is set. A slow release yields to
+// other goroutines many times before it answers.
 type recordsFake struct {
 	trace    *trace
 	failures int
 	slow     bool
+	countErr error
 
-	mu   sync.Mutex
-	held map[string]bool
+	mu     sync.Mutex
+	held   map[string]bool
+	starts []string // generations whose starts were counted, in order
+}
+
+func (r *recordsFake) Started(_ context.Context, generation string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.countErr != nil {
+		return r.countErr
+	}
+	r.starts = append(r.starts, generation)
+	return nil
+}
+
+func (r *recordsFake) counted() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.starts)
 }
 
 func (r *recordsFake) Release(ctx context.Context, generation string) (bool, error) {
@@ -345,6 +364,45 @@ func TestWaitingCountsRunsPastTheConversationLimit(t *testing.T) {
 		}
 		if got := h.s.Waiting("dm:u2"); got != 0 {
 			t.Errorf("Waiting of an idle conversation = %d, want 0", got)
+		}
+	})
+}
+
+func TestStartIsCountedInTheRecordJustBeforeTheRunAndNotWhileItWaits(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := start(t, 1)
+		var countedAtStart []string
+		h.script("1", func(context.Context, func(context.Context) error) error {
+			countedAtStart = h.records.counted()
+			<-h.gate("1")
+			return nil
+		})
+		h.submit("dm:u1", "1")
+		h.submit("dm:u1", "2")
+		h.submit("dm:u2", "3")
+		if !slices.Equal(countedAtStart, []string{"1"}) {
+			t.Errorf("starts counted when run 1 began = %q, want its own", countedAtStart)
+		}
+		if got := h.records.counted(); !slices.Equal(got, []string{"1"}) {
+			t.Errorf("starts counted while runs 2 and 3 wait = %q, want only run 1's", got)
+		}
+		h.finish("1")
+		h.finish("3")
+		if got := h.records.counted(); !slices.Equal(got, []string{"1", "3", "2"}) {
+			t.Errorf("starts counted = %q, want each run's when it started", got)
+		}
+	})
+}
+
+func TestRunGoesAheadWhenItsStartCannotBeCounted(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := start(t, 1)
+		h.records.countErr = errors.New("read tcp 10.0.0.5:5432: connection reset by peer")
+		h.submit("dm:u1", "1")
+		h.wantStarted("1")
+		line := h.logs.line("start not counted")
+		if !strings.Contains(line, "level=WARN") || !strings.Contains(line, "connection reset") || !strings.Contains(line, "conversation_key=dm:u1") {
+			t.Errorf("count failure log = %q, want a warning with the error and the conversation key", line)
 		}
 	})
 }

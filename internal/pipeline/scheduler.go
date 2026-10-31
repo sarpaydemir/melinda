@@ -29,7 +29,9 @@ var (
 	errTakenOver  = errors.New("in-flight record released by another process; nothing written")
 )
 
-type releaser interface {
+type inflight interface {
+	// Started counts one more start of the run of generation's in-flight record.
+	Started(ctx context.Context, generation string) error
 	// Release deletes the in-flight record of generation and reports whether it was there.
 	Release(ctx context.Context, generation string) (bool, error)
 }
@@ -40,7 +42,7 @@ type Scheduler struct {
 	intake  context.Context
 	work    context.Context
 	answer  func(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error
-	records releaser
+	records inflight
 	workers int
 	timeout time.Duration
 	clk     clock.Clock
@@ -72,7 +74,7 @@ type conversation struct {
 // each write outside the engine, and returns nil when the job is answered or needs no answer. Once intake ends,
 // Reserve fails and no further run starts; runs accepted and not started keep their in-flight records in records.
 func NewScheduler(intake, work context.Context, answer func(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error,
-	records releaser, workers int, timeout time.Duration, clk clock.Clock, log *slog.Logger) *Scheduler {
+	records inflight, workers int, timeout time.Duration, clk clock.Clock, log *slog.Logger) *Scheduler {
 	return &Scheduler{
 		intake: intake, work: work, answer: answer, records: records, workers: workers, timeout: timeout, clk: clk,
 		log: log, slots: make(chan struct{}, maxAccepted), ready: make(chan accepted, maxAccepted),
@@ -168,7 +170,10 @@ func (s *Scheduler) execute(a accepted) {
 	rec := &record{records: s.records, generation: a.job.Generation, log: log}
 	ctx, cancel := context.WithCancelCause(s.work)
 	done := make(chan error, 1)
-	go func() { done <- s.call(ctx, a.job, rec.beforeWrite) }()
+	go func() {
+		rec.start(ctx)
+		done <- s.call(ctx, a.job, rec.beforeWrite)
+	}()
 	deadline := s.clk.NewTimer(s.timeout)
 	var err error
 	timedOut := false
@@ -234,10 +239,10 @@ func (s *Scheduler) next(key string) {
 	s.ready <- a
 }
 
-// record is a run's in-flight record. It is released just before the run's first write, or when the run returns
-// without one.
+// record is a run's in-flight record. The run's start is counted in it before the run, and it is released just before
+// the run's first write, or when the run returns without one.
 type record struct {
-	records    releaser
+	records    inflight
 	generation string
 	log        *slog.Logger
 
@@ -246,6 +251,14 @@ type record struct {
 	settled  bool // released, or found gone
 	gone     bool // another process released it
 	wrote    bool // a write was attempted
+}
+
+// start counts the run's start, which bounds how often a run that crashes the process is resubmitted. A failure is
+// logged and the run goes ahead.
+func (r *record) start(ctx context.Context) {
+	if err := r.records.Started(ctx, r.generation); err != nil {
+		r.log.Warn("run start not counted in its in-flight record", "error", err)
+	}
 }
 
 // beforeWrite releases the record before the run's first write. A failed release is logged and the write goes
