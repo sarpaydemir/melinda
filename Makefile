@@ -7,7 +7,7 @@ LDFLAGS   := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.d
 TEST_DB_IMAGE ?= pgvector/pgvector:pg17
 
 .DEFAULT_GOAL := help
-.PHONY: help check fmt fmt-check vet staticcheck test test-integration vuln build image tidy clean
+.PHONY: help check fmt fmt-check vet staticcheck test test-integration vuln build image release release-dry-run tidy clean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -52,6 +52,15 @@ build: ## Static binary in bin/
 
 image: ## Container image dost:$(VERSION), also tagged dost:latest
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t dost:$(VERSION) -t dost:latest .
+
+release: ## Run gates, then tag and publish binaries and image: make release VERSION=vX.Y.Z
+	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=vX.Y.Z" >&2; exit 1; }
+	scripts/release.sh preflight $(VERSION)
+	$(MAKE) check test-integration vuln
+	scripts/release.sh publish $(VERSION)
+
+release-dry-run: ## Build every release artifact into dist/ without tagging, pushing, or publishing
+	scripts/release.sh dry-run $(if $(filter command line,$(origin VERSION)),$(VERSION),v0.0.0-dryrun)
 
 tidy: ## go mod tidy
 	$(GO) mod tidy
