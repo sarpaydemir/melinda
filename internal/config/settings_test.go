@@ -181,7 +181,7 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"buffer_prefix": null, "last_seen_key": null, "bot_identity_key": null, "memory_key_prefix": null,
 		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
 		"file_max_count": null, "file_max_bytes": null, "search_result_limit": null, "prompts": null,
-		"max_progress_updates": null, "progress_update_max_chars": null
+		"max_progress_updates": null, "progress_update_max_chars": null, "kb_learn_from_private_channels": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)

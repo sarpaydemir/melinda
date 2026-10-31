@@ -59,6 +59,9 @@ type Settings struct {
 	KBCollection    string  `json:"kb_collection"`
 	AssistantLabel  string  `json:"assistant_label"`
 
+	// KBLearnFromPrivateChannels lets private and group conversations feed the shared knowledge.
+	KBLearnFromPrivateChannels bool `json:"kb_learn_from_private_channels"`
+
 	// FileMaxCount and FileMaxBytes bound the attachments of one message: how many are read and the size of each.
 	FileMaxCount int   `json:"file_max_count"`
 	FileMaxBytes int64 `json:"file_max_bytes"`

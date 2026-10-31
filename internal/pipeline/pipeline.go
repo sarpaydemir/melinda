@@ -50,6 +50,10 @@ type Pipeline struct {
 		Search(ctx context.Context, collection string, vec []float32, filter map[string]string, limit int) ([]vector.Hit, error)
 		Add(ctx context.Context, collection string, docs []vector.Doc) error
 	}
+	// Learning queues answered conversations for the learning run.
+	Learning interface {
+		Append(ctx context.Context, s *config.Settings, m chat.Message, reply string) error
+	}
 	// Prompts is the catalog that each run's settings override.
 	Prompts *prompt.Catalog
 	// Zone is the time zone of the time the system prompt shows.
@@ -59,8 +63,8 @@ type Pipeline struct {
 }
 
 // Answer answers j with one settings snapshot: it decodes the first buffered message with the combined text and
-// attachments, applies the gate again, loads the context, generates the reply, posts it, saves the turn, and
-// extracts the author's facts.
+// attachments, applies the gate again, loads the context, generates the reply, posts it, saves the turn,
+// extracts the author's facts, and queues the turn for learning.
 // beforeWrite is called before each write to the chat platform. Once posting has started, cancelling ctx no
 // longer stops the run.
 func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error {
@@ -121,6 +125,9 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 		return fmt.Errorf("save turn: %w", err)
 	}
 	facts.Extract(ctx, m, reply, count)
+	if err := p.Learning.Append(ctx, s, m, reply); err != nil {
+		return fmt.Errorf("queue turn for learning: %w", err)
+	}
 	return nil
 }
 

@@ -17,11 +17,13 @@ import (
 
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/dost/internal/kb"
 	"github.com/sarpaydemir/dost/internal/pipeline"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
 	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/routing"
+	"github.com/sarpaydemir/dost/internal/testkit"
 	"github.com/sarpaydemir/dost/internal/testkit/kvtest"
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
@@ -217,6 +219,7 @@ type fixture struct {
 	chat     *chatFake
 	model    *modelFake
 	history  *historyFake
+	learning *kvtest.Memory
 	settings *settingsFake
 	catalog  *prompt.Catalog
 	logs     *syncBuffer
@@ -231,6 +234,7 @@ func newFixture(t *testing.T) *fixture {
 		chat:     &chatFake{identity: chat.User{ID: agentID, Username: "helper"}},
 		model:    &modelFake{},
 		history:  &historyFake{items: map[string][]json.RawMessage{}},
+		learning: &kvtest.Memory{},
 		settings: &settingsFake{s: &config.Settings{Model: "chat-model"}},
 		catalog:  cat,
 		logs:     &syncBuffer{},
@@ -242,6 +246,7 @@ func newFixture(t *testing.T) *fixture {
 		Model:    func(*config.Settings) (model.Provider, error) { return f.model, nil },
 		Identity: routing.NewIdentity(&kvtest.Memory{}, "agent:bot_identity", clock.Real(), discard),
 		History:  f.history,
+		Learning: kb.Batch{Store: f.learning, Learn: kb.NewTrigger(), Log: discard},
 		Prompts:  cat,
 		Zone:     time.UTC,
 		Clock:    clock.Real(),
@@ -451,6 +456,26 @@ func TestTurnIsSavedWhenThePostFails(t *testing.T) {
 	}
 	if line := f.logs.line("reply not posted"); !strings.Contains(line, "level=ERROR") || !strings.Contains(line, "500") {
 		t.Errorf("failed post log = %q, want an error with the status", line)
+	}
+}
+
+func TestAnsweredTurnIsQueuedForLearning(t *testing.T) {
+	f := newFixture(t)
+	f.settings.s = &config.Settings{Model: "chat-model", KBBatchKey: "agent:public_kb_batch", AssistantLabel: "agent"}
+	f.model.answers = []string{"Hello!"}
+	m1 := chat.Message{ID: "p1", ConversationID: "c1", ThreadID: "r1", AuthorID: "u1", Text: "helper first",
+		Created: time.UnixMilli(1780000000123), Kind: chat.Public}
+	m2 := chat.Message{ID: "p2", ConversationID: "c1", ThreadID: "r1", AuthorID: "u1", Text: "second", Kind: chat.Public}
+	f.answer(t, job("thread:r1:u1", m1, m2))
+	got, _, err := f.learning.Get(t.Context(), "agent:public_kb_batch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"messages": [{"post_id": "p1", "channel_id": "c1", "user_id": "u1", "create_at": 1780000000123,
+		"context_id": "r1", "root_id": "r1", "is_thread": true, "message": "u1: helper first\nu1: second\nagent: Hello!",
+		"status": "pending"}]}`
+	if eq, err := testkit.JSONEqual(got, []byte(want)); err != nil || !eq {
+		t.Errorf("batch = %s\nwant    %s (err %v)", got, want, err)
 	}
 }
 
