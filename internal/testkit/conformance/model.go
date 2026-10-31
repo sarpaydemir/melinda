@@ -5,6 +5,7 @@ package conformance
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -20,6 +21,8 @@ type ModelHarness struct {
 	Text func(text string)
 	// ToolCall makes the API answer the next chat request with one call of a tool; arguments is a JSON object.
 	ToolCall func(id, name, arguments string)
+	// Embedding makes the API answer the next embeddings request with vector.
+	Embedding func(vector []float32)
 	// Fail makes the API fail every later request.
 	Fail func()
 	// Hang makes the API hold back its answer to every later request until the client gives up.
@@ -30,6 +33,17 @@ type ModelHarness struct {
 func Model(t *testing.T, harness func(t *testing.T) ModelHarness) {
 	user := model.Message{Role: model.RoleUser, Content: "What is the weather in Paris?"}
 	ask := model.Request{Model: "m", Messages: []model.Message{user}}
+	// requests are one request of each kind.
+	requests := []struct {
+		name string
+		do   func(context.Context, model.Provider) error
+	}{
+		{"chat", func(ctx context.Context, p model.Provider) error { _, err := p.Chat(ctx, ask); return err }},
+		{"embed", func(ctx context.Context, p model.Provider) error {
+			_, err := p.Embed(ctx, "e", user.Content)
+			return err
+		}},
+	}
 
 	t.Run("answers with stripped text", func(t *testing.T) {
 		h := harness(t)
@@ -88,21 +102,37 @@ func Model(t *testing.T, harness func(t *testing.T) ModelHarness) {
 		}
 	})
 
+	t.Run("embeds text", func(t *testing.T) {
+		h := harness(t)
+		want := []float32{0.0123, -0.5, 1, 0}
+		h.Embedding(want)
+		got, err := h.Provider.Embed(context.Background(), "e", user.Content)
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("got %v, %v; want %v", got, err, want)
+		}
+	})
+
 	t.Run("reports server errors", func(t *testing.T) {
 		h := harness(t)
 		h.Fail()
-		if _, err := h.Provider.Chat(context.Background(), ask); err == nil {
-			t.Error("got no error")
+		for _, r := range requests {
+			if err := r.do(context.Background(), h.Provider); err == nil {
+				t.Errorf("%s: got no error", r.name)
+			}
 		}
 	})
 
 	t.Run("stops when cancelled", func(t *testing.T) {
 		h := harness(t)
 		h.Hang()
-		ctx, cancel := context.WithCancel(context.Background())
-		defer time.AfterFunc(50*time.Millisecond, cancel).Stop()
-		if _, err := h.Provider.Chat(ctx, ask); !errors.Is(err, context.Canceled) {
-			t.Errorf("got %v, want context.Canceled", err)
+		for _, r := range requests {
+			ctx, cancel := context.WithCancel(context.Background())
+			stop := time.AfterFunc(50*time.Millisecond, cancel)
+			if err := r.do(ctx, h.Provider); !errors.Is(err, context.Canceled) {
+				t.Errorf("%s: got %v, want context.Canceled", r.name, err)
+			}
+			stop.Stop()
+			cancel()
 		}
 	})
 }

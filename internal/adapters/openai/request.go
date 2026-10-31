@@ -23,6 +23,11 @@ type request struct {
 	ParallelToolCalls *bool       `json:"parallel_tool_calls,omitempty"`
 }
 
+type embeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
 type message struct {
 	Role      model.Role      `json:"role"`
 	Content   any             `json:"content"`
@@ -67,7 +72,6 @@ type function struct {
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
-// body encodes r as compact UTF-8 JSON without escaping HTML or other non-ASCII characters.
 func (p *provider) body(r model.Request) ([]byte, error) {
 	req := request{
 		Model:       r.Model,
@@ -88,10 +92,15 @@ func (p *provider) body(r model.Request) ([]byte, error) {
 		}
 		req.ToolChoice, req.ParallelToolCalls = "auto", new(false)
 	}
+	return encode(req)
+}
+
+// encode is v as compact UTF-8 JSON without escaping HTML or other non-ASCII characters.
+func encode(v any) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(req); err != nil {
+	if err := enc.Encode(v); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
 	}
 	return unescapeSeparators(bytes.TrimSuffix(b.Bytes(), []byte("\n"))), nil

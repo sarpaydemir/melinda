@@ -64,7 +64,7 @@ func TestChatReplies(t *testing.T) {
 
 func TestEmbeddings(t *testing.T) {
 	f := openaifake.New(t)
-	f.Embeddings().Reply(openaifake.Embedding([]float64{0.5, -1}))
+	f.Embeddings().Reply(openaifake.Embedding([]float32{0.5, -1}))
 	_, body := post(t, f.URL()+"/embeddings", `{"model":"e","input":"metin"}`)
 	want := `{"object":"list","model":"fake","data":[{"object":"embedding","index":0,"embedding":[0.5,-1]}]}`
 	if eq, err := testkit.JSONEqual([]byte(want), body); err != nil || !eq {

@@ -98,7 +98,7 @@ func HTTPError(status int, message string) testkit.Response {
 }
 
 // Embedding answers an embeddings request with one vector per input.
-func Embedding(vectors ...[]float64) testkit.Response {
+func Embedding(vectors ...[]float32) testkit.Response {
 	data := make([]map[string]any, len(vectors))
 	for i, v := range vectors {
 		data[i] = map[string]any{"object": "embedding", "index": i, "embedding": v}

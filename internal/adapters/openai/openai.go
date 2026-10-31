@@ -21,17 +21,18 @@ import (
 )
 
 const (
-	attempts       = 3
-	defaultTimeout = 60 * time.Second
+	attempts         = 3
+	defaultTimeout   = 60 * time.Second
+	embeddingTimeout = 30 * time.Second
 )
 
 type provider struct {
 	client    *http.Client
 	clock     clock.Clock
 	userAgent string
-	url, key  string
-	// timeout bounds each phase of an attempt: connecting, sending, waiting for the headers, and each read of
-	// the body.
+	// base is api_base without trailing slashes or a /chat/completions suffix.
+	base, key string
+	// timeout bounds each phase of a chat attempt.
 	timeout     time.Duration
 	temperature json.Number
 	maxTokens   int
@@ -62,10 +63,6 @@ func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userA
 	if err := errors.Join(problems...); err != nil {
 		return nil, err
 	}
-	url := strings.TrimRight(c.APIBase, "/")
-	if !strings.HasSuffix(url, "/chat/completions") {
-		url += "/chat/completions"
-	}
 	timeout := defaultTimeout
 	if seconds > 0 {
 		timeout = time.Duration(seconds * float64(time.Second))
@@ -77,7 +74,7 @@ func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userA
 		},
 		clock:       clk,
 		userAgent:   userAgent,
-		url:         url,
+		base:        strings.TrimSuffix(strings.TrimRight(c.APIBase, "/"), "/chat/completions"),
 		key:         c.Key,
 		timeout:     timeout,
 		temperature: s.Temperature,
@@ -85,36 +82,43 @@ func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userA
 	}, nil
 }
 
-// Chat sends one chat completion request. Every failure is retried, up to three attempts, after 1 s and 2 s, or
-// 5 s and 10 s when the API reports a rate limit.
+// Chat sends one chat completion request, with retries. An answer without choices that carries an error fails the
+// attempt.
 func (p *provider) Chat(ctx context.Context, r model.Request) (model.Response, error) {
 	body, err := p.body(r)
 	if err != nil {
 		return model.Response{}, err
 	}
 	var completion map[string]json.RawMessage
-	for attempt := 0; ; attempt++ {
-		completion, err = p.post(ctx, body)
-		if err == nil || attempt == attempts-1 {
-			break
+	err = p.retry(ctx, func() (err error) {
+		completion, err = p.post(ctx, "/chat/completions", body, p.timeout)
+		if err == nil && !truthy(completion["choices"]) && truthy(completion["error"]) {
+			err = errorPayload(completion["error"])
 		}
-		wait := time.Second << attempt
-		if rateLimited(err) {
-			wait = 5 * time.Second << attempt
-		}
-		if err := clock.Sleep(ctx, p.clock, wait); err != nil {
-			return model.Response{}, err
-		}
-	}
+		return err
+	})
 	if err != nil {
 		return model.Response{}, err
 	}
 	return response(completion)
 }
 
-// Embed is not available yet.
-func (p *provider) Embed(context.Context, string, string) ([]float32, error) {
-	return nil, fmt.Errorf("embeddings: %w", errors.ErrUnsupported)
+// Embed returns the answer's first embedding, with retries. An answer without one fails the attempt, whatever error
+// it carries.
+func (p *provider) Embed(ctx context.Context, model, text string) ([]float32, error) {
+	body, err := encode(embeddingRequest{model, text})
+	if err != nil {
+		return nil, err
+	}
+	var vector []float32
+	err = p.retry(ctx, func() error {
+		answer, err := p.post(ctx, "/embeddings", body, embeddingTimeout)
+		if err == nil {
+			vector, err = embedding(answer)
+		}
+		return err
+	})
+	return vector, err
 }
 
 // Image is not available yet.
@@ -122,21 +126,40 @@ func (p *provider) Image(context.Context, string, string) (model.Image, error) {
 	return model.Image{}, fmt.Errorf("image generation: %w", errors.ErrUnsupported)
 }
 
+// retry runs attempt until it succeeds, up to three times, waiting 1 s and then 2 s after a failure, or 5 s and then
+// 10 s after a rate limit.
+func (p *provider) retry(ctx context.Context, attempt func() error) error {
+	for n := 0; ; n++ {
+		err := attempt()
+		if err == nil || n == attempts-1 {
+			return err
+		}
+		wait := time.Second << n
+		if rateLimited(err) {
+			wait = 5 * time.Second << n
+		}
+		if err := clock.Sleep(ctx, p.clock, wait); err != nil {
+			return err
+		}
+	}
+}
+
 var errStalled = errors.New("stalled")
 
-// post makes one attempt and returns the members of the answer; an answer that is not an object has none.
-func (p *provider) post(ctx context.Context, body []byte) (map[string]json.RawMessage, error) {
+// post makes one attempt at the API path and returns the members of the answer; an answer that is not an object
+// has none. timeout bounds each phase: connecting, sending, waiting for the headers, and each read of the body.
+func (p *provider) post(ctx context.Context, path string, body []byte, timeout time.Duration) (map[string]json.RawMessage, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	stall := time.AfterFunc(p.timeout, func() { cancel(errStalled) })
+	stall := time.AfterFunc(timeout, func() { cancel(errStalled) })
 	defer stall.Stop()
-	progress := func() { stall.Reset(p.timeout) }
+	progress := func() { stall.Reset(timeout) }
 	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		GotConn:              func(httptrace.GotConnInfo) { progress() },
 		WroteRequest:         func(httptrace.WroteRequestInfo) { progress() },
 		GotFirstResponseByte: progress,
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +175,7 @@ func (p *provider) post(ctx context.Context, body []byte) (map[string]json.RawMe
 		data, err = io.ReadAll(progressReader{resp.Body, progress})
 	}
 	if err != nil && errors.Is(context.Cause(ctx), errStalled) {
-		return nil, fmt.Errorf("timed out after %v without progress", p.timeout)
+		return nil, fmt.Errorf("timed out after %v without progress", timeout)
 	}
 	if err != nil {
 		return nil, err
@@ -163,12 +186,9 @@ func (p *provider) post(ctx context.Context, body []byte) (map[string]json.RawMe
 	if !json.Valid(data) {
 		return nil, errors.New("response is not valid JSON")
 	}
-	var completion map[string]json.RawMessage
-	_ = json.Unmarshal(data, &completion) // leaves it nil for an answer that is not an object
-	if !truthy(completion["choices"]) && truthy(completion["error"]) {
-		return nil, errorPayload(completion["error"])
-	}
-	return completion, nil
+	var answer map[string]json.RawMessage
+	_ = json.Unmarshal(data, &answer) // leaves it nil for an answer that is not an object
+	return answer, nil
 }
 
 type progressReader struct {
@@ -270,6 +290,21 @@ func response(completion map[string]json.RawMessage) (model.Response, error) {
 		msg.ToolCalls = append(msg.ToolCalls, model.ToolCall{ID: c.ID, Name: c.Function.Name, Arguments: arguments(c.Function.Arguments)})
 	}
 	return model.Response{Message: msg}, nil
+}
+
+// embedding is data[0].embedding: numbers, or nil for null.
+func embedding(answer map[string]json.RawMessage) ([]float32, error) {
+	var data []struct {
+		Embedding json.RawMessage `json:"embedding"`
+	}
+	if json.Unmarshal(answer["data"], &data) != nil || len(data) == 0 || data[0].Embedding == nil {
+		return nil, errors.New("response has no embedding")
+	}
+	var vector []float32
+	if err := json.Unmarshal(data[0].Embedding, &vector); err != nil {
+		return nil, fmt.Errorf("response embedding: %w", err)
+	}
+	return vector, nil
 }
 
 // arguments is the JSON text of a call's arguments: an object as sent, the content of a non-empty string, or {}.

@@ -93,8 +93,15 @@ func TestModelConformance(t *testing.T) {
 			ToolCall: func(id, name, arguments string) {
 				fake.Chat().Reply(openaifake.ToolCalls(openaifake.ToolCall{ID: id, Name: name, Arguments: arguments}))
 			},
-			Fail: func() { fake.Chat().Default(openaifake.HTTPError(500, "unavailable")) },
-			Hang: func() { fake.Chat().Default(openaifake.Text("late").WithDelay(time.Hour)) },
+			Embedding: func(vector []float32) { fake.Embeddings().Reply(openaifake.Embedding(vector)) },
+			Fail: func() {
+				fake.Chat().Default(openaifake.HTTPError(500, "unavailable"))
+				fake.Embeddings().Default(openaifake.HTTPError(500, "unavailable"))
+			},
+			Hang: func() {
+				fake.Chat().Default(openaifake.Text("late").WithDelay(time.Hour))
+				fake.Embeddings().Default(openaifake.Embedding([]float32{0.5}).WithDelay(time.Hour))
+			},
 		}
 	})
 }
@@ -139,44 +146,53 @@ func TestRequestTimeoutComesFromSettings(t *testing.T) {
 	}
 }
 
-func TestChatURL(t *testing.T) {
-	for _, tc := range []struct{ base, path string }{
-		{"", "/chat/completions"},
-		{"/", "/chat/completions"},
-		{"/v1", "/v1/chat/completions"},
-		{"/v1/", "/v1/chat/completions"},
-		{"/v1//", "/v1/chat/completions"},
-		{"/v1/chat/completions", "/v1/chat/completions"},
-		{"/v1/chat/completions/", "/v1/chat/completions"},
-		{"/api/chat/completions/v1", "/api/chat/completions/v1/chat/completions"},
+func TestURLs(t *testing.T) {
+	for _, tc := range []struct{ base, chat, embeddings string }{
+		{"", "/chat/completions", "/embeddings"},
+		{"/", "/chat/completions", "/embeddings"},
+		{"/v1", "/v1/chat/completions", "/v1/embeddings"},
+		{"/v1/", "/v1/chat/completions", "/v1/embeddings"},
+		{"/v1//", "/v1/chat/completions", "/v1/embeddings"},
+		{"/v1/chat/completions", "/v1/chat/completions", "/v1/embeddings"},
+		{"/v1/chat/completions/", "/v1/chat/completions", "/v1/embeddings"},
+		{"/api/chat/completions/v1", "/api/chat/completions/v1/chat/completions", "/api/chat/completions/v1/embeddings"},
 	} {
 		fake := openaifake.New(t)
-		fake.On("POST", tc.path).Reply(openaifake.Text("ok"))
+		fake.On("POST", tc.chat).Reply(openaifake.Text("ok"))
+		fake.On("POST", tc.embeddings).Reply(openaifake.Embedding([]float32{0.5}))
 		p, _ := open(t, fake.URL()+tc.base)
 		if _, err := p.Chat(context.Background(), ask); err != nil {
-			t.Errorf("%q: %v", tc.base, err)
+			t.Errorf("%q: chat: %v", tc.base, err)
 		}
-		fake.AssertCalls(t, "POST "+tc.path)
+		if _, err := p.Embed(context.Background(), "e", "Hello"); err != nil {
+			t.Errorf("%q: embed: %v", tc.base, err)
+		}
+		fake.AssertCalls(t, "POST "+tc.chat, "POST "+tc.embeddings)
 	}
 }
 
-func TestChatSendsOnlyTheContractHeaders(t *testing.T) {
+func TestSendsOnlyTheContractHeaders(t *testing.T) {
 	fake := openaifake.New(t)
 	fake.Chat().Reply(openaifake.Text("ok"))
+	fake.Embeddings().Reply(openaifake.Embedding([]float32{0.5}))
 	p, _ := open(t, fake.URL())
 	if _, err := p.Chat(context.Background(), ask); err != nil {
 		t.Fatal(err)
 	}
-	req := fake.Requests()[0]
-	want := http.Header{
-		"Accept-Encoding": {"gzip"}, // added by the transport, which then decompresses the answer
-		"Authorization":   {"Bearer " + key},
-		"Content-Length":  {strconv.Itoa(len(req.Body))},
-		"Content-Type":    {"application/json"},
-		"User-Agent":      {"dost/1.2.3"},
+	if _, err := p.Embed(context.Background(), "e", "Hello"); err != nil {
+		t.Fatal(err)
 	}
-	if fmt.Sprint(req.Header) != fmt.Sprint(want) {
-		t.Errorf("headers:\n got %v\nwant %v", req.Header, want)
+	for _, req := range fake.Requests() {
+		want := http.Header{
+			"Accept-Encoding": {"gzip"}, // added by the transport, which then decompresses the answer
+			"Authorization":   {"Bearer " + key},
+			"Content-Length":  {strconv.Itoa(len(req.Body))},
+			"Content-Type":    {"application/json"},
+			"User-Agent":      {"dost/1.2.3"},
+		}
+		if fmt.Sprint(req.Header) != fmt.Sprint(want) {
+			t.Errorf("%s headers:\n got %v\nwant %v", req.Call(), req.Header, want)
+		}
 	}
 }
 
@@ -493,5 +509,91 @@ func TestTimeoutBoundsEachPhaseOfAnAttempt(t *testing.T) {
 				t.Errorf("waits %v, want %v", got, tc.waits)
 			}
 		})
+	}
+}
+
+func TestEmbedSendsTheTextUnmodified(t *testing.T) {
+	fake := openaifake.New(t)
+	fake.Embeddings().Reply(openaifake.Embedding([]float32{0.5}))
+	p, _ := open(t, fake.URL())
+	text := "  Şu <b>kod</b> & \"alıntı\" ne işe yarar?\tC:\\yol\x01\b\f\x7f\r\n" +
+		"Satır\u2028ayırıcı, paragraf\u2029ayırıcı, düz metin \\u2028 ve emoji 🙂\n\n"
+	if _, err := p.Embed(context.Background(), "text-embedding-3-small", text); err != nil {
+		t.Fatal(err)
+	}
+	golden.Assert(t, "embedding", append(fake.Requests()[0].Body, '\n'))
+}
+
+func TestEmbedReadsTheFirstEmbedding(t *testing.T) {
+	for _, tc := range []struct {
+		body     string
+		want     []float32
+		err      string // empty when the answer is want
+		attempts int
+	}{
+		{`{"object":"list","data":[{"object":"embedding","index":0,"embedding":[0.25,-1.5,3]},` +
+			`{"object":"embedding","index":1,"embedding":[9]}],"model":"x"}`, []float32{0.25, -1.5, 3}, "", 1},
+		{`{"data":[{"embedding":[1,2]}],"error":{"message":"partial failure","code":429}}`, []float32{1, 2}, "", 1},
+		{`{"data":[{"embedding":[]}]}`, nil, "", 1},
+		{`{"data":[{"embedding":null}]}`, nil, "", 1},
+		{`{"object":"list"}`, nil, "response has no embedding", 3},
+		{`{"data":null}`, nil, "response has no embedding", 3},
+		{`{"data":[]}`, nil, "response has no embedding", 3},
+		{`{"data":[{}]}`, nil, "response has no embedding", 3},
+		{`[]`, nil, "response has no embedding", 3},
+		{`{"error":{"message":"rate-limited upstream","code":429}}`, nil, "response has no embedding", 3},
+		{`{"data":[{"embedding":"0.5"}]}`, nil, "response embedding: json: cannot unmarshal string", 3},
+	} {
+		fake := openaifake.New(t)
+		fake.Embeddings().Default(testkit.Raw(200, "application/json", []byte(tc.body)))
+		p, clk := open(t, fake.URL())
+		got, err := p.Embed(context.Background(), "e", "Hello")
+		switch {
+		case tc.err == "" && (err != nil || !slices.Equal(got, tc.want)):
+			t.Errorf("%s: got %v, %v; want %v", tc.body, got, err, tc.want)
+		case tc.err != "" && (err == nil || !strings.HasPrefix(err.Error(), tc.err)):
+			t.Errorf("%s: got %v, want an error starting %q", tc.body, err, tc.err)
+		}
+		if n := len(fake.Requests()); n != tc.attempts {
+			t.Errorf("%s: %d attempts, want %d", tc.body, n, tc.attempts)
+		}
+		if got, want := clk.Waits(), []time.Duration{time.Second, 2 * time.Second}[:tc.attempts-1]; !slices.Equal(got, want) {
+			t.Errorf("%s: waits %v, want %v", tc.body, got, want)
+		}
+	}
+}
+
+func TestEmbedRecoversAfterTwoFailures(t *testing.T) {
+	vector := []float32{0.25, -1.5, 3}
+	for _, tc := range []struct {
+		name     string
+		failures testkit.Response
+		waits    []time.Duration
+	}{
+		{"server errors", openaifake.HTTPError(503, "unavailable"), []time.Duration{time.Second, 2 * time.Second}},
+		{"rate limits", openaifake.HTTPError(429, "slow down"), []time.Duration{5 * time.Second, 10 * time.Second}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := openaifake.New(t)
+			fake.Embeddings().Reply(tc.failures, tc.failures, openaifake.Embedding(vector))
+			p, clk := open(t, fake.URL())
+			got, err := p.Embed(context.Background(), "e", "Hello")
+			if err != nil || !slices.Equal(got, vector) {
+				t.Errorf("got %v, %v; want %v", got, err, vector)
+			}
+			fake.AssertCalls(t, "POST /embeddings", "POST /embeddings", "POST /embeddings")
+			if got := clk.Waits(); !slices.Equal(got, tc.waits) {
+				t.Errorf("waits %v, want %v", got, tc.waits)
+			}
+		})
+	}
+}
+
+func TestEmbedTimeoutIsNotTheRequestTimeout(t *testing.T) {
+	fake := openaifake.New(t)
+	fake.Embeddings().Reply(openaifake.Embedding([]float32{0.5}).WithDelay(200 * time.Millisecond))
+	p, _ := open(t, fake.URL(), `"request_timeout":0.05`)
+	if got, err := p.Embed(context.Background(), "e", "Hello"); err != nil || !slices.Equal(got, []float32{0.5}) {
+		t.Errorf("got %v, %v; want [0.5] from the first attempt", got, err)
 	}
 }

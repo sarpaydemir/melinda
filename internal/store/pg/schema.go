@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// embeddingDims is the dimension of every stored embedding.
-const embeddingDims = 1536
+// EmbeddingDims is the length of every stored embedding.
+const EmbeddingDims = 1536
 
 type column struct {
 	name  string
@@ -160,8 +160,8 @@ func verify(ctx context.Context, conn *pgx.Conn) error {
 			case !slices.Contains(c.types, got.typ):
 				problems = append(problems, fmt.Sprintf("%s.%s is %s, want %s", t.name, c.name, got.typ, strings.Join(c.types, " or ")))
 			// A vector column without a declared dimension (typmod -1) holds 1536-dimension vectors too.
-			case got.typ == "vector" && got.typmod != -1 && got.typmod != embeddingDims:
-				problems = append(problems, fmt.Sprintf("%s.%s is vector(%d), want vector(%d)", t.name, c.name, got.typmod, embeddingDims))
+			case got.typ == "vector" && got.typmod != -1 && got.typmod != EmbeddingDims:
+				problems = append(problems, fmt.Sprintf("%s.%s is vector(%d), want vector(%d)", t.name, c.name, got.typmod, EmbeddingDims))
 			}
 		}
 	}
