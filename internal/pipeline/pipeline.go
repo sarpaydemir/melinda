@@ -20,10 +20,13 @@ import (
 	"github.com/sarpaydemir/dost/internal/memory"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
+	"github.com/sarpaydemir/dost/internal/port/tool"
+	"github.com/sarpaydemir/dost/internal/port/web"
 	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/store/vector"
 	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/dost/internal/tools"
 )
 
 // fileMemoryLimit is how many code points of the file context a saved turn keeps.
@@ -37,6 +40,11 @@ type Pipeline struct {
 	// Platform and Model open the chat platform and the model provider from a settings snapshot.
 	Platform func(*config.Settings) (chat.Platform, error)
 	Model    func(*config.Settings) (model.Provider, error)
+	// Search and Fetch open the web searcher and the page fetcher of the built-in tools, and Tools returns the
+	// tools the adapters contribute, from a settings snapshot and the run's catalog.
+	Search   func(*config.Settings) (web.Searcher, error)
+	Fetch    func(*config.Settings) (web.Fetcher, error)
+	Tools    func(*config.Settings, *prompt.Catalog) []tool.Tool
 	Identity *routing.Identity
 	History  interface {
 		Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
@@ -68,9 +76,9 @@ type Pipeline struct {
 
 // Answer answers j with one settings snapshot: it decodes the first buffered message with the combined text and
 // attachments, applies the gate again, and runs the first matching automation in its place or loads the context,
-// generates the reply, posts it, saves the turn, extracts the author's facts, and queues the turn for learning.
-// beforeWrite is called before each write to the chat platform. Once posting has started, cancelling ctx no
-// longer stops the run.
+// generates the reply with the offered tools, posts it with the files the tools uploaded, saves the turn, extracts
+// the author's facts, and queues the turn for learning. beforeWrite is called before each write to the chat
+// platform. Once posting the reply has started, cancelling ctx no longer stops the run.
 func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error {
 	s := p.Settings.Current(ctx)
 	log := p.Log.With(logging.KeyConversation, j.Key, "post_ids", j.MessageIDs)
@@ -113,18 +121,26 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 	client := llm.Client{Provider: provider, Failure: cat.Text("error.generic"), CutOffNote: cat.Text("reply.truncated_note"), Log: log}
 	facts := memory.Facts{Settings: s, Model: client, Embedder: provider, Store: p.Facts, History: p.History,
 		Prompt: cat.Text("memory.facts"), Log: log}
-	c, err := p.loader(s, cat, platform, provider, client, facts, log).Load(ctx, m)
+	knowledge := kb.Retriever{Settings: s, Model: client, Embedder: provider, Store: p.Knowledge,
+		QueryPrompt: cat.Text("kb.query"), Clock: p.Clock, Log: log}
+	c, err := p.loader(s, cat, platform, knowledge, client, facts, log).Load(ctx, m)
 	if err != nil {
 		return fmt.Errorf("load context: %w", err)
 	}
-	reply := p.generate(ctx, s, cat, client, c, m.Text, log)
+	out := &outbound{platform: platform, beforeWrite: beforeWrite}
+	set, err := p.tools(s, cat, out, provider, knowledge, m, log)
+	if err != nil {
+		return fmt.Errorf("offer tools: %w", err)
+	}
+	reply := p.generate(ctx, s, cat, client, set, c, m.Text, log)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
 	ctx = context.WithoutCancel(ctx)
-	out := &outbound{platform: platform, beforeWrite: beforeWrite}
-	if err := send(ctx, out, chat.Outgoing{ConversationID: m.ConversationID, ThreadID: routing.ReplyThread(m), Text: reply}, log); err != nil {
+	answer := chat.Outgoing{ConversationID: m.ConversationID, ThreadID: routing.ReplyThread(m), Text: reply,
+		FileIDs: set.FileIDs()}
+	if err := send(ctx, out, answer, log); err != nil {
 		return fmt.Errorf("post reply: %w", err)
 	}
 	count, err := p.save(ctx, cat, m, c, reply)
@@ -160,29 +176,64 @@ func (p *Pipeline) automate(ctx context.Context, s *config.Settings, cat *prompt
 	return nil
 }
 
-// loader loads a message's context with the run's snapshot, catalog, platform, model, and facts.
-func (p *Pipeline) loader(s *config.Settings, cat *prompt.Catalog, platform chat.Platform, provider model.Provider,
+// loader loads a message's context with the run's snapshot, catalog, platform, shared knowledge, model, and facts.
+func (p *Pipeline) loader(s *config.Settings, cat *prompt.Catalog, platform chat.Platform, knowledge kb.Retriever,
 	client llm.Client, facts memory.Facts, log *slog.Logger) Loader {
 	return Loader{
-		History: p.History,
-		Users:   platform,
-		Facts:   facts,
-		Knowledge: kb.Retriever{Settings: s, Model: client, Embedder: provider, Store: p.Knowledge,
-			QueryPrompt: cat.Text("kb.query"), Clock: p.Clock, Log: log},
+		History:    p.History,
+		Users:      platform,
+		Facts:      facts,
+		Knowledge:  knowledge,
 		Files:      files.Describer{Platform: platform, Settings: s, Catalog: cat, Model: client, Log: log},
 		UserPrefix: cat.Text("context.user_prefix"),
 		Log:        log,
 	}
 }
 
-// generate returns the model's reply to text in the context c, without tools.
+// tools returns the tools offered while answering m, which write to the chat platform through out.
+func (p *Pipeline) tools(s *config.Settings, cat *prompt.Catalog, out *outbound, provider model.Provider,
+	knowledge kb.Retriever, m chat.Message, log *slog.Logger) (tools.Set, error) {
+	search, err := p.Search(s)
+	if err != nil {
+		return tools.Set{}, fmt.Errorf("open web search: %w", err)
+	}
+	fetch, err := p.Fetch(s)
+	if err != nil {
+		return tools.Set{}, fmt.Errorf("open page fetch: %w", err)
+	}
+	b := tools.Builtin{
+		Search: search, Fetch: fetch, SearchLimit: s.SearchResultLimit, Knowledge: knowledge,
+		Images: provider, ImageModel: s.ImageGenerationModel, Chat: out, ReplyThread: routing.ReplyThread(m),
+		MaxProgressUpdates: s.MaxProgressUpdates, ProgressUpdateMaxChars: s.ProgressUpdateMaxChars,
+		Catalog: cat, Clock: p.Clock, Log: log,
+	}
+	call := tool.Call{ConversationID: m.ConversationID, UserID: m.AuthorID, Direct: m.Kind == chat.Direct,
+		BeforeWrite: out.permit}
+	return tools.Offer(call, s.EnabledTools, b, p.Tools(s, cat))
+}
+
+// generate returns the model's reply to text in the context c, with the tools of set when it offers any.
 func (p *Pipeline) generate(ctx context.Context, s *config.Settings, cat *prompt.Catalog, client llm.Client,
-	c prompt.Context, text string, log *slog.Logger) string {
-	system := prompt.System(cat, s, c, false, p.Clock.Now(), p.Zone)
+	set tools.Set, c prompt.Context, text string, log *slog.Logger) string {
+	specs := set.Specs(cat)
+	system := prompt.System(cat, s, c, len(specs) > 0, p.Clock.Now(), p.Zone)
 	user := prompt.UserMessage(cat, c, text)
 	log.DebugContext(ctx, "model input", "system_chars", utf8.RuneCountInString(system),
-		"user_chars", utf8.RuneCountInString(user), "history_items", len(c.History))
-	reply := client.Generate(ctx, model.Request{Model: s.Model, Messages: llm.Messages(system, c.History, user)})
+		"user_chars", utf8.RuneCountInString(user), "history_items", len(c.History), "tools", len(specs))
+	msgs := llm.Messages(system, c.History, user)
+	var reply string
+	if len(specs) == 0 {
+		reply = client.Generate(ctx, model.Request{Model: s.Model, Messages: msgs})
+	} else {
+		execute := func(ctx context.Context, name string, args json.RawMessage) string {
+			log.DebugContext(ctx, "tool call", "tool", name, "args", logging.Clip(string(args), debugClip))
+			result := set.Execute(ctx, name, args)
+			log.DebugContext(ctx, "tool result", "tool", name, "result", logging.Clip(result, debugClip))
+			return result
+		}
+		loop := llm.ToolLoop{Client: client, Settings: s, Catalog: cat, Tools: specs, Execute: execute}
+		reply = loop.Answer(ctx, msgs)
+	}
 	log.DebugContext(ctx, "model reply", "reply", logging.Clip(reply, debugClip))
 	return reply
 }

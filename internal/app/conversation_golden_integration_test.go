@@ -92,6 +92,13 @@ var scenarios = []scenario{
 		h.post(post("p1", "u1", "dm1", "", "hello", 0))
 		h.flush(3*time.Second, 1)
 	}},
+	{name: "dm_tools", settings: `"enabled_tools":["send_progress_update"]`, replies: []testkit.Response{
+		openaifake.ToolCalls(openaifake.ToolCall{ID: "call_1", Name: "send_progress_update", Arguments: `{"message": "Looking"}`}),
+		openaifake.Text("Hi Ada!"),
+	}, play: func(h *harness) {
+		h.post(post("p1", "u1", "dm1", "", "hello", 0))
+		h.flush(3*time.Second, 1)
+	}},
 	{name: "dm_burst", replies: texts("All three, got it."), play: func(h *harness) {
 		h.post(post("p1", "u1", "dm1", "", "one", 0))
 		h.clock.Advance(time.Second)

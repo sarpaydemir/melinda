@@ -23,6 +23,8 @@ import (
 	"github.com/sarpaydemir/dost/internal/pipeline"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/port/model"
+	"github.com/sarpaydemir/dost/internal/port/tool"
+	"github.com/sarpaydemir/dost/internal/port/web"
 	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/testkit"
@@ -115,11 +117,14 @@ func (c *chatFake) Upload(_ context.Context, conversationID string, f chat.File)
 	return fmt.Sprintf("file%d", len(c.uploads)), nil
 }
 
-// modelFake answers each chat request with the next of answers, then with "ok". A failing answer is an empty
-// string. When hold is set, each request waits for it to close or for the request's cancellation.
+// modelFake answers each chat request that offers tools with the next of toolCalls while any are left, and any
+// other with the next of answers, then with "ok". A failing answer is an empty string. When hold is set, each
+// request waits for it to close or for the request's cancellation. Image returns image when it has data.
 type modelFake struct {
-	answers []string
-	hold    chan struct{}
+	answers   []string
+	toolCalls [][]model.ToolCall
+	image     model.Image
+	hold      chan struct{}
 
 	mu       sync.Mutex
 	requests []model.Request
@@ -128,6 +133,12 @@ type modelFake struct {
 func (f *modelFake) Chat(ctx context.Context, r model.Request) (model.Response, error) {
 	f.mu.Lock()
 	f.requests = append(f.requests, r)
+	if len(r.Tools) > 0 && len(f.toolCalls) > 0 {
+		calls := f.toolCalls[0]
+		f.toolCalls = f.toolCalls[1:]
+		f.mu.Unlock()
+		return model.Response{Message: model.Message{Role: model.RoleAssistant, ToolCalls: calls}}, nil
+	}
 	answer := "ok"
 	if len(f.answers) > 0 {
 		answer, f.answers = f.answers[0], f.answers[1:]
@@ -156,8 +167,41 @@ func (*modelFake) Embed(context.Context, string, string) ([]float32, error) {
 	return nil, errors.ErrUnsupported
 }
 
-func (*modelFake) Image(context.Context, string, string) (model.Image, error) {
-	return model.Image{}, errors.ErrUnsupported
+func (f *modelFake) Image(context.Context, string, string) (model.Image, error) {
+	if f.image.Data == nil {
+		return model.Image{}, errors.ErrUnsupported
+	}
+	return f.image, nil
+}
+
+// lookupTool is a contributed tool that records its calls and returns their arguments. With cancel set, it cancels
+// the run and then asks to write, recording the answer in writeErr.
+type lookupTool struct {
+	mu       sync.Mutex
+	calls    []tool.Call
+	cancel   context.CancelFunc
+	writeErr error
+}
+
+func (*lookupTool) Name() string { return "lookup" }
+
+func (*lookupTool) Parameters() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
+
+func (l *lookupTool) Call(ctx context.Context, c tool.Call) (string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, c)
+	if l.cancel != nil {
+		l.cancel()
+		l.writeErr = c.BeforeWrite(ctx)
+	}
+	return "found " + string(c.Args), nil
+}
+
+func (l *lookupTool) received() []tool.Call {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.calls)
 }
 
 // historyFake keeps the user and assistant texts of each key's turns and records every write.
@@ -217,11 +261,13 @@ type settingsFake struct{ s *config.Settings }
 
 func (f *settingsFake) Current(context.Context) *config.Settings { return f.s }
 
-// fixture is a pipeline on fakes; the agent is "agent" with the username "helper".
+// fixture is a pipeline on fakes; the agent is "agent" with the username "helper". Its settings offer no tools
+// until a test replaces them.
 type fixture struct {
 	p        *pipeline.Pipeline
 	chat     *chatFake
 	model    *modelFake
+	lookup   *lookupTool
 	history  *historyFake
 	learning *kvtest.Memory
 	settings *settingsFake
@@ -230,16 +276,18 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T) *fixture {
-	cat, err := prompt.Load(prompt.Builtin(), "")
+	entries := append(prompt.Builtin(), prompt.Entry{ID: "tools.desc.lookup", Kind: prompt.KindRaw, Default: "Look up."})
+	cat, err := prompt.Load(entries, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	f := &fixture{
 		chat:     &chatFake{identity: chat.User{ID: agentID, Username: "helper"}},
 		model:    &modelFake{},
+		lookup:   &lookupTool{},
 		history:  &historyFake{items: map[string][]json.RawMessage{}},
 		learning: &kvtest.Memory{},
-		settings: &settingsFake{s: &config.Settings{Model: "chat-model"}},
+		settings: &settingsFake{s: &config.Settings{Model: "chat-model", EnabledTools: []string{}}},
 		catalog:  cat,
 		logs:     &syncBuffer{},
 	}
@@ -248,6 +296,9 @@ func newFixture(t *testing.T) *fixture {
 		Settings: f.settings,
 		Platform: func(*config.Settings) (chat.Platform, error) { return f.chat, nil },
 		Model:    func(*config.Settings) (model.Provider, error) { return f.model, nil },
+		Search:   func(*config.Settings) (web.Searcher, error) { return nil, nil },
+		Fetch:    func(*config.Settings) (web.Fetcher, error) { return nil, nil },
+		Tools:    func(*config.Settings, *prompt.Catalog) []tool.Tool { return []tool.Tool{f.lookup} },
 		Identity: routing.NewIdentity(&kvtest.Memory{}, "agent:bot_identity", clock.Real(), discard),
 		History:  f.history,
 		Learning: kb.Batch{Store: f.learning, Learn: kb.NewTrigger(), Log: discard},
@@ -376,6 +427,78 @@ func TestCombinedTextIsAnsweredWithTheSystemPromptAndHistory(t *testing.T) {
 	}
 	if !strings.Contains(reply, "level=DEBUG") || !strings.Contains(reply, "reply=ok") {
 		t.Errorf("model reply log = %q, want the reply at debug", reply)
+	}
+}
+
+func TestToolsRunForTheMessageAndTheReplyCarriesTheFilesTheyUploaded(t *testing.T) {
+	f := newFixture(t)
+	f.settings.s = &config.Settings{Model: "chat-model", ImageGenerationModel: "image-model"}
+	f.model.image = model.Image{MediaType: "image/png", Data: []byte("\x89PNG")}
+	f.model.toolCalls = [][]model.ToolCall{{
+		{ID: "call_1", Name: "lookup", Arguments: json.RawMessage(`{"id": "x"}`)},
+		{ID: "call_2", Name: "generate_image", Arguments: json.RawMessage(`{"prompt": "a cat"}`)},
+	}}
+	f.model.answers = []string{"Here it is."}
+	f.answer(t, job("dm:u1", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "hi", Kind: chat.Direct}))
+
+	want := []chat.Outgoing{{ConversationID: "c1", Text: "Here it is.", FileIDs: []string{"file1"}}}
+	if got := f.chat.sent(); !reflect.DeepEqual(got, want) {
+		t.Errorf("posted %+v, want %+v", got, want)
+	}
+	if got := f.chat.uploads; !slices.Equal(got, []string{"c1/generated_1.png"}) {
+		t.Errorf("uploads %q, want the generated image in the conversation", got)
+	}
+	reqs := f.model.received()
+	if len(reqs) != 2 {
+		t.Fatalf("model requests = %d, want 2", len(reqs))
+	}
+	system := reqs[0].Messages[0].Content
+	if len(reqs[0].Tools) == 0 || !strings.Contains(system, f.catalog.Text("tools.instructions")) ||
+		strings.Contains(system, f.catalog.Text("system.no_tools")) {
+		t.Errorf("first request offers %d tools with the system prompt:\n%s\nwant tools and their instructions",
+			len(reqs[0].Tools), system)
+	}
+	var results []string
+	for _, m := range reqs[1].Messages {
+		if m.Role == model.RoleTool {
+			results = append(results, m.ToolCallID+" "+m.Content)
+		}
+	}
+	if want := []string{`call_1 found {"id": "x"}`, "call_2 " + f.catalog.Text("tool.image.attached")}; !slices.Equal(results, want) {
+		t.Errorf("tool results %q, want %q", results, want)
+	}
+	if line := f.logs.line("tool result"); !strings.Contains(line, "level=DEBUG") || !strings.Contains(line, "tool=lookup") {
+		t.Errorf("tool result log = %q, want the lookup result at debug", line)
+	}
+}
+
+func TestToolCallsAreDirectOnlyInOneToOneConversations(t *testing.T) {
+	for kind, direct := range map[chat.Kind]bool{chat.Direct: true, chat.Private: false, chat.Public: false} {
+		f := newFixture(t)
+		f.settings.s = &config.Settings{Model: "chat-model"}
+		f.model.toolCalls = [][]model.ToolCall{{{ID: "call_1", Name: "lookup", Arguments: json.RawMessage(`{}`)}}}
+		f.answer(t, job("k", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "@helper hi", Kind: kind}))
+		calls := f.lookup.received()
+		if len(calls) != 1 || calls[0].ConversationID != "c1" || calls[0].UserID != "u1" || calls[0].Direct != direct {
+			t.Errorf("kind %d: calls %+v, want one in c1 for u1 with Direct %t", kind, calls, direct)
+		}
+	}
+}
+
+func TestToolOfARunCancelledBeforeItsFirstWriteMayNotWrite(t *testing.T) {
+	f := newFixture(t)
+	f.settings.s = &config.Settings{Model: "chat-model"}
+	f.model.toolCalls = [][]model.ToolCall{{{ID: "call_1", Name: "lookup", Arguments: json.RawMessage(`{}`)}}}
+	ctx, cancel := context.WithCancel(t.Context())
+	f.lookup.cancel = cancel
+	released := 0
+	err := f.p.Answer(ctx, job("dm:u1", chat.Message{ID: "p1", ConversationID: "c1", AuthorID: "u1", Text: "hi", Kind: chat.Direct}),
+		func(context.Context) error { released++; return nil })
+	if !errors.Is(err, context.Canceled) || !errors.Is(f.lookup.writeErr, context.Canceled) {
+		t.Errorf("Answer = %v and the tool's write = %v, want both cancelled", err, f.lookup.writeErr)
+	}
+	if released != 0 || len(f.chat.sent()) != 0 {
+		t.Errorf("record released %d times and %d posts, want the record kept and nothing posted", released, len(f.chat.sent()))
 	}
 }
 

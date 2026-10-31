@@ -136,7 +136,8 @@ func conversation(ctx, work context.Context, env config.Env, cfg startup, sel se
 	vectors := vector.New(db)
 	learn := kb.NewTrigger()
 	pipe := &pipeline.Pipeline{
-		Settings: cfg.settings, Platform: sel.platform, Model: sel.model, Identity: identity,
+		Settings: cfg.settings, Platform: sel.platform, Model: sel.model, Search: sel.search, Fetch: sel.fetch,
+		Tools: sel.contributed, Identity: identity,
 		History:   memory.NewHistory(history.New(db, clk), clk, s.MemoryKeyPrefix),
 		Knowledge: vectors, Facts: vectors, Learning: kb.Batch{Store: store, Learn: learn, Log: named("pipeline")},
 		Handlers: sel.handlers, Prompts: cfg.prompts, Zone: env.Timezone, Clock: clk, Log: named("pipeline"),
