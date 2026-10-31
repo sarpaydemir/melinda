@@ -28,6 +28,12 @@ func (namedTool) Parameters() json.RawMessage {
 }
 func (namedTool) Call(context.Context, tool.Call) (string, error) { return "", nil }
 
+// sourceTools are the tools of a tool source, named names.
+func sourceTools(names ...string) func(*config.Settings, *prompt.Catalog, http.RoundTripper) []tool.Tool {
+	named := toolsNamed(names...)
+	return func(s *config.Settings, c *prompt.Catalog, _ http.RoundTripper) []tool.Tool { return named(s, c) }
+}
+
 func toolsNamed(names ...string) func(*config.Settings, *prompt.Catalog) []tool.Tool {
 	return func(*config.Settings, *prompt.Catalog) []tool.Tool {
 		var ts []tool.Tool
@@ -57,8 +63,8 @@ func testTable() adapters {
 		searchers: map[string]entry[web.Searcher]{"meta": {open: fails[web.Searcher]("meta"), secrets: secret("meta_key")}},
 		fetchers:  map[string]entry[web.Fetcher]{"direct": {open: fails[web.Fetcher]("direct"), secrets: secret("key")}},
 		tools: []toolSource{
-			{tools: toolsNamed("tracker_list", "tracker_create"), secrets: []config.SecretKey{{Key: "tracker_key", Ref: "tracker_secret", Overwrite: true}}},
-			{tools: toolsNamed("notes")},
+			{tools: sourceTools("tracker_list", "tracker_create"), secrets: []config.SecretKey{{Key: "tracker_key", Ref: "tracker_secret", Overwrite: true}}},
+			{tools: sourceTools("notes")},
 		},
 		handlers: map[string]handler{
 			"summarize": {run: func(context.Context, automation.Run) (string, error) { return "", nil }},

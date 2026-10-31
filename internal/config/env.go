@@ -37,6 +37,7 @@ type Env struct {
 	PipelineWorkers    int
 	PipelineRunTimeout time.Duration
 	DryRun             bool
+	DryRunLog          string   // file the shadow-mode records are appended to; empty means the log output
 	Unknown            []string // set DOST_* variables that are not recognized
 }
 
@@ -73,6 +74,7 @@ func LoadEnv(environ []string) (Env, error) {
 		PipelineWorkers:    parse(&r, "DOST_PIPELINE_WORKERS", "8", positiveInt),
 		PipelineRunTimeout: parse(&r, "DOST_PIPELINE_RUN_TIMEOUT", "30m", positiveDuration),
 		DryRun:             parse(&r, "DOST_DRY_RUN", "false", boolean),
+		DryRunLog:          r.get("DOST_DRY_RUN_LOG", ""),
 	}
 	if len(r.errs) > 0 {
 		return Env{}, errors.New("invalid environment: " + strings.Join(r.errs, "; "))

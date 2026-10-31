@@ -2,7 +2,6 @@ package dispatch
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -214,7 +213,7 @@ func (d *Dispatcher) appendTo(n *Notice, m chat.Message, window time.Duration) k
 		if err := json.Unmarshal(cur, &stored); err != nil {
 			return nil, fmt.Errorf("%w: %w", errMalformed, err)
 		}
-		n.Generation, n.FlushAfter = newGeneration(), d.clk.Now().Add(window)
+		n.Generation, n.FlushAfter = textfmt.NewUUID(), d.clk.Now().Add(window)
 		b := buffer{Generation: n.Generation, FlushAfter: textfmt.FormatTime(n.FlushAfter), Payload: stored.Payload}
 		if b.Payload == nil {
 			b.Payload = m.Payload
@@ -231,15 +230,6 @@ func (d *Dispatcher) appendTo(n *Notice, m chat.Message, window time.Duration) k
 		}
 		return json.Marshal(b)
 	}}
-}
-
-// newGeneration returns a random version 4 UUID in canonical form.
-func newGeneration() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:]) // never fails
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 // recentIDs remembers the last recentSize IDs added, forgetting the oldest first.

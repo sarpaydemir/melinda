@@ -14,7 +14,7 @@ import (
 )
 
 func newTestHealth(addr string, ping error, notReady ...string) *health {
-	return newHealth(addr, func(context.Context) error { return ping }, func() []string { return notReady },
+	return newHealth(addr, func(context.Context) error { return ping }, func() []string { return notReady }, false,
 		slog.New(slog.DiscardHandler))
 }
 
@@ -55,6 +55,14 @@ func TestReadyzReportsTheDatabaseAndEveryComponentThatIsNotReady(t *testing.T) {
 	}
 }
 
+func TestReadyzReportsShadowMode(t *testing.T) {
+	h := newHealth("", func(context.Context) error { return nil }, func() []string { return nil }, true, slog.New(slog.DiscardHandler))
+	code, _, body := get(t, h.srv.Handler, "/readyz")
+	if want := `{"ready":true,"failing":[],"shadow":true}`; code != http.StatusOK || body != want {
+		t.Errorf("GET /readyz = %d %s, want 200 %s", code, body, want)
+	}
+}
+
 func TestReadyzGivesUpOnADatabaseThatDoesNotAnswer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		hang := func(ctx context.Context) error {
@@ -62,7 +70,7 @@ func TestReadyzGivesUpOnADatabaseThatDoesNotAnswer(t *testing.T) {
 			return ctx.Err()
 		}
 		begin := time.Now()
-		code, _, body := get(t, newHealth("", hang, func() []string { return nil }, slog.New(slog.DiscardHandler)).srv.Handler, "/readyz")
+		code, _, body := get(t, newHealth("", hang, func() []string { return nil }, false, slog.New(slog.DiscardHandler)).srv.Handler, "/readyz")
 		if code != http.StatusServiceUnavailable || body != `{"ready":false,"failing":["database: context deadline exceeded"]}` {
 			t.Errorf("GET /readyz = %d %s", code, body)
 		}

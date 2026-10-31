@@ -2,12 +2,15 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/sarpaydemir/dost/internal/clock"
@@ -92,6 +95,16 @@ func run(ctx context.Context, env config.Env, version string, table adapters, cl
 		return err
 	}
 	log.Info("starting", "version", version, "agent", env.AgentID, "settings", env.SettingsSource(), "components", cfg.components)
+	if env.DryRun {
+		records, err := shadowLog(env.DryRunLog)
+		if err != nil {
+			return err
+		}
+		defer records.Close()
+		table = table.shadowed(&recorder{w: records, clk: clk})
+		log.Warn("shadow mode: chat posts and uploads and tool writes are recorded, not performed",
+			"records", cmp.Or(env.DryRunLog, "log output"))
+	}
 	s := cfg.settings.Current(ctx)
 	sel, err := table.choose(selection(s))
 	if err != nil {
@@ -113,7 +126,7 @@ func run(ctx context.Context, env config.Env, version string, table adapters, cl
 	lock := db.NewLock(env.AgentID, clk, log)
 	var components []Component
 	if env.HTTPAddr != "" {
-		components = append(components, newHealth(env.HTTPAddr, db.Ping, sup.NotReady, log.With(logging.KeyComponent, "http")))
+		components = append(components, newHealth(env.HTTPAddr, db.Ping, sup.NotReady, env.DryRun, log.With(logging.KeyComponent, "http")))
 	}
 	components = append(components, conversation(ctx, sup.WorkContext(), env, cfg, sel, db, store, identity, lock, clk, log)...)
 	err = sup.Run(ctx, components...)
@@ -160,6 +173,18 @@ func conversation(ctx, work context.Context, env config.Env, cfg startup, sel se
 	}
 	return out
 }
+
+// shadowLog opens the file that shadow-mode records are appended to, or the log output when path is empty.
+func shadowLog(path string) (io.WriteCloser, error) {
+	if path == "" {
+		return nopCloser{os.Stderr}, nil
+	}
+	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+}
+
+type nopCloser struct{ io.Writer }
+
+func (nopCloser) Close() error { return nil }
 
 func check(ctx context.Context, env config.Env, verifyDB bool, table adapters, clk clock.Clock, secrets *logging.Secrets, log *slog.Logger) (string, error) {
 	cfg, err := load(env, table, clk, secrets, log)

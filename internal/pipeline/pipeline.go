@@ -82,6 +82,7 @@ type Pipeline struct {
 // the author's facts, and queues the turn for learning. beforeWrite is called before each write to the chat
 // platform. Once posting the reply has started, cancelling ctx no longer stops the run.
 func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error {
+	ctx = routing.WithJob(ctx, j)
 	s := p.Settings.Current(ctx)
 	log := p.Log.With(logging.KeyConversation, j.Key, "post_ids", j.MessageIDs)
 	platform, err := p.Platform(s)

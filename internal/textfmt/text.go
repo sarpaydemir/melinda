@@ -1,6 +1,8 @@
 package textfmt
 
 import (
+	"crypto/rand"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -64,6 +66,15 @@ func IsUUID(s string) bool {
 	s = strings.ReplaceAll(strings.ReplaceAll(s, "urn:", ""), "uuid:", "")
 	s = strings.ReplaceAll(strings.Trim(s, "{}"), "-", "")
 	return len(s) == 32 && strings.Trim(s, "0123456789abcdefABCDEF") == ""
+}
+
+// NewUUID returns a random version 4 UUID in canonical form.
+func NewUUID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:]) // never fails
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#x27;")

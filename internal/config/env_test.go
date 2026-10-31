@@ -72,6 +72,7 @@ func TestLoadEnvReadsEveryVariable(t *testing.T) {
 		"DOST_PIPELINE_WORKERS=2",
 		"DOST_PIPELINE_RUN_TIMEOUT=10m",
 		"DOST_DRY_RUN=true",
+		"DOST_DRY_RUN_LOG=/var/log/dost/shadow.jsonl",
 	)
 	want := config.Env{
 		AgentID:            "sales_bot2",
@@ -94,6 +95,7 @@ func TestLoadEnvReadsEveryVariable(t *testing.T) {
 		PipelineWorkers:    2,
 		PipelineRunTimeout: 10 * time.Minute,
 		DryRun:             true,
+		DryRunLog:          "/var/log/dost/shadow.jsonl",
 	}
 	if env.Timezone == nil || env.Timezone.String() != "Europe/Istanbul" {
 		t.Errorf("Timezone = %v, want Europe/Istanbul", env.Timezone)

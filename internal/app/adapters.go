@@ -72,9 +72,12 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 			"httpfetch": {open: httpfetch.New},
 		},
 		tools: []toolSource{{
-			tools:   func(s *config.Settings, c *prompt.Catalog) []tool.Tool { return plane.Tools(s, c, transport, clk, log) },
-			prompts: plane.Prompts(),
-			secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}},
+			tools: func(s *config.Settings, c *prompt.Catalog, t http.RoundTripper) []tool.Tool {
+				return plane.Tools(s, c, t, clk, log)
+			},
+			transport: transport,
+			prompts:   plane.Prompts(),
+			secrets:   []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}},
 		}},
 		handlers: map[string]handler{
 			"brand_analysis": {run: brand.Analyze, prompts: brand.Prompts()},
@@ -91,7 +94,8 @@ type entry[T any] struct {
 // platformAdapter is a chat platform with the tools it contributes, which are offered only on that platform, and
 // the catalog entries of those tools' texts.
 type platformAdapter struct {
-	open    func(*config.Settings) (chat.Platform, error)
+	open func(*config.Settings) (chat.Platform, error)
+	// tools must only read: shadow mode does not wrap their requests.
 	tools   func(*config.Settings, *prompt.Catalog) []tool.Tool
 	prompts []prompt.Entry
 	secrets []config.SecretKey
@@ -103,11 +107,13 @@ type handler struct {
 	prompts []prompt.Entry
 }
 
-// toolSource contributes tools on every platform, and the catalog entries of their texts.
+// toolSource contributes tools on every platform, and the catalog entries of their texts. The tools send their
+// requests through transport.
 type toolSource struct {
-	tools   func(*config.Settings, *prompt.Catalog) []tool.Tool
-	prompts []prompt.Entry
-	secrets []config.SecretKey
+	tools     func(s *config.Settings, c *prompt.Catalog, transport http.RoundTripper) []tool.Tool
+	transport http.RoundTripper
+	prompts   []prompt.Entry
+	secrets   []config.SecretKey
 }
 
 // prompts are the built-in catalog entries followed by those of every registered adapter, selected or not, since
@@ -192,7 +198,9 @@ func (a adapters) choose(n names) (selected, error) {
 	}
 	for _, src := range a.tools {
 		if src.tools != nil {
-			s.tools = append(s.tools, src.tools)
+			s.tools = append(s.tools, func(st *config.Settings, c *prompt.Catalog) []tool.Tool {
+				return src.tools(st, c, src.transport)
+			})
 		}
 	}
 	return s, errors.Join(errPlatform, errModel, errSearch, errFetch)

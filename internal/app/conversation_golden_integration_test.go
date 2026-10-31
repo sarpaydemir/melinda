@@ -51,7 +51,10 @@ type scenario struct {
 	replies  []testkit.Response
 	unsorted bool             // runs answer concurrently: requests and posts are compared as sorted lists
 	seed     func(h *harness) // writes rows before the agent starts
-	play     func(h *harness)
+	// setup, when set, adjusts the settings document and the adapters before the agent starts, and returns extra
+	// environment entries.
+	setup func(h *harness, doc map[string]json.RawMessage, table *adapters) []string
+	play  func(h *harness)
 }
 
 func TestConversationGoldens(t *testing.T) { assertGoldens(t, "conversation", scenarios) }
@@ -289,9 +292,16 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 	}
 	maps.Copy(doc, settings)
 	h.doc = doc
+	secrets := new(logging.Secrets)
+	log := logging.New(h.logs, slog.LevelDebug, false, secrets)
+	table := builtin(http.DefaultTransport, h.clock, "dost/test", "http://searxng.invalid", log)
+	var environ []string
+	if sc.setup != nil {
+		environ = sc.setup(h, doc, &table)
+	}
 	settingsJSON, _ := json.Marshal(doc)
-	environ := []string{"DOST_DATABASE_URL=" + dsn, "DOST_HTTP_ADDR=", "DOST_TIMEZONE=+03:00",
-		"DOST_SETTINGS_JSON=" + string(settingsJSON)}
+	environ = append(environ, "DOST_DATABASE_URL="+dsn, "DOST_HTTP_ADDR=", "DOST_TIMEZONE=+03:00",
+		"DOST_SETTINGS_JSON="+string(settingsJSON))
 	if prompts != "" {
 		environ = append(environ, "DOST_PROMPTS_DIR="+prompts)
 	}
@@ -306,9 +316,6 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 		sc.seed(h)
 	}
 
-	secrets := new(logging.Secrets)
-	log := logging.New(h.logs, slog.LevelDebug, false, secrets)
-	table := builtin(http.DefaultTransport, h.clock, "dost/test", "http://searxng.invalid", log)
 	ctx, stop := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- run(ctx, env, "test", table, h.clock, secrets, log) }()

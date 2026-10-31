@@ -18,14 +18,15 @@ type health struct {
 	addr     string
 	ping     func(context.Context) error
 	notReady func() []string
+	shadow   bool
 	srv      *http.Server
 	ln       net.Listener
 }
 
-// newHealth returns the component serving on addr. ping checks the database and notReady lists the components that
-// are not ready; log receives the server's own errors.
-func newHealth(addr string, ping func(context.Context) error, notReady func() []string, log *slog.Logger) *health {
-	h := &health{addr: addr, ping: ping, notReady: notReady}
+// newHealth returns the component serving on addr. ping checks the database, notReady lists the components that
+// are not ready, and shadow reports shadow mode; log receives the server's own errors.
+func newHealth(addr string, ping func(context.Context) error, notReady func() []string, shadow bool, log *slog.Logger) *health {
+	h := &health{addr: addr, ping: ping, notReady: notReady, shadow: shadow}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") })
 	mux.HandleFunc("GET /readyz", h.ready)
@@ -75,7 +76,8 @@ func (h *health) ready(w http.ResponseWriter, r *http.Request) {
 	body, _ := json.Marshal(struct {
 		Ready   bool     `json:"ready"`
 		Failing []string `json:"failing"`
-	}{len(failing) == 0, failing}) // a struct of a bool and strings always marshals
+		Shadow  bool     `json:"shadow,omitempty"`
+	}{len(failing) == 0, failing, h.shadow}) // a struct of a bool and strings always marshals
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
