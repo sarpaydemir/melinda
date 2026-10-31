@@ -112,7 +112,7 @@ func search(t *testing.T, s *Store, collection string, vec []float32, filter map
 func documents(hits []Hit) []string {
 	out := make([]string, len(hits))
 	for i, h := range hits {
-		out[i] = h.Document
+		out[i] = *h.Document
 	}
 	return out
 }
@@ -300,8 +300,30 @@ func TestSearchFiltersByMetadataWithinTheCollection(t *testing.T) {
 		}
 	}
 	for _, h := range search(t, s, "kb", fill(1), nil, 10) {
-		if h.Document == "no metadata" && h.Metadata != nil {
+		if *h.Document == "no metadata" && h.Metadata != nil {
 			t.Errorf("NULL metadata read as %s; want nil", h.Metadata)
+		}
+	}
+}
+
+func TestSearchReturnsRowsWithoutADocument(t *testing.T) {
+	s, conn := open(t)
+	add(t, s, "kb", Doc{Document: "", Embedding: fill(1)})
+	execSQL(t, conn, `
+		INSERT INTO langchain_pg_embedding (id, collection_id, embedding, document, cmetadata)
+		SELECT 'no-document', uuid, $1, NULL, '{}' FROM langchain_pg_collection WHERE name = 'kb'`,
+		vectorText(fill(1)))
+
+	hits := search(t, s, "kb", fill(1), nil, 10)
+	if len(hits) != 2 {
+		t.Fatalf("%d hits; want 2", len(hits))
+	}
+	for _, h := range hits {
+		switch {
+		case h.ID == "no-document" && h.Document != nil:
+			t.Errorf("NULL document read as %q; want nil", *h.Document)
+		case h.ID != "no-document" && (h.Document == nil || *h.Document != ""):
+			t.Errorf("empty document read as %v; want a pointer to an empty string", h.Document)
 		}
 	}
 }
@@ -326,7 +348,7 @@ func TestSearchRanksByCosineDistanceWithZeroVectorsLast(t *testing.T) {
 	}
 	for _, h := range hits[:4] {
 		if !(h.Distance >= 0) {
-			t.Errorf("%s: distance %v; want a non-negative number", h.Document, h.Distance)
+			t.Errorf("%s: distance %v; want a non-negative number", *h.Document, h.Distance)
 		}
 	}
 	if d := hits[0].Distance; d != 0 {
@@ -344,7 +366,7 @@ func TestSearchRanksByCosineDistanceWithZeroVectorsLast(t *testing.T) {
 	}
 	for _, h := range search(t, s, "kb", fill(0), nil, 10) {
 		if !math.IsNaN(h.Distance) {
-			t.Errorf("zero query vector, %s: distance %v; want NaN", h.Document, h.Distance)
+			t.Errorf("zero query vector, %s: distance %v; want NaN", *h.Document, h.Distance)
 		}
 	}
 }
@@ -425,7 +447,7 @@ func TestJSONMetadataColumnWithoutIndexes(t *testing.T) {
 	)
 
 	hits := search(t, s, "kb", fill(1), map[string]string{"type": "public_kb"}, 10)
-	if len(hits) != 1 || hits[0].Document != "knowledge" || string(hits[0].Metadata) != kb {
+	if len(hits) != 1 || *hits[0].Document != "knowledge" || string(hits[0].Metadata) != kb {
 		t.Errorf("hits %+v; want knowledge with metadata %s", hits, kb)
 	}
 	if n, err := s.Delete(t.Context(), "kb", map[string]string{"type": "user_fact"}); err != nil || n != 1 {

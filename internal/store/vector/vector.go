@@ -34,7 +34,7 @@ type Doc struct {
 // Hit is one search result.
 type Hit struct {
 	ID       string
-	Document string
+	Document *string         // nil when the row has none
 	Metadata json.RawMessage // nil when the row has none
 	Distance float64         // cosine distance; NaN for a zero vector
 }

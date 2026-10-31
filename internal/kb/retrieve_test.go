@@ -92,7 +92,7 @@ func retriever(s *config.Settings, p *provider, st *store, log *slog.Logger) Ret
 }
 
 func hit(doc, metadata string, distance float64) vector.Hit {
-	return vector.Hit{ID: doc, Document: doc, Metadata: json.RawMessage(metadata), Distance: distance}
+	return vector.Hit{ID: doc, Document: &doc, Metadata: json.RawMessage(metadata), Distance: distance}
 }
 
 func TestPreloadShowsTheBestRankedEntriesForTheGeneratedQuery(t *testing.T) {
@@ -135,6 +135,20 @@ func TestPreloadShowsTheBestRankedEntriesForTheGeneratedQuery(t *testing.T) {
 				t.Errorf("searches = %+v, want %+v", st.searches, wantSearch)
 			}
 		})
+	}
+}
+
+func TestPreloadShowsAnEntryWithoutADocumentAsNone(t *testing.T) {
+	p := &provider{answer: `{"query": "release notes"}`, vector: queryVector()}
+	st := &store{hits: []vector.Hit{
+		hit("first entry", `{"type": "public_kb"}`, 0.1),
+		{ID: "no document", Metadata: json.RawMessage(`{"type": "public_kb"}`), Distance: 0.1},
+		hit("", `{"type": "public_kb"}`, 0.1),
+	}}
+
+	got := retriever(settings(), p, st, discard).Preload(context.Background(), "message")
+	if want := "- first entry\n- None\n- "; got != want {
+		t.Errorf("Preload = %q, want %q", got, want)
 	}
 }
 
@@ -271,7 +285,7 @@ func TestRerankPrefersRecentEntriesAmongNearEqualMatches(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var got []string
 			for _, h := range rerank(c.hits, now, c.limit) {
-				got = append(got, h.Document)
+				got = append(got, *h.Document)
 			}
 			if !reflect.DeepEqual(got, c.want) {
 				t.Errorf("rerank = %q, want %q", got, c.want)

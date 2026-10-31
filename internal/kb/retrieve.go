@@ -79,7 +79,11 @@ func (r Retriever) Preload(ctx context.Context, text string) string {
 	}
 	var lines []string
 	for _, h := range rerank(hits, r.Clock.Now(), preloadEntries) {
-		lines = append(lines, "- "+h.Document)
+		doc := textfmt.Str(nil) // an entry without a document shows as None
+		if h.Document != nil {
+			doc = *h.Document
+		}
+		lines = append(lines, "- "+doc)
 	}
 	return strings.Join(lines, "\n")
 }
