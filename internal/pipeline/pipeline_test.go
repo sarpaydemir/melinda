@@ -182,6 +182,11 @@ func (h *historyFake) AddTurn(ctx context.Context, key, user, assistant string, 
 	return len(h.items[key]), nil
 }
 
+// Scoped serves the last n turns under key; the fake keeps no scopes.
+func (h *historyFake) Scoped(ctx context.Context, key, _ string, n int) ([]json.RawMessage, error) {
+	return h.Get(ctx, key, n)
+}
+
 // user returns the user text of the turns under key.
 func (h *historyFake) user(key string) []string {
 	h.mu.Lock()
@@ -362,6 +367,45 @@ func TestCombinedTextIsAnsweredWithTheSystemPromptAndHistory(t *testing.T) {
 	}
 	if !strings.Contains(reply, "level=DEBUG") || !strings.Contains(reply, "reply=ok") {
 		t.Errorf("model reply log = %q, want the reply at debug", reply)
+	}
+}
+
+func TestFactsAreExtractedAfterEveryFifthTurnUnderTheAuthorsKey(t *testing.T) {
+	earlier := json.RawMessage(`{"user": "u1: earlier", "assistant": "before"}`)
+	cases := []struct {
+		name         string
+		user, thread int // turns stored before the run under the author's key and under the thread's
+		extracts     bool
+	}{
+		{"author's fifth turn", 4, 0, true},
+		{"thread's fifth turn", 3, 4, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			f.settings.s = &config.Settings{Model: "chat-model", FactModel: "fact-model", EmbeddingModel: "embed-model"}
+			f.history.items["u1"] = slices.Repeat([]json.RawMessage{earlier}, tc.user)
+			f.history.items["thread:p3"] = slices.Repeat([]json.RawMessage{earlier}, tc.thread)
+			f.model.answers = []string{"NULL", "Hello!", "NULL"} // knowledge query, reply, facts
+
+			f.answer(t, job("k", chat.Message{ID: "p3", ConversationID: "c1", AuthorID: "u1", Text: "@helper hi", Kind: chat.Public}))
+
+			var asked []string
+			for _, r := range f.model.received() {
+				if r.Model == "fact-model" && r.Messages[0].Content == f.catalog.Text("memory.facts") {
+					asked = append(asked, r.Messages[1].Content)
+				}
+			}
+			if !tc.extracts {
+				if len(asked) != 0 {
+					t.Errorf("facts extracted from %q, want no extraction", asked)
+				}
+				return
+			}
+			if len(asked) != 1 || !strings.HasSuffix(asked[0], "User: u1: @helper hi\nAssistant: Hello!") {
+				t.Errorf("facts extracted from %q, want one extraction ending with the saved turn", asked)
+			}
+		})
 	}
 }
 

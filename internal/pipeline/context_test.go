@@ -55,6 +55,17 @@ func (k *knowledge) Preload(_ context.Context, text string) string {
 	return k.text
 }
 
+// facts answers every recall with the same text and records the messages it was asked about.
+type facts struct {
+	text string
+	got  []chat.Message
+}
+
+func (f *facts) Recall(_ context.Context, m chat.Message) string {
+	f.got = append(f.got, m)
+	return f.text
+}
+
 type historyReader interface {
 	Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 }
@@ -71,8 +82,8 @@ func (a *attachments) Describe(_ context.Context, m chat.Message) (string, strin
 }
 
 func loader(h historyReader, u *users, log *slog.Logger) pipeline.Loader {
-	return pipeline.Loader{History: h, Users: u, Knowledge: &knowledge{}, Files: &attachments{}, UserPrefix: userPrefix,
-		Log: log}
+	return pipeline.Loader{History: h, Users: u, Facts: &facts{}, Knowledge: &knowledge{}, Files: &attachments{},
+		UserPrefix: userPrefix, Log: log}
 }
 
 var discard = slog.New(slog.DiscardHandler)
@@ -166,6 +177,20 @@ func TestLoadReadsTheConversationHistory(t *testing.T) {
 				t.Errorf("Load = %+v\nwant %+v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestLoadAddsTheAuthorsFactsForTheMessage(t *testing.T) {
+	f := &facts{text: "Works on billing.\nPrefers short answers."}
+	l := loader(history{}, &users{}, discard)
+	l.Facts = f
+	msg := chat.Message{ID: "p1", AuthorID: "u1", Kind: chat.Public, Text: "u1: who handles invoices?"}
+	got, err := l.Load(context.Background(), msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LongTermMemory != f.text || !reflect.DeepEqual(f.got, []chat.Message{msg}) {
+		t.Errorf("LongTermMemory = %q after recalling for %+v; want %q for the message", got.LongTermMemory, f.got, f.text)
 	}
 }
 

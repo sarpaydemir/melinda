@@ -132,10 +132,11 @@ func conversation(ctx, work context.Context, env config.Env, cfg startup, sel se
 	s := cfg.settings.Current(ctx)
 	named := func(name string) *slog.Logger { return log.With(logging.KeyComponent, name) }
 	runs := journal.New(db, env.AgentID, clk)
+	vectors := vector.New(db)
 	pipe := &pipeline.Pipeline{
 		Settings: cfg.settings, Platform: sel.platform, Model: sel.model, Identity: identity,
 		History:   memory.NewHistory(history.New(db, clk), clk, s.MemoryKeyPrefix),
-		Knowledge: vector.New(db), Prompts: cfg.prompts, Zone: env.Timezone, Clock: clk, Log: named("pipeline"),
+		Knowledge: vectors, Facts: vectors, Prompts: cfg.prompts, Zone: env.Timezone, Clock: clk, Log: named("pipeline"),
 	}
 	scheduler := pipeline.NewScheduler(ctx, work, pipe.Answer, runs, env.PipelineWorkers, env.PipelineRunTimeout, clk, named("pipeline"))
 	flusher := dispatch.NewFlusher(s.BufferPrefix, store, runs, lock, scheduler, clk, named("flusher"))

@@ -22,14 +22,18 @@ const (
 	debugClip = 4000
 )
 
-// Loader loads a message's context from the conversation history, the shared knowledge, the author's profile, and
-// the attachments. Every field is required.
+// Loader loads a message's context from the conversation history, the author's facts, the shared knowledge, the
+// author's profile, and the attachments. Every field is required.
 type Loader struct {
 	History interface {
 		Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 	}
 	Users interface {
 		User(ctx context.Context, id string) (chat.User, error)
+	}
+	// Facts recalls the facts about a message's author relevant to the message.
+	Facts interface {
+		Recall(ctx context.Context, m chat.Message) string
 	}
 	// Knowledge finds the shared knowledge relevant to a message's text.
 	Knowledge interface {
@@ -44,8 +48,9 @@ type Loader struct {
 	Log        *slog.Logger
 }
 
-// Load returns the context for m: the newest items of the history its conversation reads, the shared knowledge
-// relevant to its text, its author, and its attachments. It fails only when the history cannot be read.
+// Load returns the context for m: the newest items of the history its conversation reads, its author's facts and
+// the shared knowledge relevant to it, its author, and its attachments. It fails only when the history cannot be
+// read.
 func (l Loader) Load(ctx context.Context, m chat.Message) (prompt.Context, error) {
 	read, write := memory.HistoryKeys(m.AuthorID, routing.ContextID(m), m.Kind == chat.Direct)
 	items, err := l.History.Get(ctx, read, historyWindow)
@@ -53,6 +58,7 @@ func (l Loader) Load(ctx context.Context, m chat.Message) (prompt.Context, error
 		return prompt.Context{}, fmt.Errorf("read history %s: %w", read, err)
 	}
 	c := prompt.Context{History: items, UserID: m.AuthorID}
+	c.LongTermMemory = l.Facts.Recall(ctx, m)
 	c.Knowledge = l.Knowledge.Preload(ctx, m.Text)
 	c.UserContext = l.userContext(ctx, m.AuthorID)
 	c.FileContext, c.FileSummary = l.Files.Describe(ctx, m)

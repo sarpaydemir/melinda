@@ -39,10 +39,16 @@ type Pipeline struct {
 	History  interface {
 		Get(ctx context.Context, key string, n int) ([]json.RawMessage, error)
 		AddTurn(ctx context.Context, key, user, assistant string, metadata map[string]any) (int, error)
+		Scoped(ctx context.Context, key, scope string, n int) ([]json.RawMessage, error)
 	}
 	// Knowledge holds the shared knowledge entries.
 	Knowledge interface {
 		Search(ctx context.Context, collection string, vec []float32, filter map[string]string, limit int) ([]vector.Hit, error)
+	}
+	// Facts holds the facts about each user.
+	Facts interface {
+		Search(ctx context.Context, collection string, vec []float32, filter map[string]string, limit int) ([]vector.Hit, error)
+		Add(ctx context.Context, collection string, docs []vector.Doc) error
 	}
 	// Prompts is the catalog that each run's settings override.
 	Prompts *prompt.Catalog
@@ -53,7 +59,8 @@ type Pipeline struct {
 }
 
 // Answer answers j with one settings snapshot: it decodes the first buffered message with the combined text and
-// attachments, applies the gate again, loads the context, generates the reply, posts it, and saves the turn.
+// attachments, applies the gate again, loads the context, generates the reply, posts it, saves the turn, and
+// extracts the author's facts.
 // beforeWrite is called before each write to the chat platform. Once posting has started, cancelling ctx no
 // longer stops the run.
 func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(context.Context) error) error {
@@ -93,7 +100,9 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 		return fmt.Errorf("open model provider: %w", err)
 	}
 	client := llm.Client{Provider: provider, Failure: cat.Text("error.generic"), CutOffNote: cat.Text("reply.truncated_note"), Log: log}
-	c, err := p.loader(s, cat, platform, provider, client, log).Load(ctx, m)
+	facts := memory.Facts{Settings: s, Model: client, Embedder: provider, Store: p.Facts, History: p.History,
+		Prompt: cat.Text("memory.facts"), Log: log}
+	c, err := p.loader(s, cat, platform, provider, client, facts, log).Load(ctx, m)
 	if err != nil {
 		return fmt.Errorf("load context: %w", err)
 	}
@@ -107,18 +116,21 @@ func (p *Pipeline) Answer(ctx context.Context, j routing.Job, beforeWrite func(c
 	if err := send(ctx, out, chat.Outgoing{ConversationID: m.ConversationID, ThreadID: routing.ReplyThread(m), Text: reply}, log); err != nil {
 		return fmt.Errorf("post reply: %w", err)
 	}
-	if err := p.save(ctx, cat, m, c, reply); err != nil {
+	count, err := p.save(ctx, cat, m, c, reply)
+	if err != nil {
 		return fmt.Errorf("save turn: %w", err)
 	}
+	facts.Extract(ctx, m, reply, count)
 	return nil
 }
 
-// loader loads a message's context with the run's snapshot, catalog, platform, and model.
+// loader loads a message's context with the run's snapshot, catalog, platform, model, and facts.
 func (p *Pipeline) loader(s *config.Settings, cat *prompt.Catalog, platform chat.Platform, provider model.Provider,
-	client llm.Client, log *slog.Logger) Loader {
+	client llm.Client, facts memory.Facts, log *slog.Logger) Loader {
 	return Loader{
 		History: p.History,
 		Users:   platform,
+		Facts:   facts,
 		Knowledge: kb.Retriever{Settings: s, Model: client, Embedder: provider, Store: p.Knowledge,
 			QueryPrompt: cat.Text("kb.query"), Clock: p.Clock, Log: log},
 		Files:      files.Describer{Platform: platform, Settings: s, Catalog: cat, Model: client, Log: log},
@@ -140,8 +152,9 @@ func (p *Pipeline) generate(ctx context.Context, s *config.Settings, cat *prompt
 }
 
 // save appends the turn to every history m's conversation writes to, the author's first. The user text is the
-// combined message, then the attachment summary and the clipped file context when there are any.
-func (p *Pipeline) save(ctx context.Context, cat *prompt.Catalog, m chat.Message, c prompt.Context, reply string) error {
+// combined message, then the attachment summary and the clipped file context when there are any. It returns the
+// message count of the author's turn.
+func (p *Pipeline) save(ctx context.Context, cat *prompt.Catalog, m chat.Message, c prompt.Context, reply string) (int, error) {
 	contextID, direct := routing.ContextID(m), m.Kind == chat.Direct
 	metadata := map[string]any{"scope": routing.Scope(m), "context_id": contextID, "user_id": m.AuthorID, "is_dm": direct}
 	if m.ThreadID != "" {
@@ -155,12 +168,17 @@ func (p *Pipeline) save(ctx context.Context, cat *prompt.Catalog, m chat.Message
 		user += cat.Text("memory.file_analysis_marker") + textfmt.Clip(c.FileContext, fileMemoryLimit)
 	}
 	_, keys := memory.HistoryKeys(m.AuthorID, contextID, direct)
+	var count int
 	for _, key := range keys {
-		if _, err := p.History.AddTurn(ctx, key, user, reply, metadata); err != nil {
-			return fmt.Errorf("%s: %w", key, err)
+		n, err := p.History.AddTurn(ctx, key, user, reply, metadata)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", key, err)
+		}
+		if key == m.AuthorID {
+			count = n
 		}
 	}
-	return nil
+	return count, nil
 }
 
 // outbound is a run's path to the chat platform: each write is preceded by beforeWrite.
