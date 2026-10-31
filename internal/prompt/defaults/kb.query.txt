@@ -1,0 +1,2 @@
+Turn the user's message into a short query for searching the team's shared knowledge. Build it from the names it contains: projects, products, companies, teams, processes, or subjects. User IDs, greetings, and filler words do not belong in it. Return NULL instead when the message is small talk, purely personal, or asks what is known about the user.
+Return JSON like {"query": "..."}, or NULL.

@@ -1,0 +1,1 @@
+Tool use failed ({reason}). Reply without tools, relying on the conversation and on any tool results shown earlier, and never present information you could not retrieve as if you had it.

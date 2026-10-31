@@ -1,0 +1,7 @@
+
+
+### CURRENT USER
+User ID: {user_id}
+Administrator: {is_admin}
+
+{security}

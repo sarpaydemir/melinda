@@ -177,7 +177,7 @@ func TestNullKeysTakeDefaults(t *testing.T) {
 		"model_provider": null, "web_search": null, "web_fetch": null, "debounce_seconds": null,
 		"buffer_prefix": null, "last_seen_key": null, "bot_identity_key": null, "memory_key_prefix": null,
 		"kb_batch_key": null, "facts_collection": null, "kb_collection": null, "assistant_label": null,
-		"file_max_count": null, "file_max_bytes": null
+		"file_max_count": null, "file_max_bytes": null, "prompts": null
 	}`)
 	if got, want := core(s), defaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
@@ -189,7 +189,7 @@ func TestFalsyValuesAreKept(t *testing.T) {
 		"model": "m", "fact_model": "", "temperature": 0, "tool_call_temperature": 0.0, "max_tokens": 0,
 		"public_kb_max_tokens": 0, "tool_final_max_tokens": 0, "max_tool_iterations": 0, "max_tool_calls": 0,
 		"persona": "", "name_excluded_channels": [], "enabled_tools": [], "chat_platform": "",
-		"debounce_seconds": 0, "buffer_prefix": "", "assistant_label": ""
+		"debounce_seconds": 0, "buffer_prefix": "", "assistant_label": "", "prompts": {}
 	}`)
 	want := defaults()
 	want.Temperature, want.ToolCallTemperature = "0", "0.0"
@@ -201,6 +201,7 @@ func TestFalsyValuesAreKept(t *testing.T) {
 	want.DebounceSeconds = 0
 	want.BufferPrefix = ""
 	want.AssistantLabel = ""
+	want.Prompts = map[string]string{}
 	if got := core(s); !reflect.DeepEqual(got, want) {
 		t.Errorf("\n got %+v\nwant %+v", got, want)
 	}
@@ -256,6 +257,13 @@ func TestAttachmentLimitsAreSettings(t *testing.T) {
 	s := settings(t, `{"model": "m", "file_max_count": 2, "file_max_bytes": 1000}`)
 	if s.FileMaxCount != 2 || s.FileMaxBytes != 1000 {
 		t.Errorf("got %d files of %d bytes, want 2 of 1000", s.FileMaxCount, s.FileMaxBytes)
+	}
+}
+
+func TestPromptOverridesAreSettings(t *testing.T) {
+	s := settings(t, `{"model": "m", "prompts": {"error.generic": "Sorry.\n", "kb.query": "{\"query\"}"}}`)
+	if want := map[string]string{"error.generic": "Sorry.\n", "kb.query": `{"query"}`}; !reflect.DeepEqual(s.Prompts, want) {
+		t.Errorf("prompts %q, want %q", s.Prompts, want)
 	}
 }
 
@@ -411,6 +419,9 @@ func TestWrongTypesNameTheKeyAndExpectedType(t *testing.T) {
 		{`"file_max_count": 0`, "file_max_count: must be positive"},
 		{`"file_max_bytes": 1.5`, "file_max_bytes: expected integer"},
 		{`"file_max_bytes": -1`, "file_max_bytes: must be positive"},
+		{`"prompts": ["x"]`, "prompts: expected object of strings"},
+		{`"prompts": {"error.generic": 1}`, "prompts: expected object of strings"},
+		{`"prompts": {"error.generic": null}`, "prompts: expected object of strings"},
 	} {
 		got := settingsErr(t, `{"model": "m", `+tc.entry+`}`)
 		if want := "invalid settings:\ncore: " + tc.want; got != want {

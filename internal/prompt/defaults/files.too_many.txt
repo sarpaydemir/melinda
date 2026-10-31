@@ -1,0 +1,1 @@
+[{count} more files]: not processed; a message can carry only a limited number of files.

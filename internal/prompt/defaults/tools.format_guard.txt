@@ -1,0 +1,1 @@
+Tool requests must go through the function-calling API as structured calls. A tool call written into your reply as text, markdown, or code is never executed. If a tool can do what the user wants, make the call rather than describing it or checking with the user first.

@@ -1,0 +1,23 @@
+{base_prompt}
+
+### PERSONA
+{persona}
+
+### TOOLS
+{tool_instructions}
+
+### USER
+{user_context}
+
+### CONTEXT
+Shared knowledge (retrieved for this message; ignore entries that do not apply):
+{public_knowledge}
+
+Memory about this user (a retrieved subset, not everything that is stored):
+{long_term_memory}
+
+Attached files:
+{file_context}
+
+### CURRENT TIME
+{now}

@@ -1,0 +1,2 @@
+Read the conversation and pick out what is worth knowing about this user in future chats: things they told you about themselves or their work, what they prefer, what they decided, and anything they explicitly want kept. Pleasantries and error output are not worth keeping.
+Return a JSON array like [{"fact": "..."}], one object per item, or NULL if there is nothing.

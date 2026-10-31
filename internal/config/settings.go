@@ -63,6 +63,9 @@ type Settings struct {
 	FileMaxCount int   `json:"file_max_count"`
 	FileMaxBytes int64 `json:"file_max_bytes"`
 
+	// Prompts replaces the texts of prompt catalog entries, by ID.
+	Prompts map[string]string `json:"prompts"`
+
 	agentID string
 	secrets []SecretKey
 	doc     map[string]json.RawMessage
@@ -198,6 +201,11 @@ func build(doc map[string]json.RawMessage, agentID string, secrets []SecretKey) 
 	if s.FileMaxBytes < 1 {
 		problems = append(problems, errors.New("file_max_bytes: must be positive"))
 	}
+	// A null entry would otherwise decode as empty text.
+	var prompts map[string]*string
+	if json.Unmarshal(doc["prompts"], &prompts) == nil && slices.Contains(slices.Collect(maps.Values(prompts)), nil) {
+		problems = append(problems, errors.New("prompts: expected object of strings"))
+	}
 	if raw, ok := doc["admin_ids"]; ok {
 		ids, err := adminIDs(raw)
 		if err != nil {
@@ -299,6 +307,8 @@ func jsonType(t reflect.Type) string {
 		return "integer"
 	case k == reflect.Slice:
 		return "list of " + jsonType(t.Elem()) + "s"
+	case k == reflect.Map:
+		return "object of " + jsonType(t.Elem()) + "s"
 	}
 	return "object"
 }

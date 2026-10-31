@@ -1,0 +1,4 @@
+Another assistant will reply to the user's message below and needs to know what the attached file holds. Write a short plain-text account of its contents for that assistant; it is not a reply to the user. Stick to what is actually in the file and point out anything you cannot make out.
+
+User's message: {user_message}
+File: {file_list}

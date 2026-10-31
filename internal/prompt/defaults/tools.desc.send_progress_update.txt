@@ -1,0 +1,1 @@
+Tell the user how a longer task is going with a brief status message, posted right away in this conversation. Your answer at the end is delivered on its own, and only a few updates are allowed per request.

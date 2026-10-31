@@ -1,0 +1,1 @@
+Your last tool call was malformed. To call a tool, return a valid structured tool call; never write tool calls as text.

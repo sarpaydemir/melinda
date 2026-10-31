@@ -1,0 +1,1 @@
+Read the text of a web page, such as a link the user shared or a search result.

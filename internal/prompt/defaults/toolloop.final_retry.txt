@@ -1,0 +1,1 @@
+Now write your reply to the user based on what the tools returned above, in the user's language. Make no further tool calls and ask no follow-up questions.

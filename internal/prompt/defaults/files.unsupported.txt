@@ -1,0 +1,1 @@
+[{filename}]: {kind} files cannot be analysed.

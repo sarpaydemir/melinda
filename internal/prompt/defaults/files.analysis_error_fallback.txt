@@ -1,0 +1,4 @@
+The file could not be analysed: {error}
+
+Text extracted from the document:
+{text}
