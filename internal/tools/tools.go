@@ -43,6 +43,16 @@ func Offer(call tool.Call, enabled []string, b Builtin, contributed []tool.Tool)
 	return Set{offered, call, b.Log}, errors.Join(errs...)
 }
 
+// FileIDs are the files the tools uploaded for the reply, in upload order; the reply carries them.
+func (s Set) FileIDs() []string {
+	for _, t := range s.offered {
+		if g, ok := t.(*generateImage); ok {
+			return g.uploaded()
+		}
+	}
+	return nil
+}
+
 // Specs are the offered tools as the model is offered them, each described by its catalog entry
 // tools.desc.<name>.
 func (s Set) Specs(c *prompt.Catalog) []model.ToolSpec {

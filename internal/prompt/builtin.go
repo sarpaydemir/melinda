@@ -67,6 +67,7 @@ func Builtin() []Entry {
 		{ID: "tool.image.attached", Kind: KindRaw},
 		{ID: "tool.image.upload_failed", Kind: KindRaw},
 		{ID: "tool.image.failed", Kind: KindFormat, Placeholders: []string{"detail"}},
+		{ID: "tool.image.unknown_error", Kind: KindRaw},
 	}
 	for i, e := range entries {
 		b, err := defaults.ReadFile("defaults/" + e.ID + ".txt")

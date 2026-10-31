@@ -23,6 +23,13 @@ type request struct {
 	ParallelToolCalls *bool       `json:"parallel_tool_calls,omitempty"`
 }
 
+type imageRequest struct {
+	Model      string    `json:"model"`
+	Messages   []message `json:"messages"`
+	Modalities []string  `json:"modalities"`
+	MaxTokens  int       `json:"max_tokens"`
+}
+
 type embeddingRequest struct {
 	Model string `json:"model"`
 	Input string `json:"input"`

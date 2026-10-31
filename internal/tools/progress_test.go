@@ -15,12 +15,19 @@ import (
 	"github.com/sarpaydemir/dost/internal/tools"
 )
 
-// outbound records every message sent through it and answers each send with the next of replies, then with a
-// message ID.
+// outbound records every message sent and file uploaded through it. It answers each send with the next of replies,
+// then with a message ID, and each upload with the next of uploadReplies, then with a file ID.
 type outbound struct {
-	mu      sync.Mutex
-	sent    []chat.Outgoing
-	replies []reply
+	mu            sync.Mutex
+	sent          []chat.Outgoing
+	replies       []reply
+	uploads       []upload
+	uploadReplies []reply
+}
+
+type upload struct {
+	conversation string
+	file         chat.File
 }
 
 type reply struct {
@@ -37,6 +44,18 @@ func (o *outbound) Send(_ context.Context, m chat.Outgoing) (string, error) {
 	}
 	r := o.replies[0]
 	o.replies = o.replies[1:]
+	return r.id, r.err
+}
+
+func (o *outbound) Upload(_ context.Context, conversationID string, f chat.File) (string, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.uploads = append(o.uploads, upload{conversationID, f})
+	if len(o.uploadReplies) == 0 {
+		return "file", nil
+	}
+	r := o.uploadReplies[0]
+	o.uploadReplies = o.uploadReplies[1:]
 	return r.id, r.err
 }
 

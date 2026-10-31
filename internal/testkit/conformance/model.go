@@ -3,6 +3,7 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"slices"
@@ -23,6 +24,8 @@ type ModelHarness struct {
 	ToolCall func(id, name, arguments string)
 	// Embedding makes the API answer the next embeddings request with vector.
 	Embedding func(vector []float32)
+	// Image makes the API answer the next image request with an image of mediaType, image/png or image/jpeg.
+	Image func(mediaType string, data []byte)
 	// Fail makes the API fail every later request.
 	Fail func()
 	// Hang makes the API hold back its answer to every later request until the client gives up.
@@ -41,6 +44,10 @@ func Model(t *testing.T, harness func(t *testing.T) ModelHarness) {
 		{"chat", func(ctx context.Context, p model.Provider) error { _, err := p.Chat(ctx, ask); return err }},
 		{"embed", func(ctx context.Context, p model.Provider) error {
 			_, err := p.Embed(ctx, "e", user.Content)
+			return err
+		}},
+		{"image", func(ctx context.Context, p model.Provider) error {
+			_, err := p.Image(ctx, "i", "A sunny street in Paris")
 			return err
 		}},
 	}
@@ -109,6 +116,20 @@ func Model(t *testing.T, harness func(t *testing.T) ModelHarness) {
 		got, err := h.Provider.Embed(context.Background(), "e", user.Content)
 		if err != nil || !slices.Equal(got, want) {
 			t.Errorf("got %v, %v; want %v", got, err, want)
+		}
+	})
+
+	t.Run("generates images", func(t *testing.T) {
+		h := harness(t)
+		for _, want := range []model.Image{
+			{MediaType: "image/png", Data: []byte("\x89PNG\r\n\x1a\n")},
+			{MediaType: "image/jpeg", Data: []byte("\xff\xd8\xff\xe0")},
+		} {
+			h.Image(want.MediaType, want.Data)
+			got, err := h.Provider.Image(context.Background(), "i", "A sunny street in Paris")
+			if err != nil || got.MediaType != want.MediaType || !bytes.Equal(got.Data, want.Data) {
+				t.Errorf("got %s %q, %v; want %s %q", got.MediaType, got.Data, err, want.MediaType, want.Data)
+			}
 		}
 	})
 

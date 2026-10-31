@@ -1,4 +1,4 @@
-// Package openaifake fakes an OpenAI-compatible API: chat completions and embeddings.
+// Package openaifake fakes an OpenAI-compatible API: chat completions, including images, and embeddings.
 package openaifake
 
 import (
@@ -60,6 +60,17 @@ func Calls(calls ...ToolCall) Option {
 			}
 		}
 		m["tool_calls"] = list
+	}
+}
+
+// Images sets message.images to an image part per URL, as providers return generated images.
+func Images(urls ...string) Option {
+	return func(_, m map[string]any) {
+		list := make([]map[string]any, len(urls))
+		for i, u := range urls {
+			list[i] = map[string]any{"type": "image_url", "image_url": map[string]any{"url": u}}
+		}
+		m["images"] = list
 	}
 }
 

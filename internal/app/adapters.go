@@ -54,7 +54,7 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent, searxngURL
 		},
 		models: map[string]entry[model.Provider]{
 			"openai": {
-				open:    func(s *config.Settings) (model.Provider, error) { return openai.New(s, transport, clk, userAgent) },
+				open:    func(s *config.Settings) (model.Provider, error) { return openai.New(s, transport, clk, userAgent, log) },
 				secrets: []config.SecretKey{{Key: "key"}},
 			},
 		},

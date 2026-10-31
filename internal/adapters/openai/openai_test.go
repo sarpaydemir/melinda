@@ -2,9 +2,11 @@ package openai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -74,7 +76,7 @@ func open(t *testing.T, base string, fields ...string) (model.Provider, *instant
 		doc += "," + f
 	}
 	clk := &instantClock{}
-	p, err := New(settings(t, doc+"}"), http.DefaultTransport, clk, "dost/1.2.3")
+	p, err := New(settings(t, doc+"}"), http.DefaultTransport, clk, "dost/1.2.3", slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +96,10 @@ func TestModelConformance(t *testing.T) {
 				fake.Chat().Reply(openaifake.ToolCalls(openaifake.ToolCall{ID: id, Name: name, Arguments: arguments}))
 			},
 			Embedding: func(vector []float32) { fake.Embeddings().Reply(openaifake.Embedding(vector)) },
+			Image: func(mediaType string, data []byte) {
+				url := "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)
+				fake.Chat().Reply(openaifake.Completion(openaifake.Images(url)))
+			},
 			Fail: func() {
 				fake.Chat().Default(openaifake.HTTPError(500, "unavailable"))
 				fake.Embeddings().Default(openaifake.HTTPError(500, "unavailable"))
@@ -118,7 +124,7 @@ func TestNewValidatesSettings(t *testing.T) {
 		{`{"model":"m","api_base":"http://h","key":"k","request_timeout":-1}`, "request_timeout: must not be negative"},
 		{`{"model":"m","api_base":"http://h","key":"k","request_timeout":1e10}`, "request_timeout: too large"},
 	} {
-		_, err := New(settings(t, tc.doc), http.DefaultTransport, &instantClock{}, "dost/1.2.3")
+		_, err := New(settings(t, tc.doc), http.DefaultTransport, &instantClock{}, "dost/1.2.3", slog.New(slog.DiscardHandler))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want %q", tc.doc, err, tc.want)
 		}
@@ -180,6 +186,10 @@ func TestSendsOnlyTheContractHeaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := p.Embed(context.Background(), "e", "Hello"); err != nil {
+		t.Fatal(err)
+	}
+	fake.Chat().Reply(openaifake.Completion(openaifake.Images("data:image/png;base64,QUJD")))
+	if _, err := p.Image(context.Background(), "img-1", "a cat"); err != nil {
 		t.Fatal(err)
 	}
 	for _, req := range fake.Requests() {

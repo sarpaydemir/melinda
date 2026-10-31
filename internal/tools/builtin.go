@@ -2,14 +2,14 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"log/slog"
 
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/dost/internal/port/model"
 	"github.com/sarpaydemir/dost/internal/port/tool"
 	"github.com/sarpaydemir/dost/internal/port/web"
+	"github.com/sarpaydemir/dost/internal/prompt"
 	"github.com/sarpaydemir/dost/internal/store/vector"
 )
 
@@ -24,6 +24,11 @@ type Builtin struct {
 	Knowledge interface {
 		Search(ctx context.Context, query string, limit int) ([]vector.Hit, error)
 	}
+	Images interface {
+		Image(ctx context.Context, name, prompt string) (model.Image, error)
+	}
+	// ImageModel is the model Images generates with; "" when none is configured.
+	ImageModel string
 	// Chat is the run's outbound path to the chat platform.
 	Chat Outbound
 	// ReplyThread is the thread the reply goes to, or "" for the conversation root.
@@ -32,6 +37,8 @@ type Builtin struct {
 	// points it keeps of each.
 	MaxProgressUpdates     int
 	ProgressUpdateMaxChars int
+	// Catalog holds the texts of the tools' results.
+	Catalog *prompt.Catalog
 	// Clock times the waits between attempts of a failed call.
 	Clock clock.Clock
 	Log   *slog.Logger
@@ -41,6 +48,8 @@ type Builtin struct {
 type Outbound interface {
 	// Send posts a message and returns its ID.
 	Send(ctx context.Context, m chat.Outgoing) (string, error)
+	// Upload stores a file in a conversation for a later Send and returns its ID.
+	Upload(ctx context.Context, conversationID string, f chat.File) (string, error)
 }
 
 // tools returns the built-in tools offered before the contributed ones and those offered after them, with their own
@@ -50,19 +59,10 @@ func (b Builtin) tools() (knowledge, conversation []tool.Tool) {
 		searchWeb{b},
 		visitPage{b},
 		searchKB{b},
-		declared{"generate_image", `{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}`},
+		&generateImage{b: b},
 	}
 	conversation = []tool.Tool{
 		&progressUpdate{b: b},
 	}
 	return knowledge, conversation
 }
-
-// declared is a tool offered by its name and argument schema; calling it is not supported yet.
-type declared struct{ name, parameters string }
-
-func (d declared) Name() string { return d.name }
-
-func (d declared) Parameters() json.RawMessage { return json.RawMessage(d.parameters) }
-
-func (declared) Call(context.Context, tool.Call) (string, error) { return "", errors.ErrUnsupported }

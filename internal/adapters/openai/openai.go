@@ -2,14 +2,17 @@ package openai
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,17 +34,18 @@ type provider struct {
 	client    *http.Client
 	clock     clock.Clock
 	userAgent string
+	log       *slog.Logger
 	// base is api_base without trailing slashes or a /chat/completions suffix.
 	base, key string
-	// timeout bounds each phase of a chat attempt.
-	timeout     time.Duration
-	temperature json.Number
-	maxTokens   int
+	// timeout and imageTimeout bound each phase of a chat and an image attempt.
+	timeout, imageTimeout time.Duration
+	temperature           json.Number
+	maxTokens             int
 }
 
 // New builds the provider from one settings snapshot. transport sends its requests, clk times the waits between
-// attempts, and userAgent identifies it to the API.
-func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userAgent string) (model.Provider, error) {
+// attempts, userAgent identifies it to the API, and it logs to log.
+func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userAgent string, log *slog.Logger) (model.Provider, error) {
 	var c struct {
 		APIBase string      `json:"api_base"`
 		Key     string      `json:"key"`
@@ -73,13 +77,15 @@ func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userA
 			Transport:     transport,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		clock:       clk,
-		userAgent:   userAgent,
-		base:        strings.TrimSuffix(strings.TrimRight(c.APIBase, "/"), "/chat/completions"),
-		key:         c.Key,
-		timeout:     timeout,
-		temperature: s.Temperature,
-		maxTokens:   s.MaxTokens,
+		clock:        clk,
+		userAgent:    userAgent,
+		log:          log,
+		base:         strings.TrimSuffix(strings.TrimRight(c.APIBase, "/"), "/chat/completions"),
+		key:          c.Key,
+		timeout:      timeout,
+		imageTimeout: 2 * time.Minute,
+		temperature:  s.Temperature,
+		maxTokens:    s.MaxTokens,
 	}, nil
 }
 
@@ -122,9 +128,46 @@ func (p *provider) Embed(ctx context.Context, model, text string) ([]float32, er
 	return vector, err
 }
 
-// Image is not available yet.
-func (p *provider) Image(context.Context, string, string) (model.Image, error) {
-	return model.Image{}, fmt.Errorf("image generation: %w", errors.ErrUnsupported)
+// Image asks the chat completions API once, without retries, and returns the answer's first image sent as a data
+// URL. Its errors are worded for the model: Timeout, API error: <status> - <body>, or what was wrong with the answer.
+func (p *provider) Image(ctx context.Context, name, prompt string) (model.Image, error) {
+	body, err := textfmt.Encode(imageRequest{
+		Model:      name,
+		Messages:   []message{{Role: model.RoleUser, Content: prompt}},
+		Modalities: []string{"image", "text"},
+		MaxTokens:  4096,
+	})
+	if err != nil {
+		return model.Image{}, err
+	}
+	resp, answer, err := p.exchange(ctx, "/chat/completions", body, p.imageTimeout)
+	var stalled timeoutError
+	var unsent *url.Error
+	switch {
+	case errors.As(err, &stalled):
+		return model.Image{}, imageError("Timeout")
+	case errors.As(err, &unsent):
+		// The model reads the error, so the API's URL is left to the log.
+		if ctx.Err() == nil {
+			p.log.WarnContext(ctx, "image request failed", "error", err)
+		}
+		if unsent.Timeout() {
+			return model.Image{}, imageError("Timeout")
+		}
+		return model.Image{}, unsent.Err
+	case err != nil:
+		return model.Image{}, err
+	case resp.StatusCode < 200 || resp.StatusCode > 299:
+		text := "API error: " + strconv.Itoa(resp.StatusCode)
+		if len(answer) > 0 {
+			text += " - " + textfmt.Clip(string(answer), 250)
+		}
+		return model.Image{}, imageError(text)
+	}
+	if kind := textfmt.Lower(resp.Header.Get("Content-Type")); !strings.Contains(kind, "application/json") {
+		return model.Image{}, imageError("Unexpected content-type: " + cmp.Or(kind, "unknown"))
+	}
+	return image(answer)
 }
 
 // retry runs attempt until it succeeds, up to three times, waiting 1 s and then 2 s after a failure, or 5 s and then
@@ -145,11 +188,32 @@ func (p *provider) retry(ctx context.Context, attempt func() error) error {
 	}
 }
 
+// post makes one attempt at the API path and returns the answer, which is valid JSON.
+func (p *provider) post(ctx context.Context, path string, body []byte, timeout time.Duration) ([]byte, error) {
+	resp, data, err := p.exchange(ctx, path, body, timeout)
+	switch {
+	case err != nil:
+		return nil, err
+	case resp.StatusCode < 200 || resp.StatusCode > 299:
+		return nil, &apiError{message: "HTTP status " + resp.Status, code: resp.StatusCode}
+	case !json.Valid(data):
+		return nil, errors.New("response is not valid JSON")
+	}
+	return data, nil
+}
+
 var errStalled = errors.New("stalled")
 
-// post makes one attempt at the API path and returns the answer, which is valid JSON. timeout bounds each phase:
-// connecting, sending, waiting for the headers, and each read of the body.
-func (p *provider) post(ctx context.Context, path string, body []byte, timeout time.Duration) ([]byte, error) {
+// timeoutError fails an attempt that made no progress for the duration.
+type timeoutError time.Duration
+
+func (e timeoutError) Error() string {
+	return fmt.Sprintf("timed out after %v without progress", time.Duration(e))
+}
+
+// exchange makes one attempt at the API path and returns the response with its body read. timeout bounds each
+// phase: connecting, sending, waiting for the headers, and each read of the body.
+func (p *provider) exchange(ctx context.Context, path string, body []byte, timeout time.Duration) (*http.Response, []byte, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	stall := time.AfterFunc(timeout, func() { cancel(errStalled) })
@@ -162,7 +226,7 @@ func (p *provider) post(ctx context.Context, path string, body []byte, timeout t
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+path, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header = http.Header{
 		"Authorization": {"Bearer " + p.key},
@@ -176,18 +240,12 @@ func (p *provider) post(ctx context.Context, path string, body []byte, timeout t
 		data, err = io.ReadAll(progressReader{resp.Body, progress})
 	}
 	if err != nil && errors.Is(context.Cause(ctx), errStalled) {
-		return nil, fmt.Errorf("timed out after %v without progress", timeout)
+		return nil, nil, timeoutError(timeout)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, &apiError{message: "HTTP status " + resp.Status, code: resp.StatusCode}
-	}
-	if !json.Valid(data) {
-		return nil, errors.New("response is not valid JSON")
-	}
-	return data, nil
+	return resp, data, nil
 }
 
 type progressReader struct {

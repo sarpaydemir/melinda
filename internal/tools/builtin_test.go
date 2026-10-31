@@ -21,8 +21,14 @@ func (down) Search(context.Context, string, int) ([]web.Result, error) {
 
 func (down) Send(context.Context, chat.Outgoing) (string, error) { return "", errors.New("down") }
 
+func (down) Upload(context.Context, string, chat.File) (string, error) { return "", errors.New("down") }
+
 func TestBuiltinToolsKeepTheToolContract(t *testing.T) {
+	c, err := prompt.Load(prompt.Builtin(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	knowledge, conversation := Builtin{Search: down{}, SearchLimit: 5, Chat: down{}, MaxProgressUpdates: 2,
-		ProgressUpdateMaxChars: 500, Log: slog.New(slog.DiscardHandler)}.tools()
+		ProgressUpdateMaxChars: 500, Catalog: c, Log: slog.New(slog.DiscardHandler)}.tools()
 	conformance.Tools(t, append(knowledge, conversation...), prompt.Builtin())
 }
