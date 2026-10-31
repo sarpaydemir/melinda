@@ -1,12 +1,14 @@
 package textfmt
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Repr prints a value of a type Decode returns, or a []Object, as a literal: {'k': v}, [a, b], 'text', 1, 1.0,
@@ -92,6 +94,60 @@ func Int(v any, def int) int {
 }
 
 func clamp(n int64) int { return int(max(math.MinInt, min(math.MaxInt, n))) }
+
+// Float converts v to a float64 and reports whether it could. True gives 1, and a string may hold surrounding
+// whitespace and a decimal or exponent literal, inf, infinity, or nan in any case, with a sign, digits of any
+// script, and single underscores between digits.
+func Float(v any) (float64, bool) {
+	switch v := v.(type) {
+	case bool:
+		if v {
+			return 1, true
+		}
+		return 0, true
+	case int64:
+		return float64(v), true
+	case *big.Int:
+		f, _ := new(big.Float).SetInt(v).Float64()
+		return f, true
+	case float64:
+		return v, true
+	case string:
+		return parseFloat(v)
+	}
+	return 0, false
+}
+
+func parseFloat(s string) (float64, bool) {
+	rs := []rune(strings.TrimFunc(s, unicode.IsSpace))
+	b := make([]byte, 0, len(rs))
+	for i, r := range rs {
+		if d, ok := decimal(r); ok {
+			b = append(b, '0'+d)
+			continue
+		}
+		if r == '_' && i > 0 && i+1 < len(rs) {
+			_, before := decimal(rs[i-1])
+			_, after := decimal(rs[i+1])
+			if before && after {
+				continue
+			}
+		}
+		if r >= utf8.RuneSelf || r == '_' || r == 'x' || r == 'X' { // hexadecimal is not a decimal literal
+			return 0, false
+		}
+		b = append(b, byte(r))
+	}
+	text := string(b)
+	if len(text) > 0 && (text[0] == '+' || text[0] == '-') && strings.EqualFold(text[1:], "nan") {
+		return math.NaN(), true
+	}
+	f, err := strconv.ParseFloat(text, 64)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return 0, false
+	}
+	return f, true
+}
 
 func parseInt(s string) (int, bool) {
 	s = strings.TrimFunc(s, unicode.IsSpace)

@@ -15,8 +15,8 @@ import (
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
-// learnAt is how many pending items make an append request a learning run.
-const learnAt = 25
+// batchSize is how many pending items a learning run takes, and how many make an append request one.
+const batchSize = 25
 
 // emptyBatch is the value a missing batch starts as.
 var emptyBatch = json.RawMessage(`{"messages": []}`)
@@ -107,7 +107,7 @@ func (b Batch) Append(ctx context.Context, s *config.Settings, m chat.Message, r
 		return err
 	}
 	b.Log.DebugContext(ctx, "turn queued for learning", "post_id", m.ID, "pending", pending)
-	if pending >= learnAt {
+	if pending >= batchSize {
 		b.Learn.Request()
 	}
 	return nil

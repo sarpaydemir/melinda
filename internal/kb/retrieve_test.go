@@ -28,18 +28,26 @@ var (
 	discard = slog.New(slog.DiscardHandler)
 )
 
-// provider answers every chat request with one text and embeds every text as one vector, or fails to embed when
-// it has none; it records the requests and the embedded texts.
+// provider answers every chat request with one text, after calling onChat when set, and embeds every text as one
+// vector, or fails to embed when it has none; it records the requests and the embedded texts.
 type provider struct {
 	answer   string
 	vector   []float32
+	onChat   func()
 	requests []model.Request
 	embedded []string
 }
 
 func (p *provider) Chat(_ context.Context, r model.Request) (model.Response, error) {
 	p.requests = append(p.requests, r)
+	if p.onChat != nil {
+		p.onChat()
+	}
 	return model.Response{Message: model.Message{Role: model.RoleAssistant, Content: p.answer}}, nil
+}
+
+func (p *provider) Image(context.Context, string, string) (model.Image, error) {
+	return model.Image{}, errors.New("no images")
 }
 
 func (p *provider) Embed(_ context.Context, m, text string) ([]float32, error) {
@@ -57,16 +65,29 @@ type search struct {
 	limit      int
 }
 
-// store answers every search with the same hits or error and records the searches.
+// store answers every search with the same hits or error, and every add with addErr; it records the searches and
+// the adds.
 type store struct {
 	hits     []vector.Hit
 	err      error
+	addErr   error
 	searches []search
+	added    []add
+}
+
+type add struct {
+	collection string
+	docs       []vector.Doc
 }
 
 func (s *store) Search(_ context.Context, collection string, vec []float32, filter map[string]string, limit int) ([]vector.Hit, error) {
 	s.searches = append(s.searches, search{collection, vec, filter, limit})
 	return s.hits, s.err
+}
+
+func (s *store) Add(_ context.Context, collection string, docs []vector.Doc) error {
+	s.added = append(s.added, add{collection, docs})
+	return s.addErr
 }
 
 func queryVector() []float32 {

@@ -316,3 +316,56 @@ func TestIntStopsReadingPastTheDigitLimit(t *testing.T) {
 		t.Errorf("Int(1M digits) = %d after allocating %d bytes, want -1 within 64 KiB", got, allocated)
 	}
 }
+
+func TestFloatConvertsValueOrReportsFailure(t *testing.T) {
+	tests := []struct {
+		in   any
+		want float64
+		ok   bool
+	}{
+		{0.74, 0.74, true},
+		{int64(1), 1, true},
+		{true, 1, true},
+		{false, 0, true},
+		{"0.8", 0.8, true},
+		{" -1.5e+2 ", -150, true},
+		{"\u00a00.5\u3000", 0.5, true},
+		{"5\u0085", 5, true},
+		{"1e-1", 0.1, true},
+		{"1.", 1, true},
+		{".5", 0.5, true},
+		{"1_0", 10, true},
+		{"1e1_0", 1e10, true},
+		{"٣.٥", 3.5, true},
+		{"１", 1, true},
+		{"1e400", math.Inf(1), true},
+		{"inf", math.Inf(1), true},
+		{"Infinity", math.Inf(1), true},
+		{"-Infinity", math.Inf(-1), true},
+		{"nan", math.NaN(), true},
+		{"-nan", math.NaN(), true},
+		{nil, 0, false},
+		{[]any{}, 0, false},
+		{textfmt.Object{}, 0, false},
+		{"", 0, false},
+		{"invalid", 0, false},
+		{"infinit", 0, false},
+		{"+-nan", 0, false},
+		{"--1", 0, false},
+		{"0x1p-1", 0, false},
+		{"1__0", 0, false},
+		{"_1", 0, false},
+		{"1_", 0, false},
+		{"1_.5", 0, false},
+		{"1._5", 0, false},
+		{"\x1c5", 0, false},
+		{"5\u200b", 0, false},
+	}
+	for _, tt := range tests {
+		got, ok := textfmt.Float(tt.in)
+		same := got == tt.want || math.IsNaN(got) && math.IsNaN(tt.want)
+		if ok != tt.ok || ok && !same {
+			t.Errorf("Float(%#v) = %v, %t, want %v, %t", tt.in, got, ok, tt.want, tt.ok)
+		}
+	}
+}
