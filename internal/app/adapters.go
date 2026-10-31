@@ -10,6 +10,7 @@ import (
 
 	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
 	"github.com/sarpaydemir/dost/internal/adapters/openai"
+	"github.com/sarpaydemir/dost/internal/adapters/plane"
 	"github.com/sarpaydemir/dost/internal/clock"
 	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/port/chat"
@@ -17,6 +18,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/port/tool"
 	"github.com/sarpaydemir/dost/internal/port/web"
 	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/dost/internal/tools"
 )
 
 // adapters is the constructor table of the built-in adapters, keyed by the names the settings select them by.
@@ -41,6 +43,8 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string) ada
 		platforms: map[string]platformAdapter{
 			"mattermost": {
 				open:    func(s *config.Settings) (chat.Platform, error) { return mattermost.Open(s, transport) },
+				tools:   func(*config.Settings) []tool.Tool { return mattermost.Tools() },
+				prompts: mattermost.Prompts(),
 				secrets: []config.SecretKey{{Key: "mattermost_token"}},
 			},
 		},
@@ -50,8 +54,11 @@ func builtin(transport http.RoundTripper, clk clock.Clock, userAgent string) ada
 				secrets: []config.SecretKey{{Key: "key"}},
 			},
 		},
-		// Registered for its secret keys until its constructor exists.
-		tools: []toolSource{{secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}}}},
+		tools: []toolSource{{
+			tools:   func(*config.Settings) []tool.Tool { return plane.Tools() },
+			prompts: plane.Prompts(),
+			secrets: []config.SecretKey{{Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true}},
+		}},
 	}
 }
 
@@ -129,6 +136,15 @@ type selected struct {
 	tools []func(*config.Settings) []tool.Tool
 }
 
+// contributed are the tools the selected adapters contribute with s, in the order they are offered.
+func (sel selected) contributed(s *config.Settings) []tool.Tool {
+	var contributed []tool.Tool
+	for _, contribute := range sel.tools {
+		contributed = append(contributed, contribute(s)...)
+	}
+	return contributed
+}
+
 // choose resolves the selected names, reporting every unknown name at once.
 func (a adapters) choose(n names) (selected, error) {
 	platform, errPlatform := pick(a.platforms, "chat_platform", n.platform)
@@ -152,10 +168,12 @@ func selection(s *config.Settings) names {
 	return names{platform: s.ChatPlatform, model: s.ModelProvider, search: s.WebSearch, fetch: s.WebFetch}
 }
 
-// validate builds the adapters that s selects, reporting every unknown name and invalid adapter setting at once.
+// validate builds the adapters that s selects and checks that enabled_tools names only offered tools, reporting
+// every unknown name and invalid adapter setting at once.
 func (a adapters) validate(s *config.Settings) error {
 	sel, err := a.choose(selection(s))
-	return errors.Join(err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s))
+	_, errTools := tools.Offer(tool.Call{}, s.EnabledTools, sel.contributed(s))
+	return errors.Join(err, build(sel.platform, s), build(sel.model, s), build(sel.search, s), build(sel.fetch, s), errTools)
 }
 
 // build returns the error of building an adapter with open, which is nil for an unknown name, reported by choose,

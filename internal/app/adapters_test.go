@@ -61,10 +61,8 @@ func testTable() adapters {
 
 func offered(s selected) []string {
 	var names []string
-	for _, contribute := range s.tools {
-		for _, t := range contribute(nil) {
-			names = append(names, t.Name())
-		}
+	for _, t := range s.contributed(nil) {
+		names = append(names, t.Name())
 	}
 	return names
 }
@@ -131,13 +129,14 @@ func TestValidateBuildsTheSelectedAdaptersAndReportsEveryProblem(t *testing.T) {
 	doc := map[string]json.RawMessage{
 		"model": json.RawMessage(`"m"`), "chat_platform": json.RawMessage(`"pigeon"`),
 		"model_provider": json.RawMessage(`"compatible"`), "web_search": json.RawMessage(`"meta"`),
-		"web_fetch": json.RawMessage(`"direct"`),
+		"web_fetch": json.RawMessage(`"direct"`), "enabled_tools": json.RawMessage(`["search_web", "tracker_list", "teleport"]`),
 	}
 	s, err := config.Load(doc, "agent", nil, func(*config.Settings) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `chat_platform: unknown adapter "pigeon" (available: chatty, quiet)` + "\ncompatible\nmeta\ndirect"
+	want := `chat_platform: unknown adapter "pigeon" (available: chatty, quiet)` + "\ncompatible\nmeta\ndirect\n" +
+		`enabled_tools: unknown tool "teleport"`
 	if err := testTable().validate(s); err == nil || err.Error() != want {
 		t.Errorf("validate = %v, want %q", err, want)
 	}
