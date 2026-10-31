@@ -11,6 +11,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/memory"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/dost/internal/routing"
 	"github.com/sarpaydemir/dost/internal/textfmt"
 )
 
@@ -37,7 +38,7 @@ type Loader struct {
 // Load returns the context for m, with the newest items of the history its conversation reads. It fails only
 // when the history cannot be read.
 func (l Loader) Load(ctx context.Context, m chat.Message) (prompt.Context, error) {
-	read, write := memory.HistoryKeys(m.AuthorID, cmp.Or(m.ThreadID, m.ID), m.Kind == chat.Direct)
+	read, write := memory.HistoryKeys(m.AuthorID, routing.ContextID(m), m.Kind == chat.Direct)
 	items, err := l.History.Get(ctx, read, historyWindow)
 	if err != nil {
 		return prompt.Context{}, fmt.Errorf("read history %s: %w", read, err)

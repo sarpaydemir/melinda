@@ -3,6 +3,7 @@ package mattermostfake_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -74,6 +75,36 @@ func TestWebsocketAuthenticatesThenDeliversQueuedEvents(t *testing.T) {
 	}
 	if got := mm.Posts("dm"); len(got) != 1 {
 		t.Errorf("stored posts = %d, want 1", len(got))
+	}
+}
+
+func TestEventReturnsThePostedFrameWithoutStoringOrPushing(t *testing.T) {
+	mm := mattermostfake.New(t, token, bot)
+	mm.AddChannel(mattermostfake.Channel{ID: "ops", Type: "P"})
+	p := mattermostfake.Post{ID: "p1", ChannelID: "ops", UserID: "u1", RootID: "r1", Message: "selam", Type: "system_join_channel"}
+	var frame struct {
+		Event string `json:"event"`
+		Data  struct {
+			ChannelType string `json:"channel_type"`
+			Post        string `json:"post"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(mm.Event(p), &frame); err != nil {
+		t.Fatal(err)
+	}
+	var got mattermostfake.Post
+	if err := json.Unmarshal([]byte(frame.Data.Post), &got); err != nil || frame.Event != "posted" || frame.Data.ChannelType != "P" ||
+		!reflect.DeepEqual(got, p) {
+		t.Errorf("frame = %+v, post %+v (%v); want a posted event in a P channel carrying %+v", frame, got, err, p)
+	}
+	if posts := mm.Posts("ops"); len(posts) != 0 {
+		t.Errorf("stored posts = %+v, want none", posts)
+	}
+	c := authenticate(t, mm, token)
+	read(t, c)
+	mm.Push([]byte(`{"event":"typing","data":{},"seq":9}`))
+	if next := read(t, c); next["event"] != "typing" {
+		t.Errorf("first frame after authentication = %v, want only the pushed typing event", next)
 	}
 }
 

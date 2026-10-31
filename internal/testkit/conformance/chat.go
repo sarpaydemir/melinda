@@ -5,6 +5,7 @@ package conformance
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -30,14 +31,68 @@ type ChatHarness struct {
 	Fail func()
 	// Stall makes the fake hold every later request until its caller gives up.
 	Stall func()
+	// Event returns the event the platform delivers when User writes text in a conversation of kind: in the
+	// thread rooted at thread, or at the conversation root when thread is "".
+	Event func(kind chat.Kind, thread, text string) json.RawMessage
+	// SystemEvents are events for messages that are not a person's, such as a deleted message or a join notice.
+	SystemEvents []json.RawMessage
+	// NonMessages are events of the platform that carry no message.
+	NonMessages []json.RawMessage
 }
 
 // prompt is how long a call may take to return once its context ends.
 const prompt = 5 * time.Second
 
-// Chat checks a chat platform adapter's lookups and writes, each against a fresh harness from newHarness.
+// Chat checks a chat platform adapter's decoding, lookups, and writes, each against a fresh harness from
+// newHarness.
 func Chat(t *testing.T, newHarness func(*testing.T) ChatHarness) {
 	image := chat.File{Name: "chart.png", MediaType: "image/png", Data: []byte("\x89PNG\r\n\x1a\nchart")}
+
+	t.Run("DecodeReadsEachConversationKind", func(t *testing.T) {
+		h := newHarness(t)
+		for _, kind := range []chat.Kind{chat.Public, chat.Private, chat.Direct} {
+			root := decode(t, h.Platform, h.Event(kind, "", "status?"))
+			reply := decode(t, h.Platform, h.Event(kind, root.ID, "all green"))
+			for _, c := range []struct {
+				m            chat.Message
+				thread, text string
+			}{{root, "", "status?"}, {reply, root.ID, "all green"}} {
+				if m := c.m; m.ID == "" || m.ConversationID == "" || m.ConversationID != root.ConversationID ||
+					m.ThreadID != c.thread || m.AuthorID != h.User.ID || m.Text != c.text || m.Kind != kind || m.System ||
+					m.Created.IsZero() {
+					t.Errorf("kind %v: Decode = %+v; want a message by %q in thread %q with text %q", kind, m, h.User.ID, c.thread, c.text)
+				}
+			}
+			if reply.ID == root.ID {
+				t.Errorf("kind %v: the reply has its root's ID %q", kind, root.ID)
+			}
+		}
+		if n := h.Requests(); n != 0 {
+			t.Errorf("Decode made %d requests", n)
+		}
+	})
+
+	t.Run("DecodeMarksSystemMessages", func(t *testing.T) {
+		h := newHarness(t)
+		if len(h.SystemEvents) == 0 {
+			t.Fatal("the harness has no system events")
+		}
+		for _, ev := range h.SystemEvents {
+			if m := decode(t, h.Platform, ev); !m.System {
+				t.Errorf("Decode(%s) = %+v, want a system message", ev, m)
+			}
+		}
+	})
+
+	t.Run("DecodeReportsNoMessageForOtherEvents", func(t *testing.T) {
+		h := newHarness(t)
+		events := []json.RawMessage{nil, []byte("{"), []byte("null"), []byte("[]"), []byte(`"text"`), []byte("{}")}
+		for _, ev := range append(events, h.NonMessages...) {
+			if m, ok := h.Platform.Decode(ev); ok {
+				t.Errorf("Decode(%s) = %+v, want no message", ev, m)
+			}
+		}
+	})
 
 	t.Run("IdentityIsTheAgentWithoutIO", func(t *testing.T) {
 		h := newHarness(t)
@@ -150,6 +205,19 @@ func Chat(t *testing.T, newHarness func(*testing.T) ChatHarness) {
 			t.Errorf("calls returned %v after their context ended", d)
 		}
 	})
+}
+
+// decode decodes ev, requires a message, and checks that decoding its payload yields the same message.
+func decode(t *testing.T, p chat.Platform, ev json.RawMessage) chat.Message {
+	t.Helper()
+	m, ok := p.Decode(ev)
+	if !ok {
+		t.Fatalf("Decode(%s) reported no message", ev)
+	}
+	if again, ok := p.Decode(m.Payload); !ok || !reflect.DeepEqual(again, m) {
+		t.Errorf("Decode(Payload) = %+v, %v\nwant %+v", again, ok, m)
+	}
+	return m
 }
 
 // calls makes every lookup and write that does I/O and returns their errors by method name.

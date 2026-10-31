@@ -2,7 +2,6 @@ package mattermost
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -55,9 +54,6 @@ func (p *platform) Listen(context.Context, func(), chat.Deliver) error { return 
 func (p *platform) Replay(context.Context, time.Time, chat.Deliver) error {
 	return errors.ErrUnsupported
 }
-
-// Decode is not supported yet; it reports no message.
-func (p *platform) Decode(json.RawMessage) (chat.Message, bool) { return chat.Message{}, false }
 
 func (p *platform) Identity() chat.User { return p.identity }
 

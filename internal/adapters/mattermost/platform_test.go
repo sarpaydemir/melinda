@@ -14,7 +14,7 @@ import (
 	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
 )
 
-func settings(t *testing.T, doc string) *config.Settings {
+func settings(t testing.TB, doc string) *config.Settings {
 	t.Helper()
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(doc), &m); err != nil {
@@ -91,7 +91,22 @@ func TestLookupsMapMattermostFields(t *testing.T) {
 func TestChatConformance(t *testing.T) {
 	conformance.Chat(t, func(t *testing.T) conformance.ChatHarness {
 		mm := newFake(t)
+		private := id("ops")
+		mm.AddChannel(mattermostfake.Channel{ID: private, TeamID: team, Type: "P", Name: "ops", DisplayName: "Ops", Members: []string{ayse.ID}})
+		conversations := map[chat.Kind]string{chat.Public: channel, chat.Private: private, chat.Direct: id("dm")}
 		return conformance.ChatHarness{
+			Event: func(kind chat.Kind, thread, text string) json.RawMessage {
+				return mm.Event(mm.AddPost(mattermostfake.Post{ChannelID: conversations[kind], UserID: ayse.ID, RootID: thread, Message: text}))
+			},
+			SystemEvents: []json.RawMessage{
+				mm.Event(mattermostfake.Post{ID: id("gone"), CreateAt: 1767225600000, DeleteAt: 1767225600999, UserID: ayse.ID, ChannelID: private, Message: "oops"}),
+				mm.Event(mattermostfake.Post{ID: id("join"), CreateAt: 1767225600000, UserID: ayse.ID, ChannelID: private, Type: "system_join_channel", Message: "ayse joined the channel."}),
+			},
+			NonMessages: []json.RawMessage{
+				json.RawMessage(`{"event":"hello","data":{"server_version":"10.5.0"},"broadcast":{"user_id":"` + bot.ID + `"},"seq":0}`),
+				json.RawMessage(`{"event":"typing","data":{"parent_id":"","user_id":"` + ayse.ID + `"},"broadcast":{"channel_id":"` + channel + `"},"seq":3}`),
+				json.RawMessage(`{"status":"OK","seq_reply":1}`),
+			},
 			Platform:     open(t, mm, ""),
 			Agent:        chat.User{ID: bot.ID, Username: bot.Username, FirstName: bot.FirstName, LastName: bot.LastName},
 			User:         chat.User{ID: ayse.ID, Username: ayse.Username, FirstName: ayse.FirstName, LastName: ayse.LastName, Nickname: ayse.Nickname, Position: ayse.Position},

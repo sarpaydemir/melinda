@@ -30,11 +30,19 @@ func (f *Fake) Push(frames ...[]byte) {
 // Posted adds p as AddPost does and pushes the posted event Mattermost sends for it.
 func (f *Fake) Posted(p Post) Post {
 	f.t.Helper()
+	p = f.AddPost(p)
+	f.Push(f.Event(p))
+	return p
+}
+
+// Event returns the posted event Mattermost sends for p, which must be in a channel added to the fake, without
+// storing or pushing anything.
+func (f *Fake) Event(p Post) []byte {
+	f.t.Helper()
 	c, ok := f.channel(p.ChannelID)
 	if !ok {
 		f.t.Fatalf("mattermostfake: post to unknown channel %q", p.ChannelID)
 	}
-	p = f.AddPost(p)
 	post, err := json.Marshal(p)
 	if err != nil {
 		f.t.Fatal(err)
@@ -51,8 +59,7 @@ func (f *Fake) Posted(p Post) Post {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.Push(frame)
-	return p
+	return frame
 }
 
 // Connections returns the number of websocket connections accepted so far.
