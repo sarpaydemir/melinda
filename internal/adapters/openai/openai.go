@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptrace"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -83,16 +84,16 @@ func New(s *config.Settings, transport http.RoundTripper, clk clock.Clock, userA
 }
 
 // Chat sends one chat completion request, with retries. An answer without choices that carries an error fails the
-// attempt.
+// attempt; an answer without a readable first choice fails the request.
 func (p *provider) Chat(ctx context.Context, r model.Request) (model.Response, error) {
 	body, err := p.body(r)
 	if err != nil {
 		return model.Response{}, err
 	}
-	var completion map[string]json.RawMessage
+	var answer []byte
 	err = p.retry(ctx, func() (err error) {
-		completion, err = p.post(ctx, "/chat/completions", body, p.timeout)
-		if err == nil && !truthy(completion["choices"]) && truthy(completion["error"]) {
+		answer, err = p.post(ctx, "/chat/completions", body, p.timeout)
+		if completion := members(answer); err == nil && !truthy(completion["choices"]) && truthy(completion["error"]) {
 			err = errorPayload(completion["error"])
 		}
 		return err
@@ -100,7 +101,7 @@ func (p *provider) Chat(ctx context.Context, r model.Request) (model.Response, e
 	if err != nil {
 		return model.Response{}, err
 	}
-	return response(completion)
+	return response(answer)
 }
 
 // Embed returns the answer's first embedding, with retries. An answer without one fails the attempt, whatever error
@@ -114,7 +115,7 @@ func (p *provider) Embed(ctx context.Context, model, text string) ([]float32, er
 	err = p.retry(ctx, func() error {
 		answer, err := p.post(ctx, "/embeddings", body, embeddingTimeout)
 		if err == nil {
-			vector, err = embedding(answer)
+			vector, err = embedding(members(answer))
 		}
 		return err
 	})
@@ -146,9 +147,9 @@ func (p *provider) retry(ctx context.Context, attempt func() error) error {
 
 var errStalled = errors.New("stalled")
 
-// post makes one attempt at the API path and returns the members of the answer; an answer that is not an object
-// has none. timeout bounds each phase: connecting, sending, waiting for the headers, and each read of the body.
-func (p *provider) post(ctx context.Context, path string, body []byte, timeout time.Duration) (map[string]json.RawMessage, error) {
+// post makes one attempt at the API path and returns the answer, which is valid JSON. timeout bounds each phase:
+// connecting, sending, waiting for the headers, and each read of the body.
+func (p *provider) post(ctx context.Context, path string, body []byte, timeout time.Duration) ([]byte, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	stall := time.AfterFunc(timeout, func() { cancel(errStalled) })
@@ -186,9 +187,7 @@ func (p *provider) post(ctx context.Context, path string, body []byte, timeout t
 	if !json.Valid(data) {
 		return nil, errors.New("response is not valid JSON")
 	}
-	var answer map[string]json.RawMessage
-	_ = json.Unmarshal(data, &answer) // leaves it nil for an answer that is not an object
-	return answer, nil
+	return data, nil
 }
 
 type progressReader struct {
@@ -219,12 +218,12 @@ func rateLimited(err error) bool {
 // errorPayload reads an error member: its message, or else the error as JSON, or a value that is not an object
 // as text.
 func errorPayload(raw json.RawMessage) error {
-	var members map[string]json.RawMessage
-	if json.Unmarshal(raw, &members) != nil {
+	fields := members(raw)
+	if fields == nil {
 		return &apiError{message: textfmt.Str(value(raw))}
 	}
-	e := &apiError{message: spaced(raw), code: textfmt.Int(value(members["code"]), 0)}
-	if m := value(members["message"]); textfmt.Truthy(m) {
+	e := &apiError{message: spaced(raw), code: textfmt.Int(value(fields["code"]), 0)}
+	if m := value(fields["message"]); textfmt.Truthy(m) {
 		e.message = textfmt.Str(m)
 	}
 	return e
@@ -260,36 +259,100 @@ func value(raw json.RawMessage) any {
 
 func truthy(raw json.RawMessage) bool { return textfmt.Truthy(value(raw)) }
 
-// response is the first choice's assistant message.
-func response(completion map[string]json.RawMessage) (model.Response, error) {
-	var choices []struct {
-		Message json.RawMessage `json:"message"`
+// members are the members of raw, valid JSON or empty, when it is an object, and nil otherwise.
+func members(raw []byte) map[string]json.RawMessage {
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &m)
+	return m
+}
+
+// cutOffFinish and cutOffNative are the finish_reason and native_finish_reason values of an answer that stopped
+// before its natural end.
+var (
+	cutOffFinish = []string{"length", "max_tokens", "content_filter", "error"}
+	cutOffNative = []string{"max_tokens", "recitation", "safety", "blocklist", "prohibited_content", "spii", "other"}
+)
+
+// response reads the first choice of an answer: the assistant message and why the model stopped.
+func response(answer []byte) (model.Response, error) {
+	var choices []json.RawMessage
+	if json.Unmarshal(members(answer)["choices"], &choices) != nil || len(choices) == 0 {
+		text := spaced(answer)
+		if clipped := textfmt.Clip(text, 2000); clipped != text {
+			text = clipped + "... [truncated]"
+		}
+		return model.Response{}, fmt.Errorf("response has no choices: %s", text)
 	}
-	if json.Unmarshal(completion["choices"], &choices) != nil || len(choices) == 0 {
-		return model.Response{}, errors.New("response has no choices")
+	choice := members(choices[0])
+	if choice == nil {
+		return model.Response{}, errors.New("response choice is not an object")
 	}
-	raw := choices[0].Message
-	var m struct {
-		Content   json.RawMessage `json:"content"`
-		ToolCalls []struct {
-			ID       string `json:"id"`
-			Function struct {
-				Name      string          `json:"name"`
-				Arguments json.RawMessage `json:"arguments"`
-			} `json:"function"`
-		} `json:"tool_calls"`
+	finish, native := reason(choice["finish_reason"]), reason(choice["native_finish_reason"])
+	resp := model.Response{
+		Truncated: finish == "length" || finish == "max_tokens",
+		CutOff:    slices.Contains(cutOffFinish, finish) || slices.Contains(cutOffNative, native),
+		Malformed: native == "malformed_function_call",
+		Reason: "finish_reason=" + textfmt.Str(value(choice["finish_reason"])) +
+			" native_finish_reason=" + textfmt.Str(value(choice["native_finish_reason"])),
 	}
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return model.Response{}, fmt.Errorf("response message: %w", err)
+	raw := choice["message"]
+	message := members(raw)
+	if message == nil {
+		return resp, errors.New("response message is not an object")
 	}
-	msg := model.Message{Role: model.RoleAssistant, Raw: raw}
-	if content, ok := value(m.Content).(string); ok {
-		msg.Content = textfmt.Strip(content)
+	text, err := content(message["content"])
+	if err != nil {
+		return resp, err
 	}
-	for _, c := range m.ToolCalls {
-		msg.ToolCalls = append(msg.ToolCalls, model.ToolCall{ID: c.ID, Name: c.Function.Name, Arguments: arguments(c.Function.Arguments)})
+	var calls []struct {
+		ID       string `json:"id"`
+		Function struct {
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+		} `json:"function"`
 	}
-	return model.Response{Message: msg}, nil
+	// A member of an unexpected type is left empty; calls without an ID or a name are the tool loop's to reject.
+	_ = json.Unmarshal(message["tool_calls"], &calls)
+	resp.Message = model.Message{Role: model.RoleAssistant, Content: text, Raw: raw}
+	for _, c := range calls {
+		resp.Message.ToolCalls = append(resp.Message.ToolCalls,
+			model.ToolCall{ID: c.ID, Name: c.Function.Name, Arguments: arguments(c.Function.Arguments)})
+	}
+	return resp, nil
+}
+
+// content is a message's text, stripped: a string as sent, the texts of a list's text parts joined by newlines,
+// "" for any other falsy value, and any other value in its str form.
+func content(raw json.RawMessage) (string, error) {
+	var parts []json.RawMessage
+	if json.Unmarshal(raw, &parts) != nil {
+		if v := value(raw); textfmt.Truthy(v) {
+			return textfmt.Strip(textfmt.Str(v)), nil
+		}
+		return "", nil
+	}
+	texts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		p := members(part)
+		if value(p["type"]) != "text" {
+			continue
+		}
+		member, present := p["text"]
+		text, ok := value(member).(string)
+		if present && !ok {
+			return "", errors.New("response content has a text part whose text is not a string")
+		}
+		texts = append(texts, text)
+	}
+	return textfmt.Strip(strings.Join(texts, "\n")), nil
+}
+
+// reason is a finish reason in lowercase, or "" when it is falsy.
+func reason(raw json.RawMessage) string {
+	if v := value(raw); textfmt.Truthy(v) {
+		return textfmt.Lower(textfmt.Str(v))
+	}
+	return ""
 }
 
 // embedding is data[0].embedding: numbers, or nil for null.

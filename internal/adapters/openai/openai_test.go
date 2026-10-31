@@ -435,10 +435,21 @@ func TestChatReadsTheAnswer(t *testing.T) {
 		{`{"object":"error","error":{"message":"no capacity"}}`, "no capacity", 3},
 		{hi + `,"error":null}`, "", 1},
 		{hi + `,"error":{"message":"partial failure","code":429}}`, "", 1},
-		{`{"id":"x"}`, "response has no choices", 1},
-		{`{"choices":[]}`, "response has no choices", 1},
-		{`{"choices":null,"error":null}`, "response has no choices", 1},
-		{`[]`, "response has no choices", 1},
+		{`{"id":"x"}`, `response has no choices: {"id": "x"}`, 1},
+		{`{"choices":[]}`, `response has no choices: {"choices": []}`, 1},
+		{`{"choices":null,"error":null}`, `response has no choices: {"choices": null, "error": null}`, 1},
+		{`{"choices":"abc"}`, `response has no choices: {"choices": "abc"}`, 1},
+		{`{"Choices":[{"message":{"content":"hi"}}]}`, `response has no choices: {"Choices": [{"message": {"content": "hi"}}]}`, 1},
+		{`[]`, "response has no choices: []", 1},
+		{`{"id":"` + strings.Repeat("ü", 2500) + `"}`,
+			`response has no choices: {"id": "` + strings.Repeat("ü", 1992) + `... [truncated]`, 1},
+		{`{"choices":[{"message":{"content":"hi"}},5]}`, "", 1},
+		{`{"choices":[null]}`, "response choice is not an object", 1},
+		{`{"choices":["hi"]}`, "response choice is not an object", 1},
+		{`{"choices":[{"finish_reason":"stop"}]}`, "response message is not an object", 1},
+		{`{"choices":[{"message":null}]}`, "response message is not an object", 1},
+		{`{"choices":[{"message":"hi"}]}`, "response message is not an object", 1},
+		{`{"choices":[{"message":{"content":"hi","tool_calls":"x"}}]}`, "", 1},
 	} {
 		fake := openaifake.New(t)
 		fake.Chat().Default(testkit.Raw(200, "application/json", []byte(tc.body)))
@@ -452,6 +463,119 @@ func TestChatReadsTheAnswer(t *testing.T) {
 		}
 		if n := len(fake.Requests()); n != tc.attempts {
 			t.Errorf("%s: %d attempts, want %d", tc.body, n, tc.attempts)
+		}
+	}
+}
+
+// answer runs a chat request against an API answering with one choice made of members.
+func answer(t *testing.T, members string) (model.Response, error) {
+	t.Helper()
+	fake := openaifake.New(t)
+	fake.Chat().Reply(testkit.Raw(200, "application/json", []byte(`{"choices":[{`+members+`}]}`)))
+	p, _ := open(t, fake.URL())
+	return p.Chat(context.Background(), ask)
+}
+
+func TestChatKeepsACallOfAnUnexpectedShapeWithoutItsID(t *testing.T) {
+	resp, err := answer(t, `"message":{"content":"hi","tool_calls":[{"id":5}]}`)
+	if calls := resp.Message.ToolCalls; err != nil || resp.Message.Content != "hi" || len(calls) != 1 || calls[0].ID != "" {
+		t.Errorf("got %+v, %v; want hi with one call without an ID", resp.Message, err)
+	}
+}
+
+func TestChatReportsStopFactsWithAnUnreadableMessage(t *testing.T) {
+	for message, want := range map[string]string{
+		`,"message":"hi"`: "response message is not an object",
+		``:                "response message is not an object",
+		`,"message":null`: "response message is not an object",
+		`,"message":{"content":[{"type":"text","text":5}]}`: "response content has a text part whose text is not a string",
+	} {
+		resp, err := answer(t, `"finish_reason":"length"`+message)
+		if err == nil || err.Error() != want || !resp.Truncated || !resp.CutOff {
+			t.Errorf("%s: got %+v, %v; want truncated with %q", message, resp, err, want)
+		}
+	}
+}
+
+func TestChatReadsMessageContent(t *testing.T) {
+	for _, tc := range []struct {
+		content, want, err string
+	}{
+		{`"\u001c x \u0085"`, "x", ""},
+		{`null`, "", ""},
+		{`""`, "", ""},
+		{`0`, "", ""},
+		{`0.0`, "", ""},
+		{`false`, "", ""},
+		{`[]`, "", ""},
+		{`{}`, "", ""},
+		{`5`, "5", ""},
+		{`-0.5`, "-0.5", ""},
+		{`1e2`, "100.0", ""},
+		{`true`, "True", ""},
+		{`{"text": " x "}`, "{'text': ' x '}", ""},
+		{`[{"type":"text","text":" a "},{"type":"image_url","image_url":{"url":"u"}},{"type":"text","text":"b "}]`, "a \nb", ""},
+		{`[{"type":"text"},{"type":"text","text":"x"}]`, "x", ""},
+		{`[{"type":"TEXT","text":"x"},"text",{"text":"y"},null]`, "", ""},
+		{`[{"type":"text","text":""},{"type":"text","text":""}]`, "", ""},
+		{`[{"type":"text","text":null}]`, "", "response content has a text part whose text is not a string"},
+		{`[{"type":"text","text":5}]`, "", "response content has a text part whose text is not a string"},
+	} {
+		resp, err := answer(t, `"message":{"content":`+tc.content+`}`)
+		switch {
+		case tc.err == "" && (err != nil || resp.Message.Content != tc.want):
+			t.Errorf("content %s: got %q, %v; want %q", tc.content, resp.Message.Content, err, tc.want)
+		case tc.err != "" && (err == nil || err.Error() != tc.err):
+			t.Errorf("content %s: got %v, want %q", tc.content, err, tc.err)
+		}
+	}
+}
+
+func TestChatReportsWhyTheModelStopped(t *testing.T) {
+	type facts struct {
+		truncated, cutOff, malformed bool
+		reason                       string
+	}
+	for _, tc := range []struct {
+		finish, native string // JSON values; empty leaves the member out
+		want           facts
+	}{
+		{`"stop"`, ``, facts{reason: "finish_reason=stop native_finish_reason=None"}},
+		{`"tool_calls"`, ``, facts{reason: "finish_reason=tool_calls native_finish_reason=None"}},
+		{`null`, `null`, facts{reason: "finish_reason=None native_finish_reason=None"}},
+		{``, ``, facts{reason: "finish_reason=None native_finish_reason=None"}},
+		{`1`, `0`, facts{reason: "finish_reason=1 native_finish_reason=0"}},
+		{`"length"`, ``, facts{true, true, false, "finish_reason=length native_finish_reason=None"}},
+		{`"max_tokens"`, ``, facts{true, true, false, "finish_reason=max_tokens native_finish_reason=None"}},
+		{`"LENGTH"`, `"STOP"`, facts{true, true, false, "finish_reason=LENGTH native_finish_reason=STOP"}},
+		{`"length "`, ``, facts{reason: "finish_reason=length  native_finish_reason=None"}},
+		{`"content_filter"`, `"RECITATION"`, facts{false, true, false, "finish_reason=content_filter native_finish_reason=RECITATION"}},
+		{`"error"`, ``, facts{false, true, false, "finish_reason=error native_finish_reason=None"}},
+		{`"stop"`, `"RECITATION"`, facts{false, true, false, "finish_reason=stop native_finish_reason=RECITATION"}},
+		{`"stop"`, `"STOP"`, facts{reason: "finish_reason=stop native_finish_reason=STOP"}},
+		{`"stop"`, `"MAX_TOKENS"`, facts{false, true, false, "finish_reason=stop native_finish_reason=MAX_TOKENS"}},
+		{`"stop"`, `"SAFETY"`, facts{false, true, false, "finish_reason=stop native_finish_reason=SAFETY"}},
+		{`"stop"`, `"blocklist"`, facts{false, true, false, "finish_reason=stop native_finish_reason=blocklist"}},
+		{`"stop"`, `"PROHIBITED_CONTENT"`, facts{false, true, false, "finish_reason=stop native_finish_reason=PROHIBITED_CONTENT"}},
+		{`"stop"`, `"SPII"`, facts{false, true, false, "finish_reason=stop native_finish_reason=SPII"}},
+		{`"stop"`, `"OTHER"`, facts{false, true, false, "finish_reason=stop native_finish_reason=OTHER"}},
+		{`"stop"`, `"image_safety"`, facts{reason: "finish_reason=stop native_finish_reason=image_safety"}},
+		{`"stop"`, `"MALFORMED_FUNCTION_CALL"`, facts{false, false, true, "finish_reason=stop native_finish_reason=MALFORMED_FUNCTION_CALL"}},
+		{`"length"`, `"malformed_function_call"`, facts{true, true, true, "finish_reason=length native_finish_reason=malformed_function_call"}},
+	} {
+		members := `"message":{"content":"x"}`
+		if tc.finish != "" {
+			members += `,"finish_reason":` + tc.finish
+		}
+		if tc.native != "" {
+			members += `,"native_finish_reason":` + tc.native
+		}
+		resp, err := answer(t, members)
+		if err != nil {
+			t.Fatalf("%s: %v", members, err)
+		}
+		if got := (facts{resp.Truncated, resp.CutOff, resp.Malformed, resp.Reason}); got != tc.want {
+			t.Errorf("%s: got %+v, want %+v", members, got, tc.want)
 		}
 	}
 }
