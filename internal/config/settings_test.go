@@ -330,6 +330,30 @@ func TestAdminIDs(t *testing.T) {
 	}
 }
 
+func TestIsAdminMatchesConfiguredIDsExactly(t *testing.T) {
+	admins := []string{"admin_id", "other"}
+	for _, tc := range []struct {
+		name     string
+		adminIDs []string
+		userID   string
+		want     bool
+	}{
+		{"listed user", admins, "admin_id", true},
+		{"unlisted user", admins, "user_id", false},
+		{"prefix of a listed ID", admins, "admin", false},
+		{"different case", admins, "ADMIN_ID", false},
+		{"empty list", nil, "user_id", false},
+		{"empty user ID", admins, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &config.Settings{AdminIDs: tc.adminIDs}
+			if got := s.IsAdmin(tc.userID); got != tc.want {
+				t.Errorf("IsAdmin(%q) with admin IDs %q = %v, want %v", tc.userID, tc.adminIDs, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExcludedChannelsMatchLikeTheirForm(t *testing.T) {
 	for _, tc := range []struct {
 		value, id string

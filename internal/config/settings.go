@@ -130,6 +130,9 @@ func (s *Settings) ToolFinalTokens() int { return cmp.Or(s.ToolFinalMaxTokens, s
 // RoleModel returns m, the value of a <role>_model key, or model when m is empty.
 func (s *Settings) RoleModel(m string) string { return cmp.Or(m, s.Model) }
 
+// IsAdmin reports whether userID is listed exactly in admin_ids.
+func (s *Settings) IsAdmin(userID string) bool { return slices.Contains(s.AdminIDs, userID) }
+
 // Channels is the name_excluded_channels value: a list of channel IDs, or a string the IDs are substrings of.
 type Channels struct {
 	IDs  []string
