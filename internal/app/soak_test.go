@@ -46,8 +46,10 @@ const (
 	overdue = 30 * time.Second
 	// answerWithin is how long after it is posted a message without a reply counts as lost.
 	answerWithin = 2 * time.Minute
-	// growth is how much more the resources may use at the end than at their peak in the first half.
+	// growth is how much more the resources may use at the end than at their peak in the first half, and slack the
+	// absolute margin for small counts such as database connections, where one more is not a trend.
 	growth = 0.10
+	slack  = 2
 
 	dmConversations     = 40
 	threadConversations = 12
@@ -654,7 +656,7 @@ func (s *soak) report(warm int, final sample, logPath string) {
 		{"open files", "first-half peak", float64(peak.fds), float64(final.fds)},
 		{"database connections", "first-half peak", float64(peak.conn), float64(final.conn)},
 	} {
-		if r.final > r.base*(1+growth) {
+		if r.final > max(r.base*(1+growth), r.base+slack) {
 			t.Errorf("%s grew from %.0f (%s) to %.0f, more than %.0f%%", r.name, r.base, r.from, r.final, growth*100)
 		}
 	}
