@@ -31,16 +31,18 @@ type Gateway struct {
 	open     func(*config.Settings) (chat.Platform, error)
 	deliver  chat.Deliver
 	recovery func()
+	offline  func()
 	clock    clock.Clock
 	log      *slog.Logger
 	ready    atomic.Bool
 }
 
 // New returns a gateway that opens the chat platform from the current settings for each session, passes inbound
-// events to deliver, and calls recovery, which must not block, each time a session connects.
+// events to deliver, and calls recovery, which must not block, each time a session connects. It calls offline before
+// the first session and each time a connected session ends before shutdown, before the next session opens.
 func New(settings settingsSource, open func(*config.Settings) (chat.Platform, error), deliver chat.Deliver,
-	recovery func(), clk clock.Clock, log *slog.Logger) *Gateway {
-	return &Gateway{settings: settings, open: open, deliver: deliver, recovery: recovery, clock: clk, log: log}
+	recovery, offline func(), clk clock.Clock, log *slog.Logger) *Gateway {
+	return &Gateway{settings: settings, open: open, deliver: deliver, recovery: recovery, offline: offline, clock: clk, log: log}
 }
 
 // Name identifies the component.
@@ -56,6 +58,7 @@ func (g *Gateway) Ready() error {
 
 // Run keeps a session open until ctx is cancelled and returns nil once that session has ended.
 func (g *Gateway) Run(ctx context.Context) error {
+	g.offline()
 	delay := firstDelay
 	for {
 		connected, err := g.session(ctx)
@@ -90,6 +93,9 @@ func (g *Gateway) session(ctx context.Context) (time.Duration, error) {
 	g.ready.Store(false)
 	if since.IsZero() {
 		return 0, err
+	}
+	if ctx.Err() == nil {
+		g.offline()
 	}
 	return g.clock.Now().Sub(since), err
 }

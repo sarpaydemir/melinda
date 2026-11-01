@@ -117,7 +117,7 @@ func TestReplayEventHoldsThePostAsSentAndTheChannelType(t *testing.T) {
 	}
 }
 
-func TestReplayLogsAFailingListingAndContinues(t *testing.T) {
+func TestReplayLogsAFailingListingContinuesAndThenFails(t *testing.T) {
 	mm := newFake(t)
 	news := id("news")
 	mm.AddChannel(mattermostfake.Channel{ID: news, TeamID: team, Type: "O", Name: "news", DisplayName: "News"})
@@ -131,7 +131,15 @@ func TestReplayLogsAFailingListingAndContinues(t *testing.T) {
 	var logs bytes.Buffer
 	p := openWith(t, mm, "", token, clock.Real(), slog.New(slog.NewTextHandler(&logs, nil)))
 
-	if got := postIDs(t, replay(t, p)); !slices.Equal(got, posted) {
+	var events []json.RawMessage
+	err := p.Replay(t.Context(), seenAt, func(_ context.Context, ev json.RawMessage) error {
+		events = append(events, ev)
+		return nil
+	})
+	if err == nil || err.Error() != "2 of the listings to replay could not be read" {
+		t.Errorf("Replay = %v, want the 2 unreadable listings reported", err)
+	}
+	if got := postIDs(t, events); !slices.Equal(got, posted) {
 		t.Errorf("replayed %q, want %q from the channels that could be read", got, posted)
 	}
 	for _, want := range []string{"channel_id=" + channel, "team_id=" + id("team2"), "teams=2 channels=3"} {

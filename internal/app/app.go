@@ -165,7 +165,7 @@ func conversation(ctx, work context.Context, env config.Env, cfg startup, sel se
 		"kb-learner": &kb.Learner{Settings: cfg.settings, Model: sel.model, Batch: store, Store: vectors,
 			Prompts: cfg.prompts, Learn: learn, Work: work, Clock: clk, Log: named("kb-learner")},
 		"pipeline": scheduler, "flusher": flusher, "dispatcher": dispatcher, "recovery": recovery,
-		"gateway": gateway.New(cfg.settings, sel.platform, dispatcher.Enqueue, recovery.Trigger, clk, named("gateway")),
+		"gateway": gateway.New(cfg.settings, sel.platform, dispatcher.Enqueue, recovery.Trigger, recovery.Disconnected, clk, named("gateway")),
 	}
 	var out []Component
 	for _, name := range cfg.components {

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 
 // Replay reads the posts of every channel the bot belongs to, visiting a channel listed under several teams once,
 // and delivers those created after after, oldest first per channel. A team or channel whose listing fails is
-// logged and skipped.
+// logged and skipped, and the replay then returns an error once the others are delivered.
 func (p *platform) Replay(ctx context.Context, after time.Time, deliver chat.Deliver) error {
 	teams, err := p.client.GetMyTeams(ctx)
 	if err != nil {
@@ -22,6 +23,7 @@ func (p *platform) Replay(ctx context.Context, after time.Time, deliver chat.Del
 	// back too; those created at or before it were already read.
 	since := after.UnixMilli()
 	visited := map[string]bool{}
+	skipped := 0
 	for _, team := range teams {
 		channels, err := p.client.GetMyChannels(ctx, team.ID)
 		if err != nil {
@@ -29,6 +31,7 @@ func (p *platform) Replay(ctx context.Context, after time.Time, deliver chat.Del
 				return ctx.Err()
 			}
 			p.log.Warn("cannot list a team's channels to replay; skipped", "team_id", team.ID, "error", err)
+			skipped++
 			continue
 		}
 		for _, c := range channels {
@@ -42,6 +45,7 @@ func (p *platform) Replay(ctx context.Context, after time.Time, deliver chat.Del
 					return ctx.Err()
 				}
 				p.log.Warn("cannot read a channel's posts to replay; skipped", "channel_id", c.ID, "error", err)
+				skipped++
 				continue
 			}
 			for _, post := range createdAfter(list, since) {
@@ -52,6 +56,9 @@ func (p *platform) Replay(ctx context.Context, after time.Time, deliver chat.Del
 		}
 	}
 	p.log.Info("replay scanned the bot's channels", "teams", len(teams), "channels", len(visited))
+	if skipped > 0 {
+		return fmt.Errorf("%d of the listings to replay could not be read", skipped)
+	}
 	return nil
 }
 

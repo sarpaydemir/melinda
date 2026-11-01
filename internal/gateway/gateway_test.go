@@ -71,6 +71,7 @@ type fixture struct {
 	sessions   chan *session
 	delivered  chan json.RawMessage
 	recoveries atomic.Int32
+	offline    atomic.Int32
 	logs       bytes.Buffer // read only after Run has returned
 	cancel     context.CancelFunc
 	done       chan error
@@ -91,7 +92,8 @@ func start(t *testing.T) *fixture {
 		f.delivered <- event
 		return nil
 	}
-	f.gw = gateway.New(f.settings, open, deliver, func() { f.recoveries.Add(1) }, f.clk, slog.New(slog.NewJSONHandler(&f.logs, nil)))
+	f.gw = gateway.New(f.settings, open, deliver, func() { f.recoveries.Add(1) }, func() { f.offline.Add(1) }, f.clk,
+		slog.New(slog.NewJSONHandler(&f.logs, nil)))
 	ctx, cancel := context.WithCancel(t.Context())
 	f.cancel = cancel
 	go func() { f.done <- f.gw.Run(ctx) }()
@@ -189,11 +191,11 @@ func TestEachSessionOpensThePlatformFromCurrentSettingsAndFeedsIntake(t *testing
 	}
 }
 
-func TestReadyAndRecoveryFollowEachConnection(t *testing.T) {
+func TestReadyAndRecoveryFollowEachConnectionAndOfflineIsReportedBeforeEachSession(t *testing.T) {
 	f := start(t)
 	s := f.next(t)
-	if f.gw.Ready() == nil {
-		t.Error("ready before connecting")
+	if f.gw.Ready() == nil || f.offline.Load() != 1 {
+		t.Errorf("before connecting: ready %v, offline reports = %d; want not ready and one for startup", f.gw.Ready() == nil, f.offline.Load())
 	}
 	s.connected()
 	if err := f.gw.Ready(); err != nil || f.recoveries.Load() != 1 {
@@ -201,13 +203,19 @@ func TestReadyAndRecoveryFollowEachConnection(t *testing.T) {
 	}
 	s.end <- errRefused
 	f.clk.AwaitTimers(t, 1)
-	if f.gw.Ready() == nil {
-		t.Error("ready after the session ended")
+	if f.gw.Ready() == nil || f.offline.Load() != 2 {
+		t.Errorf("after the session ended: ready %v, offline reports = %d; want not ready and one more", f.gw.Ready() == nil, f.offline.Load())
 	}
 	f.clk.Advance(time.Second)
+	f.next(t).end <- errRefused
+	f.waits(t, 2*time.Second)
 	f.next(t).connected()
-	if err := f.gw.Ready(); err != nil || f.recoveries.Load() != 2 {
-		t.Errorf("after reconnecting: Ready() = %v, recoveries = %d; want ready and two recoveries", err, f.recoveries.Load())
+	if err := f.gw.Ready(); err != nil || f.recoveries.Load() != 2 || f.offline.Load() != 2 {
+		t.Errorf("after reconnecting: Ready() = %v, recoveries = %d, offline reports = %d; want ready, two recoveries, and none for the session that never connected",
+			err, f.recoveries.Load(), f.offline.Load())
+	}
+	if err := f.stop(t); err != nil || f.offline.Load() != 2 {
+		t.Errorf("after shutdown: Run = %v, offline reports = %d; want nil and none for the session shutdown ended", err, f.offline.Load())
 	}
 }
 

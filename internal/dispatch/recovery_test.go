@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarpaydemir/dost/internal/config"
 	"github.com/sarpaydemir/dost/internal/dispatch"
+	"github.com/sarpaydemir/dost/internal/gateway"
 	"github.com/sarpaydemir/dost/internal/port/chat"
 	"github.com/sarpaydemir/dost/internal/testkit"
 )
@@ -253,5 +255,241 @@ func TestReplayErrorIsLoggedWithTheReplayedCount(t *testing.T) {
 	if !strings.Contains(logs, "level=ERROR") || !strings.Contains(logs, "replayed=1") ||
 		!strings.Contains(logs, "502 Bad Gateway") {
 		t.Errorf("logs do not report the failed replay with its count:\n%s", logs)
+	}
+}
+
+// server makes the platform replay the messages in ms created after the replay's start, recording each start.
+type server struct {
+	mu     sync.Mutex
+	ms     []chat.Message
+	starts []time.Time
+	fail   error
+}
+
+func (f *fixture) serve(ms ...chat.Message) *server {
+	s := &server{ms: ms}
+	f.platform.replay = func(ctx context.Context, after time.Time, deliver chat.Deliver) error {
+		s.mu.Lock()
+		s.starts = append(s.starts, after)
+		fail := s.fail
+		s.mu.Unlock()
+		for _, m := range s.ms {
+			if m.Created.After(after) {
+				if err := deliver(ctx, event(m)); err != nil {
+					return err
+				}
+			}
+		}
+		return fail
+	}
+	return s
+}
+
+// lastStart returns where the latest replay started, in Unix milliseconds.
+func (s *server) lastStart() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.starts[len(s.starts)-1].UnixMilli()
+}
+
+// reconnect triggers a run and waits until replay n has returned.
+func (r *recovery) reconnect(n int32) {
+	r.f.t.Helper()
+	r.Trigger()
+	r.f.awaitReplays(n)
+}
+
+func TestMessageMissedWhileDisconnectedIsBufferedOnceAfterALivePostMovesTheMarker(t *testing.T) {
+	f := newFixture(t)
+	before := msg("p1", "user-a", "before", direct, createdAt(1000))
+	missed := msg("p2", "user-b", "missed", direct, createdAt(2000))
+	live := msg("p3", "user-c", "live", direct, createdAt(3000))
+	f.serve(before, missed, live)
+	f.deliver(before)
+	r := f.startRecovery()
+	r.Disconnected()
+	f.deliver(live)
+	r.reconnect(1)
+	r.stop()
+	f.stop()
+	for user, want := range map[string]string{"user-a": "p1", "user-b": "p2", "user-c": "p3"} {
+		if got := postIDs(f.value(prefix + "dm:" + user)); !slices.Equal(got, []string{want}) {
+			t.Errorf("buffer of %s holds %q, want %s once", user, got, want)
+		}
+	}
+	if n := len(f.flusher.received()); n != 3 {
+		t.Errorf("%d notices, want one per message", n)
+	}
+}
+
+func TestReplayStartsFromTheEarliestDisconnectUntilAReplayAfterReconnectingSucceeds(t *testing.T) {
+	f := newFixture(t)
+	s := f.serve()
+	r := f.startRecovery()
+	defer r.stop()
+	f.deliver(msg("p1", "user-a", "hi", createdAt(1000)))
+	r.Disconnected()
+	f.deliver(msg("p2", "user-a", "hi", createdAt(2000)))
+	r.Disconnected()
+	f.deliver(msg("p3", "user-a", "hi", createdAt(3000)))
+	r.reconnect(1)
+	if got := s.lastStart(); got != 1000 {
+		t.Errorf("replay after two disconnects starts at %d, want the first disconnect's 1000", got)
+	}
+
+	f.deliver(msg("p4", "user-a", "hi", createdAt(4000)))
+	r.Disconnected()
+	f.deliver(msg("p5", "user-a", "hi", createdAt(5000)))
+	r.reconnect(2)
+	if got := s.lastStart(); got != 4000 {
+		t.Errorf("replay after a successful replay and one more disconnect starts at %d, want 4000", got)
+	}
+}
+
+func TestFailedReplayKeepsItsStartForTheNextOne(t *testing.T) {
+	f := newFixture(t)
+	s := f.serve()
+	s.fail = errors.New("mattermost GET /users/me/teams: 502 Bad Gateway")
+	r := f.startRecovery()
+	defer r.stop()
+	f.deliver(msg("p1", "user-a", "hi", createdAt(1000)))
+	r.Disconnected()
+	f.deliver(msg("p2", "user-a", "hi", createdAt(2000)))
+	r.reconnect(1)
+	s.mu.Lock()
+	s.fail = nil
+	s.mu.Unlock()
+	f.deliver(msg("p3", "user-a", "hi", createdAt(3000)))
+	r.Disconnected()
+	r.reconnect(2)
+	if got := s.lastStart(); got != 1000 {
+		t.Errorf("replay after a failed one starts at %d, want the failed replay's 1000", got)
+	}
+}
+
+func TestStartupReplayFailureKeepsTheStartupMarker(t *testing.T) {
+	f := newFixture(t)
+	f.set(marker, `{"create_at": 1000}`)
+	s := f.serve()
+	s.fail = errors.New("mattermost GET /users/me/teams: 502 Bad Gateway")
+	r := f.startRecovery()
+	defer r.stop()
+	r.reconnect(1)
+	s.mu.Lock()
+	s.fail = nil
+	s.mu.Unlock()
+	f.deliver(msg("p2", "user-a", "hi", createdAt(2000)))
+	r.Disconnected()
+	r.reconnect(2)
+	if got := s.lastStart(); got != 1000 {
+		t.Errorf("replay after a failed startup replay starts at %d, want the startup marker 1000", got)
+	}
+}
+
+func TestDisconnectDuringAReplayKeepsItsStart(t *testing.T) {
+	f := newFixture(t)
+	g := newGate()
+	s := f.serve()
+	serve := f.platform.replay
+	f.platform.replay = func(ctx context.Context, after time.Time, deliver chat.Deliver) error {
+		if err := g.wait(ctx); err != nil {
+			return err
+		}
+		return serve(ctx, after, deliver)
+	}
+	r := f.startRecovery()
+	defer r.stop()
+	f.deliver(msg("p1", "user-a", "hi", createdAt(1000)))
+	r.Disconnected()
+	r.Trigger()
+	g.awaitStarted(t, 1)
+	f.deliver(msg("p2", "user-a", "hi", createdAt(2000)))
+	r.Disconnected()
+	g.open <- struct{}{}
+	f.awaitReplays(1)
+	close(g.open)
+	r.reconnect(2)
+	if got := s.lastStart(); got != 1000 {
+		t.Errorf("replay after a disconnect during the previous one starts at %d, want that one's 1000", got)
+	}
+}
+
+func TestReplayWhileDisconnectedKeepsItsStart(t *testing.T) {
+	f := newFixture(t)
+	g := newGate()
+	s := f.serve()
+	serve := f.platform.replay
+	f.platform.replay = func(ctx context.Context, after time.Time, deliver chat.Deliver) error {
+		if err := g.wait(ctx); err != nil {
+			return err
+		}
+		return serve(ctx, after, deliver)
+	}
+	f.set(marker, `{"create_at": 500}`)
+	r := f.startRecovery()
+	defer r.stop()
+	r.Trigger()
+	g.awaitStarted(t, 1)
+	f.deliver(msg("p1", "user-a", "hi", createdAt(1000)))
+	r.Disconnected()
+	r.Trigger()
+	f.deliver(msg("p2", "user-a", "hi", createdAt(1500)))
+	r.Disconnected()
+	close(g.open)
+	f.awaitReplays(2)
+	f.deliver(msg("p3", "user-a", "hi", createdAt(2000)))
+	r.reconnect(3)
+	if got := s.lastStart(); got != 500 {
+		t.Errorf("replay after reconnecting starts at %d, want 500 despite the replay that ran while disconnected", got)
+	}
+}
+
+// listener is a platform whose one intake session connects, delivers live, and stays open until ctx ends.
+type listener struct {
+	*platform
+	live chat.Message
+}
+
+func (l *listener) Listen(ctx context.Context, connected func(), deliver chat.Deliver) error {
+	connected()
+	if err := deliver(ctx, event(l.live)); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return nil
+}
+
+func TestMessageMissedWhileStoppedIsBufferedOnceAfterALivePostAtStartupMovesTheMarker(t *testing.T) {
+	f := newFixture(t)
+	f.set(marker, `{"create_at": 1000}`)
+	missed := msg("p2", "user-b", "missed", direct, createdAt(2000))
+	live := msg("p3", "user-c", "live", direct, createdAt(3000))
+	f.serve(missed, live)
+	rec := dispatch.NewRecovery(f.d, f.store, f.log)
+	open := func(*config.Settings) (chat.Platform, error) { return &listener{platform: f.platform, live: live}, nil }
+	gw := gateway.New(f.settings, open, f.d.Enqueue, rec.Trigger, rec.Disconnected, f.clk, f.log)
+	dispatching, stopDispatch := context.WithCancel(t.Context())
+	dispatched := f.run(dispatching)
+	connected, disconnect := context.WithCancel(t.Context())
+	defer disconnect()
+	go func() { _ = gw.Run(connected) }()
+
+	// The live post moves the marker before the startup run, which the connection triggered, starts.
+	f.flusher.await(t, 1)
+	recovering, stopRecovery := context.WithCancel(t.Context())
+	recovered := make(chan error, 1)
+	go func() { recovered <- rec.Run(recovering) }()
+	f.awaitReplays(1)
+	stopRecovery()
+	f.wait(recovered)
+	stopDispatch()
+	f.wait(dispatched)
+	for user, want := range map[string]string{"user-b": "p2", "user-c": "p3"} {
+		if got := postIDs(f.value(prefix + "dm:" + user)); !slices.Equal(got, []string{want}) {
+			t.Errorf("buffer of %s holds %q, want %s once", user, got, want)
+		}
+	}
+	if n := len(f.flusher.received()); n != 2 {
+		t.Errorf("%d notices, want one per message", n)
 	}
 }

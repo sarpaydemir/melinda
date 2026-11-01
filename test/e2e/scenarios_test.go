@@ -179,6 +179,44 @@ func TestPostsMissedWhileDisconnectedAreAnsweredOnceAfterReconnecting(t *testing
 	e.assertSettled()
 }
 
+func TestPostInAChannelWhoseReplayFailedIsAnsweredOnceAfterTheNextReconnect(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, nil)
+	a := e.start()
+	e.post("dm1", "", "live")
+	a.awaitReplies(e, 1)
+
+	// The mention is older than the direct message, so a replay from after the direct message would skip it.
+	e.chat.On("GET", "/api/v4/channels/"+id("ch1")+"/posts").Reply(testkit.Status(500))
+	mention := e.chat.AddPost(mattermostfake.Post{UserID: id("u1"), ChannelID: id("ch1"), Message: "@agent missed mention"})
+	e.chat.AddPost(mattermostfake.Post{UserID: id("u1"), ChannelID: id("dm1"), Message: "missed"})
+	e.chat.Drop()
+	a.await("the replay that could not read ch1", func() bool {
+		return strings.Contains(a.logs.String(), `msg="recovery stopped early"`)
+	})
+	a.awaitReplies(e, 2)
+	e.chat.Drop()
+	a.awaitReplies(e, 3)
+	a.stop()
+
+	want := map[reply]bool{
+		{ChannelID: id("dm1"), Message: "Answer to " + line("u1", "live")}:                                      true,
+		{ChannelID: id("dm1"), Message: "Answer to " + line("u1", "missed")}:                                    true,
+		{ChannelID: id("ch1"), RootID: mention.ID, Message: "Answer to " + line("u1", "@agent missed mention")}: true,
+	}
+	got := e.replies()
+	for _, r := range got {
+		if !want[r] {
+			t.Errorf("unexpected or repeated reply %+v", r)
+		}
+		delete(want, r)
+	}
+	if len(want) > 0 {
+		t.Errorf("missing replies %+v; got %+v", want, got)
+	}
+	e.assertSettled()
+}
+
 func TestSIGTERMDuringAReplyLetsItFinish(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, nil)
