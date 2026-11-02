@@ -1,4 +1,4 @@
-// Command melinda runs a self-hosted AI agent for Mattermost.
+// Command melinda runs a self-hosted AI teammate for your team chat.
 package main
 
 import (
