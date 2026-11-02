@@ -1,8 +1,8 @@
-# dost
+# Melinda
 
 Self-hosted AI teammate for Mattermost, written in Go.
 
-dost answers direct messages and mentions with any OpenAI-compatible model, keeps conversation and long-term
+Melinda answers direct messages and mentions with any OpenAI-compatible model, keeps conversation and long-term
 memory in PostgreSQL with pgvector, learns shared knowledge from public channels, reads attachments, searches the
 web, generates images, and works with Plane. The agent's name, persona, language, and prompts are configuration,
 so one deployment model serves any number of agents.
