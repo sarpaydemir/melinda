@@ -3,12 +3,6 @@ chat_sessions.key character varying(256) NOT NULL
 chat_sessions.value jsonb NOT NULL
 chat_sessions.created_at timestamp with time zone NOT NULL
 chat_sessions.updated_at timestamp with time zone NOT NULL
-melinda_inflight_runs.agent_id text NOT NULL
-melinda_inflight_runs.generation text NOT NULL
-melinda_inflight_runs.conversation_key text NOT NULL
-melinda_inflight_runs.buffer jsonb NOT NULL
-melinda_inflight_runs.taken_at timestamp with time zone NOT NULL
-melinda_inflight_runs.resubmissions integer NOT NULL DEFAULT 0
 key_value_store.id integer NOT NULL DEFAULT nextval('key_value_store_id_seq'::regclass)
 key_value_store.type character varying(128) NOT NULL
 key_value_store.key character varying(256) NOT NULL
@@ -23,16 +17,21 @@ langchain_pg_embedding.collection_id uuid
 langchain_pg_embedding.embedding vector(1536)
 langchain_pg_embedding.document character varying
 langchain_pg_embedding.cmetadata jsonb
+melinda_inflight_runs.agent_id text NOT NULL
+melinda_inflight_runs.generation text NOT NULL
+melinda_inflight_runs.conversation_key text NOT NULL
+melinda_inflight_runs.buffer jsonb NOT NULL
+melinda_inflight_runs.taken_at timestamp with time zone NOT NULL
+melinda_inflight_runs.resubmissions integer NOT NULL DEFAULT 0
 chat_sessions chat_sessions_pkey PRIMARY KEY (id)
-melinda_inflight_runs melinda_inflight_runs_pkey PRIMARY KEY (agent_id, generation)
 key_value_store key_value_store_pkey PRIMARY KEY (id)
 langchain_pg_collection langchain_pg_collection_name_key UNIQUE (name)
 langchain_pg_collection langchain_pg_collection_pkey PRIMARY KEY (uuid)
 langchain_pg_embedding langchain_pg_embedding_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES langchain_pg_collection(uuid) ON DELETE CASCADE
 langchain_pg_embedding langchain_pg_embedding_pkey PRIMARY KEY (id)
+melinda_inflight_runs melinda_inflight_runs_pkey PRIMARY KEY (agent_id, generation)
 CREATE UNIQUE INDEX chat_sessions_pkey ON public.chat_sessions USING btree (id)
 CREATE UNIQUE INDEX ix_chat_sessions_key ON public.chat_sessions USING btree (key)
-CREATE UNIQUE INDEX melinda_inflight_runs_pkey ON public.melinda_inflight_runs USING btree (agent_id, generation)
 CREATE INDEX ix_gin_key_value_store_value ON public.key_value_store USING gin (value)
 CREATE UNIQUE INDEX ix_key_value_store_key ON public.key_value_store USING btree (key)
 CREATE UNIQUE INDEX key_value_store_pkey ON public.key_value_store USING btree (id)
@@ -41,3 +40,4 @@ CREATE UNIQUE INDEX langchain_pg_collection_pkey ON public.langchain_pg_collecti
 CREATE INDEX ix_cmetadata_gin ON public.langchain_pg_embedding USING gin (cmetadata jsonb_path_ops)
 CREATE INDEX ix_vector_hnsw ON public.langchain_pg_embedding USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
 CREATE UNIQUE INDEX langchain_pg_embedding_pkey ON public.langchain_pg_embedding USING btree (id)
+CREATE UNIQUE INDEX melinda_inflight_runs_pkey ON public.melinda_inflight_runs USING btree (agent_id, generation)
