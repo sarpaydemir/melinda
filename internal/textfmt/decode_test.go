@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 func TestDecodeKeepsOrderAndNumberKinds(t *testing.T) {

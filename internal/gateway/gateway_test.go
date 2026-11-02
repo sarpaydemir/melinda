@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/gateway"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/gateway"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
 )
 
 // session is an intake session the test drives: it connects when the test calls connected and ends with the

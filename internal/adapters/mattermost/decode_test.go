@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/adapters/mattermost"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 // decoder returns the platform for decoding only; it never reaches a server.

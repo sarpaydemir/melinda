@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // ModelHarness is a model provider wired to a fake API.

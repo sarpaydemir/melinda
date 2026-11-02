@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/store/kv"
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/store/kv"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // Store is the key-value store behavior Contract checks.

@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
 )
 
 const (

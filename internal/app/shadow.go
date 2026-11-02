@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/routing"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/routing"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // recorder suppresses the writes of shadow mode, writing one JSON line to w for each.

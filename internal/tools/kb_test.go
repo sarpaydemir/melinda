@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/kb"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/store/vector"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/tools"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/kb"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/store/vector"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/tools"
 )
 
 // knowledge answers each search with the next of errs while any are left, then with hits, and records each search

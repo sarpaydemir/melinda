@@ -6,9 +6,9 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/store/history"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/store/history"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // maxItems is how many of the newest items a history keeps.

@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/tools"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/tools"
 )
 
 // painter is an image model that answers with its images in turn, or fails with err, and records each request as

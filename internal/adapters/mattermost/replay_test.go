@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
 )
 
 // seenAt is the last-seen time the replays in these tests start after.

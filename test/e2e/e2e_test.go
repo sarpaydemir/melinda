@@ -19,10 +19,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
-	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
 )
 
 // deadline bounds every wait; the race-enabled binary is slow and a model failure retries for seconds.

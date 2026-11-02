@@ -3,7 +3,7 @@ package llm
 import (
 	"encoding/json"
 
-	"github.com/sarpaydemir/dost/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/port/model"
 )
 
 // Messages lays out a reply's request: the system prompt unless it is empty, the non-empty user and assistant

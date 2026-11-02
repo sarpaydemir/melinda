@@ -3,7 +3,7 @@ package files
 import (
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 func TestMediaTypeIsTheReportedOneElseImpliedByTheExtension(t *testing.T) {

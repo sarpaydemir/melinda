@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/web"
+	"github.com/sarpaydemir/melinda/internal/port/web"
 )
 
 // SearchHarness is a web search adapter wired to a fake search engine.

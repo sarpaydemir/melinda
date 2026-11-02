@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
 )
 
 func post(t *testing.T, url, body string) (int, []byte) {

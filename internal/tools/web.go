@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // searchWeb is search_web: the first results of a web search, printed as a structured value.

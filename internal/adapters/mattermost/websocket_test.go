@@ -12,11 +12,11 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
 )
 
 // session is a Listen call in progress.

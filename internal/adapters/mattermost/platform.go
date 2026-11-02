@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 // settings are the adapter's keys in the settings document.

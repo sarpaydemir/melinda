@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/files"
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/files"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 // stored is an attachment as the fake platform keeps it.

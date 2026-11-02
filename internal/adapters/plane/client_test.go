@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/adapters/plane"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/planefake"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/adapters/plane"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/planefake"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const (

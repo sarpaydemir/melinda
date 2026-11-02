@@ -6,13 +6,13 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/port/web"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/port/web"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // Handler runs a matched automation, posting its own messages, and returns the reply saved as the turn. A reply

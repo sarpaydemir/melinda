@@ -11,7 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 const (

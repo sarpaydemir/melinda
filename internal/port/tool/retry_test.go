@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
 )
 
 // logger writes text lines without timestamps to logs.

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 func TestHistoryKeys(t *testing.T) {

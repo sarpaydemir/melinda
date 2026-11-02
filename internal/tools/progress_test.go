@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/tools"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/tools"
 )
 
 // outbound records every message sent and file uploaded through it. It answers each send with the next of replies,

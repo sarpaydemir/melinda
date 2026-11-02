@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/store/pg"
-	"github.com/sarpaydemir/dost/internal/testkit/snapshot"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/testkit/snapshot"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // TestSnapshotRowsDecode checks every row of the facts and knowledge collections of a database copy: a

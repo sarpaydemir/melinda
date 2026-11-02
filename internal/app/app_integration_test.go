@@ -13,14 +13,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/logging"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/store/pg"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
-	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+	"github.com/sarpaydemir/melinda/internal/adapters/mattermost"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
 )
 
 // logWatch collects log lines written concurrently and closes seen when a line contains match.

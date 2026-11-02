@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // Decode decodes the JSON arguments of a call, keeping key order and number kinds. Text that is not JSON decodes

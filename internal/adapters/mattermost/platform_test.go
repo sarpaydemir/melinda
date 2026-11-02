@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/conformance"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/adapters/mattermost"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/conformance"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
 )
 
 func settings(t testing.TB, doc string) *config.Settings {

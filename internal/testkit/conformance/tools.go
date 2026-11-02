@@ -8,8 +8,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	catalog "github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	catalog "github.com/sarpaydemir/melinda/internal/prompt"
 )
 
 var functionName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)

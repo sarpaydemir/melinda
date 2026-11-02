@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/testkit/golden"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
-	"github.com/sarpaydemir/dost/internal/tools"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/testkit/golden"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/tools"
 )
 
 // TestDefaultToolsAreTheEstablishedArray sends the tools offered with settings that configure no tool source,

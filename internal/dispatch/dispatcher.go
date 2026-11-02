@@ -9,14 +9,14 @@ import (
 	"slices"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/logging"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/routing"
-	"github.com/sarpaydemir/dost/internal/store/kv"
-	"github.com/sarpaydemir/dost/internal/store/pg"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/routing"
+	"github.com/sarpaydemir/melinda/internal/store/kv"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const (

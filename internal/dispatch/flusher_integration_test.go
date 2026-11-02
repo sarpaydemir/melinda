@@ -14,16 +14,16 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/dispatch"
-	"github.com/sarpaydemir/dost/internal/pipeline"
-	"github.com/sarpaydemir/dost/internal/routing"
-	"github.com/sarpaydemir/dost/internal/store/journal"
-	"github.com/sarpaydemir/dost/internal/store/kv"
-	"github.com/sarpaydemir/dost/internal/store/pg"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/dispatch"
+	"github.com/sarpaydemir/melinda/internal/pipeline"
+	"github.com/sarpaydemir/melinda/internal/routing"
+	"github.com/sarpaydemir/melinda/internal/store/journal"
+	"github.com/sarpaydemir/melinda/internal/store/kv"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
 )
 
 // scheduler is a pipeline whose capacity wait and job handling a test supplies.

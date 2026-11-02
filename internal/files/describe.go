@@ -6,12 +6,12 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/llm"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/llm"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // Describer tells the model about a message's attachments, for one reply.

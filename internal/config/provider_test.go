@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/logging"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
 )
 
 type harness struct {

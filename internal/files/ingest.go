@@ -11,9 +11,9 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // Context is what a message's attachments contribute to a reply, in file order.

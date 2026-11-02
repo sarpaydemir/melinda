@@ -15,7 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // User is the part of a Mattermost user that clients read.

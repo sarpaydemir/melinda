@@ -6,8 +6,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
 )
 
 const (

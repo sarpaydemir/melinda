@@ -13,15 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/adapters/plane"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/conformance"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/testkit/planefake"
+	"github.com/sarpaydemir/melinda/internal/adapters/plane"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/conformance"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/testkit/planefake"
 )
 
 // The project, work item, and cycle the tools are asked about, and work items that cycle rows name.

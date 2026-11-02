@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/store/kv"
-	"github.com/sarpaydemir/dost/internal/store/pg"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
-	"github.com/sarpaydemir/dost/internal/testkit/kvtest"
-	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/store/kv"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/testkit/kvtest"
+	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
 )
 
 // open returns a store on a new database, and a direct connection to that database.

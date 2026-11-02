@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/dispatch"
-	"github.com/sarpaydemir/dost/internal/gateway"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/dispatch"
+	"github.com/sarpaydemir/melinda/internal/gateway"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // recovery runs a recovery that replays into f's dispatcher until stop is called.

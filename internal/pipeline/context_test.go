@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/pipeline"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/pipeline"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const userPrefix = "Talking to: "

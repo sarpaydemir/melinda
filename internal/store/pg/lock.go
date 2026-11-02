@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/clock"
 )
 
 const (

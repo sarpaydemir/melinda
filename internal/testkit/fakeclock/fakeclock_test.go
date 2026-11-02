@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/testkit/fakeclock"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/testkit/fakeclock"
 )
 
 var start = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)

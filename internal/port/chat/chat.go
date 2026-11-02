@@ -8,7 +8,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // ErrTakenOver refuses a run's write after another process took the run over; the run must stop writing.

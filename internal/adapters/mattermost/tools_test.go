@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/conformance"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/adapters/mattermost"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/conformance"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
 )
 
 // Channels as the user "me" sees them while asking in here.

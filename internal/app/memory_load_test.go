@@ -18,14 +18,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/adapters/httpfetch"
-	"github.com/sarpaydemir/dost/internal/adapters/openai"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/files"
-	"github.com/sarpaydemir/dost/internal/llm"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/adapters/httpfetch"
+	"github.com/sarpaydemir/melinda/internal/adapters/openai"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/files"
+	"github.com/sarpaydemir/melinda/internal/llm"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/prompt"
 )
 
 // containerLimit is the default memory limit of the agent's container in deploy/compose.yml.

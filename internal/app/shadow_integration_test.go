@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/automation"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
-	"github.com/sarpaydemir/dost/internal/testkit/planefake"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/automation"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/testkit/planefake"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const (

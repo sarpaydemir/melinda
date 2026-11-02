@@ -11,9 +11,9 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/prompt"
 )
 
 // Set is the tools offered while answering one message, with what their calls are told about it. It shares no

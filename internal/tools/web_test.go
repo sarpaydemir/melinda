@@ -12,9 +12,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/port/web"
-	"github.com/sarpaydemir/dost/internal/tools"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/port/web"
+	"github.com/sarpaydemir/melinda/internal/tools"
 )
 
 // engine is a web search that answers every search with results, or fails with err, and records each search as

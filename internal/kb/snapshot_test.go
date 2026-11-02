@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/testkit/snapshot"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/testkit/snapshot"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // TestSnapshotEntryTimesRead checks that every knowledge entry of a database copy that carries a creation time or

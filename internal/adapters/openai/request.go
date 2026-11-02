@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // The wire types list their fields in the order the API receives them.

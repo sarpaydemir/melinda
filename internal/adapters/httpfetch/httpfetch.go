@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/web"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/web"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const (

@@ -8,9 +8,9 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
 )
 
 // generateImage is generate_image: an image from the image model, uploaded to the conversation and attached to

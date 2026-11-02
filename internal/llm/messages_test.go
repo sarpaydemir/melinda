@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/llm"
-	"github.com/sarpaydemir/dost/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/llm"
+	"github.com/sarpaydemir/melinda/internal/port/model"
 )
 
 func TestMessagesLayOutTheSystemPromptHistoryAndUserMessage(t *testing.T) {

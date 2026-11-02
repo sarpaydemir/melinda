@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/planefake"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/planefake"
 )
 
 func TestRoutesUnderWorkspaceRequireAPIKey(t *testing.T) {

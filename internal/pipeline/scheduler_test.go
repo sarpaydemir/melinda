@@ -14,9 +14,9 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/pipeline"
-	"github.com/sarpaydemir/dost/internal/routing"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/pipeline"
+	"github.com/sarpaydemir/melinda/internal/routing"
 )
 
 const runTimeout = 30 * time.Minute

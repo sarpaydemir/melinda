@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/logging"
 )
 
 // Provider serves the current settings snapshot. The first read after the snapshot is DOST_SETTINGS_TTL old

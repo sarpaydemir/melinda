@@ -7,7 +7,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/clock"
 )
 
 func TestSleep(t *testing.T) {

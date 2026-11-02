@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/adapters/mattermost"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/adapters/mattermost"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
 )
 
 const token = "s3cret-token"

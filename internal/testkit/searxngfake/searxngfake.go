@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // Fake serves GET /search; answers are scripted. Like a SearXNG instance with only the JSON format enabled, it

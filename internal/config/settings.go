@@ -15,7 +15,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const (

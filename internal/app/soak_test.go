@@ -26,16 +26,16 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/sarpaydemir/dost/internal/app"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/logging"
-	"github.com/sarpaydemir/dost/internal/store/pg"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
-	"github.com/sarpaydemir/dost/internal/testkit/searxngfake"
-	"github.com/sarpaydemir/dost/internal/testkit/testdb"
-	"github.com/sarpaydemir/dost/internal/testkit/webfake"
+	"github.com/sarpaydemir/melinda/internal/app"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/testkit/searxngfake"
+	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
+	"github.com/sarpaydemir/melinda/internal/testkit/webfake"
 )
 
 const (

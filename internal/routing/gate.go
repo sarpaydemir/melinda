@@ -4,9 +4,9 @@ import (
 	"cmp"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // ShouldRespond reports whether the agent answers m. agent is the agent's account, with an empty Username when

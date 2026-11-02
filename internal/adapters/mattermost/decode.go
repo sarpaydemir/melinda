@@ -6,8 +6,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // post is the part of a Mattermost post that routing reads.

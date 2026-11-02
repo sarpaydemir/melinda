@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 func TestEncodeWritesCompactJSONWithCharactersAsTheyAre(t *testing.T) {

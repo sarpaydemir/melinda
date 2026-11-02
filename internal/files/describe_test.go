@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/files"
-	"github.com/sarpaydemir/dost/internal/llm"
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/files"
+	"github.com/sarpaydemir/melinda/internal/llm"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/prompt"
 )
 
 // models answers chat requests with scripted contents, in order, and records the requests; an empty content is

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/melinda/internal/config"
 )
 
 const (

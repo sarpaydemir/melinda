@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sarpaydemir/dost/internal/store/kv"
+	"github.com/sarpaydemir/melinda/internal/store/kv"
 )
 
 // Memory is an in-memory Store; the zero value is empty and ready to use. Update and UpdateAll hold the store's

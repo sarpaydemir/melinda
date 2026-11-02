@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // ChatHarness is a chat platform adapter wired to a fake platform that has the agent's account, one other

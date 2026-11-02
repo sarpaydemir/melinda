@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // Clock is a manually advanced clock.Clock. Its timers follow time.Timer semantics as of Go 1.23: after Stop or

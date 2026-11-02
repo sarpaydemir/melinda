@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 const (

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/llm"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/llm"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // provider answers every chat request with resp and err and records the requests.

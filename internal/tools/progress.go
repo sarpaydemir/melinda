@@ -6,9 +6,9 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // progressUpdate is send_progress_update: an interim message posted in the reply's thread while the reply

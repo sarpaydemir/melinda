@@ -1,4 +1,4 @@
-module github.com/sarpaydemir/dost
+module github.com/sarpaydemir/melinda
 
 go 1.26.0
 

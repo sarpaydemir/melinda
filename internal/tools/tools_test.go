@@ -12,9 +12,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/prompt"
-	"github.com/sarpaydemir/dost/internal/tools"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/tools"
 )
 
 // tracker is a contributed tool that reports the call it gets, or fails with err.

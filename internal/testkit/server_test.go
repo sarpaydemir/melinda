@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // failures captures the failures a helper reports instead of failing the enclosing test.

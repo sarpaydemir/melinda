@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
 )
 
 func arguments(t *testing.T, args string) tool.Args {

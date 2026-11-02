@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/llm"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/llm"
 )
 
 // embedder answers every embedding request with its vector or error and records the requests.

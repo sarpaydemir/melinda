@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/searxngfake"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/searxngfake"
 )
 
 func get(t *testing.T, url string) (int, []byte) {

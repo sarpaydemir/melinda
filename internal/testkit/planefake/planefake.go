@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // Fake serves routes under /api/v1/workspaces/{workspace}; answers are scripted. Requests without the

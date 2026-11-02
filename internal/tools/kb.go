@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/kb"
-	"github.com/sarpaydemir/dost/internal/port/tool"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/kb"
+	"github.com/sarpaydemir/melinda/internal/port/tool"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // kbMaxEntries is the most entries search_public_kb returns, whatever limit the model asks for.

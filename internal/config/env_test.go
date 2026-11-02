@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/melinda/internal/config"
 )
 
 func load(t *testing.T, environ ...string) config.Env {

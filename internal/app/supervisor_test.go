@@ -10,8 +10,8 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/app"
-	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/app"
+	"github.com/sarpaydemir/melinda/internal/clock"
 )
 
 type recorder struct {

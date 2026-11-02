@@ -16,9 +16,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/testkit/golden"
-	"github.com/sarpaydemir/dost/internal/testkit/testdb"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/testkit/golden"
+	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
 )
 
 var allTables = []string{"chat_sessions", "dost_inflight_runs", "key_value_store", "langchain_pg_collection", "langchain_pg_embedding"}

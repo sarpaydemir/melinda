@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/melinda/internal/config"
 )
 
 func document(t *testing.T, s string) map[string]json.RawMessage {

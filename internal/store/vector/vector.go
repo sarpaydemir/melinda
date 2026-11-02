@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/sarpaydemir/dost/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
 )
 
 // searchSQL ranks the collection's rows that pass the filter condition (%s) by cosine distance.

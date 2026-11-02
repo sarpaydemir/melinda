@@ -21,11 +21,11 @@ import (
 
 	"golang.org/x/net/dns/dnsmessage"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/web"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/conformance"
-	"github.com/sarpaydemir/dost/internal/testkit/webfake"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/web"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/conformance"
+	"github.com/sarpaydemir/melinda/internal/testkit/webfake"
 )
 
 func settings(t *testing.T, doc string) *config.Settings {

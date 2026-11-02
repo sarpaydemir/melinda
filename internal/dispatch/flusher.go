@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/logging"
-	"github.com/sarpaydemir/dost/internal/routing"
-	"github.com/sarpaydemir/dost/internal/store/journal"
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/routing"
+	"github.com/sarpaydemir/melinda/internal/store/journal"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 const (

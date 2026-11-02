@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 // Replay reads the posts of every channel the bot belongs to, visiting a channel listed under several teams once,

@@ -19,7 +19,7 @@ LABEL org.opencontainers.image.title="dost" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${DATE}" \
-      org.opencontainers.image.source="https://github.com/sarpaydemir/dost" \
+      org.opencontainers.image.source="https://github.com/sarpaydemir/melinda" \
       org.opencontainers.image.licenses="Apache-2.0"
 COPY --from=build /out/dost /usr/local/bin/dost
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 CMD ["/usr/local/bin/dost", "health"]

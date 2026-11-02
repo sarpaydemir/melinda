@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/clock"
 )
 
 // AbortGrace is how long components get to return after in-flight work is cancelled at the shutdown deadline.

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/*.golden files with the current output")

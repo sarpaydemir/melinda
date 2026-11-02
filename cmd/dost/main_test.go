@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/app"
+	"github.com/sarpaydemir/melinda/internal/app"
 )
 
 func TestCommandLine(t *testing.T) {

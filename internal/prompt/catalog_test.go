@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/prompt"
 )
 
 var entries = []prompt.Entry{

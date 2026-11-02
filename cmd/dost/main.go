@@ -14,9 +14,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/sarpaydemir/dost/internal/app"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/app"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/logging"
 )
 
 // Build metadata, set with -ldflags "-X main.version=... -X main.commit=... -X main.date=...".

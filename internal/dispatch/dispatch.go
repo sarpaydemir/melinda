@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/routing"
+	"github.com/sarpaydemir/melinda/internal/routing"
 )
 
 // Scheduler is the pipeline's intake as the flusher uses it. The pipeline implements it.

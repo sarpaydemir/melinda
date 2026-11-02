@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 // SecretKey is a settings key that holds a secret, declared by the adapter that reads it. A reference in Ref

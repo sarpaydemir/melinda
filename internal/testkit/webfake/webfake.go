@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // New starts a server that answers GET for each path in pages, every time.

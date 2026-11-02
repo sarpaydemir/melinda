@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 func TestLabelIsTheBestNameFollowedByTheUsername(t *testing.T) {

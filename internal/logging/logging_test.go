@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/logging"
+	"github.com/sarpaydemir/melinda/internal/logging"
 )
 
 func secretSet(values ...string) *logging.Secrets {

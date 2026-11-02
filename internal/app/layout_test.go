@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-const module = "github.com/sarpaydemir/dost"
+const module = "github.com/sarpaydemir/melinda"
 
 type goPackage struct {
 	ImportPath string

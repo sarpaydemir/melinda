@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/port/web"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/webfake"
+	"github.com/sarpaydemir/melinda/internal/port/web"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/webfake"
 )
 
 // maxPage is how much of a page body a fetcher reads.

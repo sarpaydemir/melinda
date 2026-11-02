@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/mattermostfake"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/mattermostfake"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
 )
 
 func TestRapidMessagesAreAnsweredOnceTogether(t *testing.T) {

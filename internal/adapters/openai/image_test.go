@@ -11,9 +11,9 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/golden"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/golden"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
 )
 
 const (

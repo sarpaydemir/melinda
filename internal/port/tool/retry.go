@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/clock"
 )
 
 const attempts = 3

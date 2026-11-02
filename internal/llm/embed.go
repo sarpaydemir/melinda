@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/store/pg"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/store/pg"
 )
 
 // embedder is the part of a model provider that Embed uses.

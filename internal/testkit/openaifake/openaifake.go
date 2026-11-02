@@ -4,7 +4,7 @@ package openaifake
 import (
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit"
 )
 
 // Fake serves POST /chat/completions and POST /embeddings at the root of its URL; every answer is scripted.

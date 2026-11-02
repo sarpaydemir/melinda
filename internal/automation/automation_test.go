@@ -5,8 +5,8 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/automation"
-	"github.com/sarpaydemir/dost/internal/config"
+	"github.com/sarpaydemir/melinda/internal/automation"
+	"github.com/sarpaydemir/melinda/internal/config"
 )
 
 func TestFirstDeclaredAutomationMatchingTheTextWithoutMentionsWins(t *testing.T) {

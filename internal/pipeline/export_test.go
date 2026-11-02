@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/sarpaydemir/dost/internal/port/chat"
+	"github.com/sarpaydemir/melinda/internal/port/chat"
 )
 
 // Send posts m through a run's outbound path to platform.

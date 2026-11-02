@@ -18,13 +18,13 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/clock"
-	"github.com/sarpaydemir/dost/internal/config"
-	"github.com/sarpaydemir/dost/internal/port/model"
-	"github.com/sarpaydemir/dost/internal/testkit"
-	"github.com/sarpaydemir/dost/internal/testkit/conformance"
-	"github.com/sarpaydemir/dost/internal/testkit/golden"
-	"github.com/sarpaydemir/dost/internal/testkit/openaifake"
+	"github.com/sarpaydemir/melinda/internal/clock"
+	"github.com/sarpaydemir/melinda/internal/config"
+	"github.com/sarpaydemir/melinda/internal/port/model"
+	"github.com/sarpaydemir/melinda/internal/testkit"
+	"github.com/sarpaydemir/melinda/internal/testkit/conformance"
+	"github.com/sarpaydemir/melinda/internal/testkit/golden"
+	"github.com/sarpaydemir/melinda/internal/testkit/openaifake"
 )
 
 const key = "sk-test-0123456789"

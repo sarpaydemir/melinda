@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarpaydemir/dost/internal/prompt"
+	"github.com/sarpaydemir/melinda/internal/prompt"
 )
 
 var (

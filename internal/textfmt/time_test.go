@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarpaydemir/dost/internal/textfmt"
+	"github.com/sarpaydemir/melinda/internal/textfmt"
 )
 
 func TestFormatTimePrintsUTCWithMicroseconds(t *testing.T) {
