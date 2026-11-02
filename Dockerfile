@@ -15,7 +15,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 ARG VERSION=dev
 ARG COMMIT=none
 ARG DATE=unknown
-LABEL org.opencontainers.image.title="dost" \
+LABEL org.opencontainers.image.title="melinda" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${DATE}" \

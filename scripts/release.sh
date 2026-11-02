@@ -10,9 +10,9 @@ tag=${2:?version}
 REGISTRY=${REGISTRY:-ghcr.io/sarpaydemir}
 TARGETS="linux/amd64 linux/arm64 darwin/arm64"
 PLATFORMS=linux/amd64,linux/arm64
-BUILDER=dost-release
+BUILDER=melinda-release
 GO_IMAGE=$(grep -m1 -o 'golang:[^ ]*' Dockerfile)
-image=$REGISTRY/dost
+image=$REGISTRY/melinda
 
 die() { echo "release: $*" >&2; exit 1; }
 
@@ -61,12 +61,12 @@ build() { # os arch out gocache; same toolchain as the image
 for t in $TARGETS; do
 	os=${t%/*}
 	arch=${t#*/}
-	name=dost_${version}_${os}_${arch}
+	name=melinda_${version}_${os}_${arch}
 	stage=$dist/.stage/$name
 	mkdir -p "$stage"
-	build "$os" "$arch" "$stage/dost" "$cache/build"
+	build "$os" "$arch" "$stage/melinda" "$cache/build"
 	cp README.md LICENSE "$stage/"
-	chmod 755 "$dist/.stage" "$stage" "$stage/dost"
+	chmod 755 "$dist/.stage" "$stage" "$stage/melinda"
 	chmod 644 "$stage/README.md" "$stage/LICENSE"
 	tar -C "$dist/.stage" --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" -cf - "$name" |
 		gzip -9n >"$dist/$name.tar.gz"
@@ -76,10 +76,10 @@ done
 fresh=$(mktemp -d "$PWD/dist/.fresh.XXXXXX")
 build linux amd64 "$dist/.repro" "$fresh"
 rm -rf "$fresh"
-cmp -s "$dist/.repro" "$dist/.stage/dost_${version}_linux_amd64/dost" || die "build is not reproducible"
+cmp -s "$dist/.repro" "$dist/.stage/melinda_${version}_linux_amd64/melinda" || die "build is not reproducible"
 rm -rf "$dist/.repro" "$dist/.stage"
 
-(cd "$dist" && sha256sum dost_*.tar.gz >SHA256SUMS)
+(cd "$dist" && sha256sum melinda_*.tar.gz >SHA256SUMS)
 
 section() {
 	[ -f CHANGELOG.md ] && awk -v v="$version" '
@@ -102,7 +102,7 @@ buildx() {
 }
 
 if [ "$mode" = dry-run ]; then
-	buildx -t "$image:$version" --output "type=oci,dest=$dist/dost_${version}_image.oci.tar"
+	buildx -t "$image:$version" --output "type=oci,dest=$dist/melinda_${version}_image.oci.tar"
 	echo "dry run complete; nothing tagged, pushed, or published"
 	ls -l "$dist"
 	exit 0
@@ -120,15 +120,15 @@ fi
 if [ -n "$(remote_tag_commit)" ]; then
 	echo "tag $tag already on origin"
 else
-	git rev-parse -q --verify "refs/tags/$tag" >/dev/null || git tag -a "$tag" -m "dost $version"
+	git rev-parse -q --verify "refs/tags/$tag" >/dev/null || git tag -a "$tag" -m "melinda $version"
 	git push origin "refs/tags/$tag" || { git tag -d "$tag" >/dev/null; die "tag push failed"; }
 fi
 
 if gh release view "$tag" >/dev/null 2>&1; then
 	echo "release $tag already exists"
 else
-	gh release create "$tag" "$dist"/dost_*.tar.gz "$dist/SHA256SUMS" \
-		--title "dost $version" --notes-file "$dist/NOTES.md" --verify-tag ${pre:+--prerelease} ||
+	gh release create "$tag" "$dist"/melinda_*.tar.gz "$dist/SHA256SUMS" \
+		--title "melinda $version" --notes-file "$dist/NOTES.md" --verify-tag ${pre:+--prerelease} ||
 		die "release creation failed; image and tag are published, run: make release VERSION=$tag"
 fi
 ls -l "$dist"

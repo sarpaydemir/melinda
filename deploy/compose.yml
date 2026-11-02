@@ -1,8 +1,8 @@
-name: dost
+name: melinda
 
 services:
-  dost:
-    image: ${IMAGE:-dost:latest}
+  melinda:
+    image: ${IMAGE:-melinda:latest}
     restart: unless-stopped
     mem_limit: ${AGENT_MEMORY_LIMIT:-1g}
     stop_grace_period: 45s
@@ -11,29 +11,29 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      MELINDA_SETTINGS_FILE: /etc/dost/settings.json
-      MELINDA_PROMPTS_DIR: /etc/dost/prompts
+      MELINDA_SETTINGS_FILE: /etc/melinda/settings.json
+      MELINDA_PROMPTS_DIR: /etc/melinda/prompts
       MELINDA_DB_HOST: postgres
-      MELINDA_DB_USER: dost
-      MELINDA_DB_NAME: dost
+      MELINDA_DB_USER: melinda
+      MELINDA_DB_NAME: melinda
       MELINDA_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
-      - ${SETTINGS_PATH:-./settings.json}:/etc/dost/settings.json:ro
-      - ${PROMPTS_PATH:-./prompts}:/etc/dost/prompts:ro
+      - ${SETTINGS_PATH:-./settings.json}:/etc/melinda/settings.json:ro
+      - ${PROMPTS_PATH:-./prompts}:/etc/melinda/prompts:ro
 
   postgres:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-512m}
     environment:
-      POSTGRES_USER: dost
+      POSTGRES_USER: melinda
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: dost
+      POSTGRES_DB: melinda
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-vector.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dost -d dost"]
+      test: ["CMD-SHELL", "pg_isready -U melinda -d melinda"]
       interval: 5s
       timeout: 3s
       retries: 20

@@ -33,7 +33,7 @@ test: ## Unit tests with the race detector
 
 # with-test-db runs $(1) with MELINDA_TEST_DATABASE_URL naming a throwaway pgvector container.
 define with-test-db
-	@set -e; name="dost-test-$$$$-$$(date +%s)"; \
+	@set -e; name="melinda-test-$$$$-$$(date +%s)"; \
 	trap 'docker rm -f "$$name" >/dev/null 2>&1 || true' EXIT; \
 	trap 'exit 130' INT TERM HUP QUIT; \
 	docker run -d --rm --name "$$name" -e POSTGRES_PASSWORD=postgres \
@@ -65,8 +65,8 @@ vuln: ## Known-vulnerability scan (pinned in go.mod)
 build: ## Static binary in bin/
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/melinda ./cmd/melinda
 
-image: ## Container image dost:$(VERSION), also tagged dost:latest
-	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t dost:$(VERSION) -t dost:latest .
+image: ## Container image melinda:$(VERSION), also tagged melinda:latest
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t melinda:$(VERSION) -t melinda:latest .
 
 release: ## Run gates, then tag and publish binaries and image: make release VERSION=vX.Y.Z
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=vX.Y.Z" >&2; exit 1; }
