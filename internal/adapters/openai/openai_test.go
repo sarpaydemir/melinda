@@ -84,7 +84,7 @@ func openVia(t *testing.T, rt http.RoundTripper, base string, fields ...string) 
 		doc += "," + f
 	}
 	clk := &instantClock{}
-	p, err := New(settings(t, doc+"}"), rt, clk, "dost/1.2.3", slog.New(slog.DiscardHandler))
+	p, err := New(settings(t, doc+"}"), rt, clk, "melinda/1.2.3", slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestNewValidatesSettings(t *testing.T) {
 		{`{"model":"m","api_base":"http://h","key":"k","request_timeout":-1}`, "request_timeout: must not be negative"},
 		{`{"model":"m","api_base":"http://h","key":"k","request_timeout":1e10}`, "request_timeout: too large"},
 	} {
-		_, err := New(settings(t, tc.doc), http.DefaultTransport, &instantClock{}, "dost/1.2.3", slog.New(slog.DiscardHandler))
+		_, err := New(settings(t, tc.doc), http.DefaultTransport, &instantClock{}, "melinda/1.2.3", slog.New(slog.DiscardHandler))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want %q", tc.doc, err, tc.want)
 		}
@@ -206,7 +206,7 @@ func TestSendsOnlyTheContractHeaders(t *testing.T) {
 			"Authorization":   {"Bearer " + key},
 			"Content-Length":  {strconv.Itoa(len(req.Body))},
 			"Content-Type":    {"application/json"},
-			"User-Agent":      {"dost/1.2.3"},
+			"User-Agent":      {"melinda/1.2.3"},
 		}
 		if fmt.Sprint(req.Header) != fmt.Sprint(want) {
 			t.Errorf("%s headers:\n got %v\nwant %v", req.Call(), req.Header, want)

@@ -50,8 +50,8 @@ test-integration: ## Integration tests against a throwaway pgvector container (n
 	$(call with-test-db,$(GO) test -race -count=1 -tags=integration ./...)
 
 test-e2e: ## End-to-end scenarios: the race-enabled binary against fakes and a throwaway pgvector container (needs Docker)
-	@mkdir -p bin && $(GO) build -race -o bin/dost-e2e ./cmd/dost
-	$(call with-test-db,DOST_E2E_BINARY=$(CURDIR)/bin/dost-e2e $(GO) test -count=1 -timeout=5m -tags=e2e $(E2E_FLAGS) ./test/e2e/)
+	@mkdir -p bin && $(GO) build -race -o bin/melinda-e2e ./cmd/melinda
+	$(call with-test-db,DOST_E2E_BINARY=$(CURDIR)/bin/melinda-e2e $(GO) test -count=1 -timeout=5m -tags=e2e $(E2E_FLAGS) ./test/e2e/)
 
 test-load: ## Memory load test: worst-case concurrent replies under the default container memory limit
 	$(GO) test -count=1 -tags=load -run ContainerLimit -v ./internal/app/
@@ -63,7 +63,7 @@ vuln: ## Known-vulnerability scan (pinned in go.mod)
 	$(GO) tool govulncheck ./...
 
 build: ## Static binary in bin/
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/dost ./cmd/dost
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/melinda ./cmd/melinda
 
 image: ## Container image dost:$(VERSION), also tagged dost:latest
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t dost:$(VERSION) -t dost:latest .

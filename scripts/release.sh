@@ -55,7 +55,7 @@ build() { # os arch out gocache; same toolchain as the image
 		-v "$cache/mod:/gomod" -v "$4:/gocache" \
 		-e CGO_ENABLED=0 -e "GOOS=$1" -e "GOARCH=$2" -e GOMODCACHE=/gomod -e GOCACHE=/gocache \
 		-e GOFLAGS=-buildvcs=false -e GOTOOLCHAIN=local -e HOME=/tmp \
-		"$GO_IMAGE" go build -trimpath -ldflags "$ldflags" -o "$3" ./cmd/dost
+		"$GO_IMAGE" go build -trimpath -ldflags "$ldflags" -o "$3" ./cmd/melinda
 }
 
 for t in $TARGETS; do

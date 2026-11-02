@@ -12,7 +12,7 @@ Status: pre-release.
 ## Build
 
 ```bash
-make build    # static binary at bin/dost
+make build    # static binary at bin/melinda
 make check    # gofmt, go vet, staticcheck, tests with -race
 ```
 

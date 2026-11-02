@@ -165,7 +165,7 @@ func TestImageRequestFailuresLeaveTheAPIAddressToTheLog(t *testing.T) {
 	fake.Chat().Default(paced(fake, step{never, ""}))
 	var logs bytes.Buffer
 	doc := fmt.Sprintf(`{"model":"m","api_base":%q,"key":%q}`, fake.URL(), key)
-	p, err := New(settings(t, doc), http.DefaultTransport, &instantClock{}, "dost/1.2.3", slog.New(slog.NewTextHandler(&logs, nil)))
+	p, err := New(settings(t, doc), http.DefaultTransport, &instantClock{}, "melinda/1.2.3", slog.New(slog.NewTextHandler(&logs, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

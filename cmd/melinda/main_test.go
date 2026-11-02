@@ -22,9 +22,9 @@ func TestCommandLine(t *testing.T) {
 		wantOut  string
 		wantErr  string
 	}{
-		{name: "version", args: []string{"version"}, wantOut: "dost dev (commit none, built unknown, " + runtime.Version() + ")\n"},
-		{name: "help", args: []string{"-h"}, wantOut: "usage: dost <command>"},
-		{name: "no command", args: nil, wantCode: 2, wantErr: "usage: dost <command>"},
+		{name: "version", args: []string{"version"}, wantOut: "melinda dev (commit none, built unknown, " + runtime.Version() + ")\n"},
+		{name: "help", args: []string{"-h"}, wantOut: "usage: melinda <command>"},
+		{name: "no command", args: nil, wantCode: 2, wantErr: "usage: melinda <command>"},
 		{name: "unknown command", args: []string{"serve"}, wantCode: 2, wantErr: "usage:"},
 		{name: "extra argument", args: []string{"run", "now"}, wantCode: 2, wantErr: "usage:"},
 		{name: "unknown flag", args: []string{"config", "check", "--verbose"}, wantCode: 2, wantErr: "usage:"},
@@ -35,7 +35,7 @@ func TestCommandLine(t *testing.T) {
 		{name: "invalid configuration", args: []string{"config", "check", "--db"}, environ: []string{"DOST_COMPONENTS=gateway"}, wantCode: 1,
 			wantErr: "DOST_COMPONENTS: gateway needs dispatcher\n"},
 		{name: "startup failure", args: []string{"run"}, environ: []string{"DOST_COMPONENTS=gateway"}, wantCode: 1,
-			wantErr: `msg="dost stopped" err="DOST_COMPONENTS: gateway needs dispatcher\n`},
+			wantErr: `msg="melinda stopped" err="DOST_COMPONENTS: gateway needs dispatcher\n`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

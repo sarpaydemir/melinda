@@ -162,7 +162,7 @@ func TestBuiltinSecretKeysAreTheExistingDocumentKeys(t *testing.T) {
 	want := []config.SecretKey{
 		{Key: "key"}, {Key: "mattermost_token"}, {Key: "plane_api_key", Ref: "plane_api_secret", Overwrite: true},
 	}
-	if got := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).secretKeys(); !slices.Equal(got, want) {
+	if got := builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).secretKeys(); !slices.Equal(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
@@ -176,7 +176,7 @@ func TestBuiltinModelProviderIsOpenAIByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).models[s.ModelProvider]
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).models[s.ModelProvider]
 	if !ok {
 		t.Fatalf("no model provider registered as %q", s.ModelProvider)
 	}
@@ -191,7 +191,7 @@ func TestBuiltinPageFetcherIsHTTPFetchByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).fetchers[s.WebFetch]
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).fetchers[s.WebFetch]
 	if !ok {
 		t.Fatalf("no page fetcher registered as %q", s.WebFetch)
 	}
@@ -209,7 +209,7 @@ func TestBuiltinPlatformIsMattermostByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).platforms[s.ChatPlatform]
+	p, ok := builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).platforms[s.ChatPlatform]
 	if !ok {
 		t.Fatalf("no platform registered as %q", s.ChatPlatform)
 	}
@@ -230,7 +230,7 @@ func TestBuiltinWebSearchIsSearXNGByDefaultAtTheConfiguredAddress(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, ok := builtin(http.DefaultTransport, clock.Real(), "dost/test", fake.URL(), slog.New(slog.DiscardHandler)).searchers[s.WebSearch]
+	e, ok := builtin(http.DefaultTransport, clock.Real(), "melinda/test", fake.URL(), slog.New(slog.DiscardHandler)).searchers[s.WebSearch]
 	if !ok {
 		t.Fatalf("no web search registered as %q", s.WebSearch)
 	}

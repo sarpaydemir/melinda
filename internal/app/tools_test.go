@@ -31,7 +31,7 @@ func TestDefaultToolsAreTheEstablishedArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	table := builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler))
+	table := builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler))
 	sel, err := table.choose(selection(s))
 	if err != nil {
 		t.Fatal(err)

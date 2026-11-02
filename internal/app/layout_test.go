@@ -113,7 +113,7 @@ func TestDependencyDirection(t *testing.T) {
 		{from: local("internal/gateway"), forbidden: local("internal/dispatch", "internal/pipeline")},
 		{from: local("internal/dispatch"), forbidden: local("internal/gateway", "internal/pipeline")},
 		{from: local("internal/pipeline"), forbidden: local("internal/gateway", "internal/dispatch")},
-		{from: []string{module}, except: concat(adapters, local("internal/app", "cmd/dost")), forbidden: adapters},
+		{from: []string{module}, except: concat(adapters, local("internal/app", "cmd/melinda")), forbidden: adapters},
 		{from: local("internal"), forbidden: local("internal/app")},
 		{from: []string{module}, except: local("internal/testkit"), forbidden: local("internal/testkit")},
 		{from: []string{module}, except: local("internal/store", "internal/testkit"), forbidden: []string{"github.com/jackc/pgx"}, direct: true},
@@ -127,7 +127,7 @@ func TestDependencyDirection(t *testing.T) {
 		}
 	}
 	for _, p := range pkgs {
-		if !within(p.ImportPath, append(layered, local("cmd/dost", "internal/app", "internal/testkit")...)...) {
+		if !within(p.ImportPath, append(layered, local("cmd/melinda", "internal/app", "internal/testkit")...)...) {
 			t.Errorf("%s belongs to no layer; add it to a layer in this test", p.ImportPath)
 		}
 	}

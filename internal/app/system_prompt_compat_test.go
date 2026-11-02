@@ -24,7 +24,7 @@ func TestCompatProfileAssemblesItsSystemPrompts(t *testing.T) {
 	if dir == "" {
 		t.Skip("DOST_COMPAT_PROFILE is not set")
 	}
-	cat, err := prompt.Load(builtin(http.DefaultTransport, clock.Real(), "dost/test", "", slog.New(slog.DiscardHandler)).prompts(), filepath.Join(dir, "prompts"))
+	cat, err := prompt.Load(builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).prompts(), filepath.Join(dir, "prompts"))
 	if err != nil {
 		t.Fatal(err)
 	}

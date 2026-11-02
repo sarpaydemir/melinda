@@ -394,7 +394,7 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 	h.doc = doc
 	secrets := new(logging.Secrets)
 	log := logging.New(h.logs, slog.LevelDebug, false, secrets)
-	table := builtin(http.DefaultTransport, h.clock, "dost/test", h.search.URL(), log)
+	table := builtin(http.DefaultTransport, h.clock, "melinda/test", h.search.URL(), log)
 	var environ []string
 	if sc.setup != nil {
 		environ = sc.setup(h, doc, &table)

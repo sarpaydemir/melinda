@@ -1,4 +1,4 @@
-// Command dost runs a self-hosted AI agent for Mattermost.
+// Command melinda runs a self-hosted AI agent for Mattermost.
 package main
 
 import (
@@ -26,7 +26,7 @@ var (
 	date    = "unknown"
 )
 
-const usage = `usage: dost <command>
+const usage = `usage: melinda <command>
 
 commands:
   run                             run the agent until SIGINT or SIGTERM
@@ -56,7 +56,7 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 	is := func(command ...string) bool { return slices.Equal(args, command) }
 	switch {
 	case is("version"):
-		fmt.Fprintf(stdout, "dost %s (commit %s, built %s, %s)\n", version, commit, date, runtime.Version())
+		fmt.Fprintf(stdout, "melinda %s (commit %s, built %s, %s)\n", version, commit, date, runtime.Version())
 		return 0
 	case is("-h"), is("--help"), is("help"):
 		fmt.Fprint(stdout, usage)
@@ -82,7 +82,7 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		}
 		err = app.Run(ctx, env, version, secrets, log)
 		if err != nil {
-			log.Error("dost stopped", "err", err)
+			log.Error("melinda stopped", "err", err)
 		}
 		return exitCode(err)
 	case is("config", "check"), is("config", "check", "--db"):

@@ -56,7 +56,7 @@ func TestWorstCaseRepliesStayUnderTheContainerLimit(t *testing.T) {
 	s := loadSettings(t, map[string]any{"model": "m", "vision_model": "v", "api_base": visionModel.URL, "key": "k",
 		"web_fetch_allow_private": true})
 	log := slog.New(slog.DiscardHandler)
-	provider, err := openai.New(s, http.DefaultTransport, clock.Real(), "dost/test", log)
+	provider, err := openai.New(s, http.DefaultTransport, clock.Real(), "melinda/test", log)
 	if err != nil {
 		t.Fatal(err)
 	}
