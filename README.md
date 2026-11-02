@@ -1,5 +1,7 @@
 # Melinda
 
+[![ci](https://github.com/sarpaydemir/melinda/actions/workflows/ci.yml/badge.svg)](https://github.com/sarpaydemir/melinda/actions/workflows/ci.yml)
+
 Melinda: a self-hosted AI teammate for your team chat.
 
 Melinda is a single Go binary that answers direct messages and mentions in your team chat. It uses any
