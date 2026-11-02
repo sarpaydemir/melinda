@@ -1,6 +1,6 @@
 {
   "chat_sessions": {
-    "dost:u1000000000000000000000000": [
+    "melinda:u1000000000000000000000000": [
       {
         "assistant": "First answer.",
         "context_id": "p1000000000000000000000000",
@@ -35,12 +35,12 @@
     {
       "after": "p1",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:dm:u1000000000000000000000000": {
+        "melinda:buffer:dm:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:03+00:00",
           "generation": "<generation>",
           "messages": [
@@ -63,7 +63,7 @@
             "seq": 1
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -71,12 +71,12 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -84,12 +84,12 @@
     {
       "after": "p2",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:dm:u1000000000000000000000000": {
+        "melinda:buffer:dm:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:13+00:00",
           "generation": "<generation>",
           "messages": [
@@ -112,7 +112,7 @@
             "seq": 2
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448010000
         }
       }
@@ -120,12 +120,12 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448010000
         }
       }

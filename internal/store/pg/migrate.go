@@ -13,21 +13,21 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// migrations holds the additive schema changes for dost-owned objects, named NNNN_name.sql.
+// migrations holds the additive schema changes for melinda-owned objects, named NNNN_name.sql.
 //
 //go:embed migrations/*.sql
 var migrations embed.FS
 
 // migrate applies, in version order and each in its own transaction, the migrations/*.sql files in fsys that
-// dost_schema_migrations does not list. Migration 1 creates that table.
+// melinda_schema_migrations does not list. Migration 1 creates that table.
 func migrate(ctx context.Context, conn *pgx.Conn, fsys fs.FS) error {
 	var recorded bool
-	if err := conn.QueryRow(ctx, "SELECT to_regclass('dost_schema_migrations') IS NOT NULL").Scan(&recorded); err != nil {
+	if err := conn.QueryRow(ctx, "SELECT to_regclass('melinda_schema_migrations') IS NOT NULL").Scan(&recorded); err != nil {
 		return err
 	}
 	var applied []int
 	if recorded {
-		rows, _ := conn.Query(ctx, "SELECT version FROM dost_schema_migrations")
+		rows, _ := conn.Query(ctx, "SELECT version FROM melinda_schema_migrations")
 		var err error
 		if applied, err = pgx.CollectRows(rows, pgx.RowTo[int]); err != nil {
 			return fmt.Errorf("read applied migrations: %w", err)
@@ -55,7 +55,7 @@ func migrate(ctx context.Context, conn *pgx.Conn, fsys fs.FS) error {
 			if _, err := tx.Exec(ctx, string(sql)); err != nil {
 				return err
 			}
-			_, err := tx.Exec(ctx, "INSERT INTO dost_schema_migrations (version, name) VALUES ($1, $2)", version, name)
+			_, err := tx.Exec(ctx, "INSERT INTO melinda_schema_migrations (version, name) VALUES ($1, $2)", version, name)
 			return err
 		}); err != nil {
 			return fmt.Errorf("migration %s: %w", name, err)

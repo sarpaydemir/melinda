@@ -21,7 +21,7 @@ import (
 	"github.com/sarpaydemir/melinda/internal/testkit/testdb"
 )
 
-var allTables = []string{"chat_sessions", "dost_inflight_runs", "key_value_store", "langchain_pg_collection", "langchain_pg_embedding"}
+var allTables = []string{"chat_sessions", "melinda_inflight_runs", "key_value_store", "langchain_pg_collection", "langchain_pg_embedding"}
 
 func open(t *testing.T, dsn string) *DB {
 	t.Helper()
@@ -96,7 +96,7 @@ func TestOpenCreatesTheExactSchemaInAnEmptyDatabase(t *testing.T) {
 	if got := queryStrings(t, conn, "SELECT extname::text FROM pg_extension WHERE extname = 'vector'"); len(got) != 1 {
 		t.Error("vector extension not created")
 	}
-	if got := queryStrings(t, conn, "SELECT version::text FROM dost_schema_migrations ORDER BY version"); len(got) == 0 || got[0] != "1" {
+	if got := queryStrings(t, conn, "SELECT version::text FROM melinda_schema_migrations ORDER BY version"); len(got) == 0 || got[0] != "1" {
 		t.Errorf("recorded migrations = %v, want the embedded ones starting at 1", got)
 	}
 }
@@ -195,7 +195,7 @@ func TestRejectedOnlyForStatementsTheServerRefuses(t *testing.T) {
 	}{
 		{"password rotated", func(u *url.URL) { u.User = url.UserPassword(u.User.Username(), "rotated") },
 			"SELECT 1", "28P01", false},
-		{"database not there during a failover", func(u *url.URL) { u.Path = "/dost_missing_database" },
+		{"database not there during a failover", func(u *url.URL) { u.Path = "/melinda_missing_database" },
 			"SELECT 1", "3D000", false},
 		{"server turned read-only by a failover", func(u *url.URL) { u.RawQuery += "&default_transaction_read_only=on" },
 			"CREATE TABLE written (n integer)", "25006", false},
@@ -286,14 +286,14 @@ func TestMigrateAppliesPendingMigrationsInOrderOnce(t *testing.T) {
 	}
 	fsys := fstest.MapFS{
 		"migrations/0001_schema_migrations.sql": {Data: first},
-		"migrations/0002_create.sql":            {Data: []byte("CREATE TABLE dost_scratch (n integer)")},
-		"migrations/0003_fill.sql":              {Data: []byte("INSERT INTO dost_scratch VALUES (3)")},
+		"migrations/0002_create.sql":            {Data: []byte("CREATE TABLE melinda_scratch (n integer)")},
+		"migrations/0003_fill.sql":              {Data: []byte("INSERT INTO melinda_scratch VALUES (3)")},
 	}
 	rows := func() string {
-		return strings.Join(queryStrings(t, conn, "SELECT n::text FROM dost_scratch ORDER BY n"), ",")
+		return strings.Join(queryStrings(t, conn, "SELECT n::text FROM melinda_scratch ORDER BY n"), ",")
 	}
 	versions := func() string {
-		return strings.Join(queryStrings(t, conn, "SELECT version || ' ' || name FROM dost_schema_migrations ORDER BY version"), ",")
+		return strings.Join(queryStrings(t, conn, "SELECT version || ' ' || name FROM melinda_schema_migrations ORDER BY version"), ",")
 	}
 
 	for range 2 {
@@ -309,7 +309,7 @@ func TestMigrateAppliesPendingMigrationsInOrderOnce(t *testing.T) {
 		t.Errorf("recorded = %q, want %q", got, applied)
 	}
 
-	fsys["migrations/0004_broken.sql"] = &fstest.MapFile{Data: []byte("INSERT INTO dost_scratch VALUES (4); SELECT * FROM no_such_table")}
+	fsys["migrations/0004_broken.sql"] = &fstest.MapFile{Data: []byte("INSERT INTO melinda_scratch VALUES (4); SELECT * FROM no_such_table")}
 	err = migrate(ctx, conn, fsys)
 	if err == nil || !strings.Contains(err.Error(), "0004_broken.sql") {
 		t.Errorf("migrate error = %v, want one naming the failed migration", err)

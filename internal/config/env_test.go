@@ -32,7 +32,7 @@ func loadErr(t *testing.T, environ ...string) string {
 func TestLoadEnvDefaults(t *testing.T) {
 	env := load(t, "PATH=/usr/bin", "HOME=/root")
 	want := config.Env{
-		AgentID:            "dost",
+		AgentID:            "melinda",
 		SettingsTTL:        5 * time.Second,
 		DBHost:             "localhost",
 		DBPort:             5432,
@@ -52,7 +52,7 @@ func TestLoadEnvDefaults(t *testing.T) {
 func TestLoadEnvReadsEveryVariable(t *testing.T) {
 	env := load(t,
 		"MELINDA_AGENT_ID=sales_bot2",
-		"MELINDA_SETTINGS_FILE=/etc/dost/settings.json",
+		"MELINDA_SETTINGS_FILE=/etc/melinda/settings.json",
 		`MELINDA_SETTINGS_JSON={"model":"m"}`,
 		"MELINDA_SETTINGS_TTL=1m",
 		"MELINDA_PROMPTS_DIR=/prompts",
@@ -72,11 +72,11 @@ func TestLoadEnvReadsEveryVariable(t *testing.T) {
 		"MELINDA_PIPELINE_WORKERS=2",
 		"MELINDA_PIPELINE_RUN_TIMEOUT=10m",
 		"MELINDA_DRY_RUN=true",
-		"MELINDA_DRY_RUN_LOG=/var/log/dost/shadow.jsonl",
+		"MELINDA_DRY_RUN_LOG=/var/log/melinda/shadow.jsonl",
 	)
 	want := config.Env{
 		AgentID:            "sales_bot2",
-		SettingsFile:       "/etc/dost/settings.json",
+		SettingsFile:       "/etc/melinda/settings.json",
 		SettingsJSON:       `{"model":"m"}`,
 		SettingsTTL:        time.Minute,
 		PromptsDir:         "/prompts",
@@ -95,7 +95,7 @@ func TestLoadEnvReadsEveryVariable(t *testing.T) {
 		PipelineWorkers:    2,
 		PipelineRunTimeout: 10 * time.Minute,
 		DryRun:             true,
-		DryRunLog:          "/var/log/dost/shadow.jsonl",
+		DryRunLog:          "/var/log/melinda/shadow.jsonl",
 	}
 	if env.Timezone == nil || env.Timezone.String() != "Europe/Istanbul" {
 		t.Errorf("Timezone = %v, want Europe/Istanbul", env.Timezone)
@@ -180,12 +180,12 @@ func TestLogFormat(t *testing.T) {
 }
 
 func TestAgentID(t *testing.T) {
-	for _, ok := range []string{"a", "dost", "team_bot_2", "a" + strings.Repeat("b", 31)} {
+	for _, ok := range []string{"a", "melinda", "team_bot_2", "a" + strings.Repeat("b", 31)} {
 		if got := load(t, "MELINDA_AGENT_ID="+ok).AgentID; got != ok {
 			t.Errorf("MELINDA_AGENT_ID=%q: got %q", ok, got)
 		}
 	}
-	for _, bad := range []string{"", "Dost", "2bot", "_bot", "bot-1", "a" + strings.Repeat("b", 32)} {
+	for _, bad := range []string{"", "Melinda", "2bot", "_bot", "bot-1", "a" + strings.Repeat("b", 32)} {
 		if msg := loadErr(t, "MELINDA_AGENT_ID="+bad); !strings.Contains(msg, "MELINDA_AGENT_ID") {
 			t.Errorf("MELINDA_AGENT_ID=%q: error %q does not name the variable", bad, msg)
 		}
@@ -296,7 +296,7 @@ func TestEveryErrorIsReportedTogether(t *testing.T) {
 }
 
 func TestUnknownVariablesAreListed(t *testing.T) {
-	env := load(t, "MELINDA_LOG_LEVL=DEBUG", "MELINDA_AGENT_ID=dost", "MELINDA_DRYRUN=1", "OTHER_VAR=1", "MELINDA=1")
+	env := load(t, "MELINDA_LOG_LEVL=DEBUG", "MELINDA_AGENT_ID=melinda", "MELINDA_DRYRUN=1", "OTHER_VAR=1", "MELINDA=1")
 	if want := []string{"MELINDA_DRYRUN", "MELINDA_LOG_LEVL"}; !slices.Equal(env.Unknown, want) {
 		t.Errorf("Unknown = %q, want %q", env.Unknown, want)
 	}

@@ -16,11 +16,11 @@ const (
 	takeSQL = `WITH taken AS (
 	DELETE FROM key_value_store WHERE key = $1 AND value->'generation' = to_jsonb($2::text) RETURNING value
 )
-INSERT INTO dost_inflight_runs (agent_id, generation, conversation_key, buffer, taken_at)
+INSERT INTO melinda_inflight_runs (agent_id, generation, conversation_key, buffer, taken_at)
 SELECT $3, $2, $1, value, $4 FROM taken
 RETURNING buffer`
 
-	listSQL = `SELECT conversation_key, generation, buffer, resubmissions FROM dost_inflight_runs WHERE agent_id = $1
+	listSQL = `SELECT conversation_key, generation, buffer, resubmissions FROM melinda_inflight_runs WHERE agent_id = $1
 ORDER BY taken_at, generation`
 )
 
@@ -63,13 +63,13 @@ func (s *Store) Take(ctx context.Context, key, generation string) (json.RawMessa
 // Release deletes the record of generation and reports whether it was there; a missing record is not an error.
 // A run makes no visible change after false: another process has taken the run over, or it expired.
 func (s *Store) Release(ctx context.Context, generation string) (bool, error) {
-	tag, err := s.db.Exec(ctx, `DELETE FROM dost_inflight_runs WHERE agent_id = $1 AND generation = $2`, s.agent, generation)
+	tag, err := s.db.Exec(ctx, `DELETE FROM melinda_inflight_runs WHERE agent_id = $1 AND generation = $2`, s.agent, generation)
 	return err == nil && tag.RowsAffected() == 1, err
 }
 
 // Started counts one more start of the run of generation's record; a missing record is not an error.
 func (s *Store) Started(ctx context.Context, generation string) error {
-	_, err := s.db.Exec(ctx, `UPDATE dost_inflight_runs SET resubmissions = resubmissions + 1 WHERE agent_id = $1 AND generation = $2`,
+	_, err := s.db.Exec(ctx, `UPDATE melinda_inflight_runs SET resubmissions = resubmissions + 1 WHERE agent_id = $1 AND generation = $2`,
 		s.agent, generation)
 	return err
 }

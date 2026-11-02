@@ -116,7 +116,7 @@ func TestShadowModeRecordsEveryWriteAndPerformsNone(t *testing.T) {
 	if err := json.Unmarshal(play(t, sc, nil, ""), &doc); err != nil {
 		t.Fatal(err)
 	}
-	dm, thread := len(doc.ChatSessions["dost:"+id("u1")]), len(doc.ChatSessions["dost:thread:"+id("r1")])
+	dm, thread := len(doc.ChatSessions["melinda:"+id("u1")]), len(doc.ChatSessions["melinda:thread:"+id("r1")])
 	if len(doc.Posts) != 0 || dm != 3 || thread != 1 {
 		t.Errorf("posts = %q, turns saved = %d direct and %d in the thread; want no posts, 3 and 1", doc.Posts, dm, thread)
 	}
@@ -154,15 +154,15 @@ func TestShadowModeRecordsEveryWriteAndPerformsNone(t *testing.T) {
 		got = strings.ReplaceAll(got, id(short), short)
 	}
 	const work = `/api/v1/workspaces/acme/projects/` + shadowProject
-	want := `{"time":"2026-10-31T12:00:03Z","kind":"post","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id1>","channel_id":"dm1","message":"On it"}
-{"time":"2026-10-31T12:00:03Z","kind":"upload","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id2>","channel_id":"dm1","file":{"name":"generated_1.png","size":14}}
-{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id3>","method":"POST","path":"` + work + `/work-items/","body":{"name":"Fix login"}}
-{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id4>","method":"POST","path":"` + work + `/cycles/` + shadowCycle + `/cycle-issues/","body":{"issues":["<id3>"]}}
-{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id5>","method":"POST","path":"` + work + `/work-items/<id3>/comments/","body":{"comment_html":"<p>Created this work item.</p><p></p><p>— Requested by Ada Lovelace (@ada)</p>"}}
-{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id6>","method":"POST","path":"` + work + `/work-items/<id3>/comments/","body":{"comment_html":"<p>Investigating</p><p></p><p>— Requested by Ada Lovelace (@ada)</p>"}}
-{"time":"2026-10-31T12:00:03Z","kind":"post","conversation_key":"dost:buffer:dm:u1","post_ids":["p1"],"id":"<id7>","channel_id":"dm1","message":"Filed it.","file_ids":["<id2>"]}
-{"time":"2026-10-31T12:00:06Z","kind":"post","conversation_key":"dost:buffer:thread:r1:u1","post_ids":["p2"],"id":"<id8>","channel_id":"ch1","root_id":"r1","message":"Sure."}
-{"time":"2026-10-31T12:00:09Z","kind":"post","conversation_key":"dost:buffer:dm:u1","post_ids":["p3"],"id":"<id9>","channel_id":"dm1","message":"Noted: the team"}
+	want := `{"time":"2026-10-31T12:00:03Z","kind":"post","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id1>","channel_id":"dm1","message":"On it"}
+{"time":"2026-10-31T12:00:03Z","kind":"upload","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id2>","channel_id":"dm1","file":{"name":"generated_1.png","size":14}}
+{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id3>","method":"POST","path":"` + work + `/work-items/","body":{"name":"Fix login"}}
+{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id4>","method":"POST","path":"` + work + `/cycles/` + shadowCycle + `/cycle-issues/","body":{"issues":["<id3>"]}}
+{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id5>","method":"POST","path":"` + work + `/work-items/<id3>/comments/","body":{"comment_html":"<p>Created this work item.</p><p></p><p>— Requested by Ada Lovelace (@ada)</p>"}}
+{"time":"2026-10-31T12:00:03Z","kind":"request","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id6>","method":"POST","path":"` + work + `/work-items/<id3>/comments/","body":{"comment_html":"<p>Investigating</p><p></p><p>— Requested by Ada Lovelace (@ada)</p>"}}
+{"time":"2026-10-31T12:00:03Z","kind":"post","conversation_key":"melinda:buffer:dm:u1","post_ids":["p1"],"id":"<id7>","channel_id":"dm1","message":"Filed it.","file_ids":["<id2>"]}
+{"time":"2026-10-31T12:00:06Z","kind":"post","conversation_key":"melinda:buffer:thread:r1:u1","post_ids":["p2"],"id":"<id8>","channel_id":"ch1","root_id":"r1","message":"Sure."}
+{"time":"2026-10-31T12:00:09Z","kind":"post","conversation_key":"melinda:buffer:dm:u1","post_ids":["p3"],"id":"<id9>","channel_id":"dm1","message":"Noted: the team"}
 `
 	if got != want {
 		t.Errorf("records:\n%s\nwant:\n%s", got, want)

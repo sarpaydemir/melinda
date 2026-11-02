@@ -53,7 +53,7 @@ func LoadEnv(environ []string) (Env, error) {
 	}
 
 	env := Env{
-		AgentID:            parse(&r, "MELINDA_AGENT_ID", "dost", agentID),
+		AgentID:            parse(&r, "MELINDA_AGENT_ID", "melinda", agentID),
 		SettingsFile:       r.get("MELINDA_SETTINGS_FILE", ""),
 		SettingsJSON:       r.get("MELINDA_SETTINGS_JSON", ""),
 		SettingsTTL:        parse(&r, "MELINDA_SETTINGS_TTL", "5s", duration),

@@ -1,6 +1,6 @@
 {
   "chat_sessions": {
-    "dost:thread:r1000000000000000000000000": [
+    "melinda:thread:r1000000000000000000000000": [
       {
         "assistant": "Hello Ada.",
         "context_id": "r1000000000000000000000000",
@@ -24,7 +24,7 @@
         "user_id": "u2000000000000000000000000"
       }
     ],
-    "dost:u1000000000000000000000000": [
+    "melinda:u1000000000000000000000000": [
       {
         "assistant": "Hello Ada.",
         "context_id": "r1000000000000000000000000",
@@ -37,7 +37,7 @@
         "user_id": "u1000000000000000000000000"
       }
     ],
-    "dost:u2000000000000000000000000": [
+    "melinda:u2000000000000000000000000": [
       {
         "assistant": "Hello Grace.",
         "context_id": "r1000000000000000000000000",
@@ -63,12 +63,12 @@
     {
       "after": "p1",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:thread:r1000000000000000000000000:u1000000000000000000000000": {
+        "melinda:buffer:thread:r1000000000000000000000000:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:03+00:00",
           "generation": "<generation>",
           "messages": [
@@ -91,7 +91,7 @@
             "seq": 1
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -99,12 +99,12 @@
     {
       "after": "p2",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:thread:r1000000000000000000000000:u1000000000000000000000000": {
+        "melinda:buffer:thread:r1000000000000000000000000:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:03+00:00",
           "generation": "<generation>",
           "messages": [
@@ -127,7 +127,7 @@
             "seq": 1
           }
         },
-        "dost:buffer:thread:r1000000000000000000000000:u2000000000000000000000000": {
+        "melinda:buffer:thread:r1000000000000000000000000:u2000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:04+00:00",
           "generation": "<generation>",
           "messages": [
@@ -150,7 +150,7 @@
             "seq": 2
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448001000
         }
       }
@@ -158,12 +158,12 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:thread:r1000000000000000000000000:u2000000000000000000000000": {
+        "melinda:buffer:thread:r1000000000000000000000000:u2000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:04+00:00",
           "generation": "<generation>",
           "messages": [
@@ -186,17 +186,17 @@
             "seq": 2
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448001000
         },
-        "dost:public_kb_batch": {
+        "melinda:public_kb_batch": {
           "messages": [
             {
               "channel_id": "ch100000000000000000000000",
               "context_id": "r1000000000000000000000000",
               "create_at": 1793448000000,
               "is_thread": true,
-              "message": "u1000000000000000000000000: @agent first\ndost: Hello Ada.",
+              "message": "u1000000000000000000000000: @agent first\nmelinda: Hello Ada.",
               "post_id": "p1000000000000000000000000",
               "root_id": "r1000000000000000000000000",
               "status": "pending",
@@ -209,22 +209,22 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448001000
         },
-        "dost:public_kb_batch": {
+        "melinda:public_kb_batch": {
           "messages": [
             {
               "channel_id": "ch100000000000000000000000",
               "context_id": "r1000000000000000000000000",
               "create_at": 1793448000000,
               "is_thread": true,
-              "message": "u1000000000000000000000000: @agent first\ndost: Hello Ada.",
+              "message": "u1000000000000000000000000: @agent first\nmelinda: Hello Ada.",
               "post_id": "p1000000000000000000000000",
               "root_id": "r1000000000000000000000000",
               "status": "pending",
@@ -235,7 +235,7 @@
               "context_id": "r1000000000000000000000000",
               "create_at": 1793448001000,
               "is_thread": true,
-              "message": "u2000000000000000000000000: @agent second\ndost: Hello Grace.",
+              "message": "u2000000000000000000000000: @agent second\nmelinda: Hello Grace.",
               "post_id": "p2000000000000000000000000",
               "root_id": "r1000000000000000000000000",
               "status": "pending",

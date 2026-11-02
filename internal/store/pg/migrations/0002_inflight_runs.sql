@@ -1,4 +1,4 @@
-CREATE TABLE dost_inflight_runs (
+CREATE TABLE melinda_inflight_runs (
     agent_id         text        NOT NULL,
     generation       text        NOT NULL,
     conversation_key text        NOT NULL,

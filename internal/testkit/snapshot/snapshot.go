@@ -1,5 +1,5 @@
 // Package snapshot opens a read-only connection to a copy of a deployment's database named by MELINDA_COMPAT_DSN,
-// for tests that check dost reads the data already stored there.
+// for tests that check melinda reads the data already stored there.
 package snapshot
 
 import (
@@ -20,7 +20,7 @@ const (
 )
 
 // Open returns a connection to the copy on which every transaction is read-only, and the settings the copy is
-// read with: those in MELINDA_SETTINGS_FILE, if set, for the agent MELINDA_AGENT_ID (default dost). It skips the test
+// read with: those in MELINDA_SETTINGS_FILE, if set, for the agent MELINDA_AGENT_ID (default melinda). It skips the test
 // when EnvDSN is unset.
 func Open(t testing.TB) (*pgx.Conn, *config.Settings) {
 	t.Helper()
@@ -57,7 +57,7 @@ func settings(t testing.TB) *config.Settings {
 	}
 	agent := os.Getenv("MELINDA_AGENT_ID")
 	if agent == "" {
-		agent = "dost"
+		agent = "melinda"
 	}
 	s, err := config.Load(doc, agent, nil, func(*config.Settings) error { return nil })
 	if err != nil {

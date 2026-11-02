@@ -71,7 +71,7 @@ func Open(ctx context.Context, dsn string, clk clock.Clock, log *slog.Logger) (*
 	return &DB{pool: pool}, nil
 }
 
-// Verify connects to dsn as Open does and reports every way the schema differs from what dost reads and writes,
+// Verify connects to dsn as Open does and reports every way the schema differs from what melinda reads and writes,
 // without changing anything.
 func Verify(ctx context.Context, dsn string, clk clock.Clock, log *slog.Logger) error {
 	_, conn, err := connectTo(ctx, dsn, clk, log)

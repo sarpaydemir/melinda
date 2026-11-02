@@ -81,7 +81,7 @@ func TestCheckSummarizesTheConfigurationWithSecretsMasked(t *testing.T) {
 	summary, logs, err := checkWith(t, workingTable(),
 		"MELINDA_AGENT_ID=agent",
 		`MELINDA_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`,"chatty_token":"token-value"}`,
-		"MELINDA_DATABASE_URL=postgres://dost:db-password@db/dost",
+		"MELINDA_DATABASE_URL=postgres://melinda:db-password@db/melinda",
 		"MELINDA_COMPONENTS=pipeline,kb-learner",
 		"MELINDA_LOG_LEVL=debug",
 		"MELINDA_DRYRUN=true",
@@ -139,7 +139,7 @@ prompts["zzz"]: unknown ID`
 
 func TestCheckReportsInvalidPromptOverrides(t *testing.T) {
 	_, _, err := checkWith(t, workingTable(),
-		"MELINDA_DATABASE_URL=postgres://dost@db/dost",
+		"MELINDA_DATABASE_URL=postgres://melinda@db/melinda",
 		`MELINDA_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`,"prompts":{"notes.saved":"Saved\n{title","nope":"text"}}`,
 	)
 	want := `invalid settings:

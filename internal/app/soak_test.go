@@ -54,7 +54,7 @@ const (
 	dmConversations     = 40
 	threadConversations = 12
 	threadTurns         = 5 // turns in a thread before its user starts a new one
-	bufferPrefix        = "dost:buffer:"
+	bufferPrefix        = "melinda:buffer:"
 	bot                 = "agent"
 )
 
@@ -85,7 +85,7 @@ func TestSoak(t *testing.T) {
 	} else {
 		runtime.MemProfileRate = 4 << 10 // the heap is a few MiB; the default rate samples too few allocations
 	}
-	logPath := filepath.Join(out, "dost.log")
+	logPath := filepath.Join(out, "melinda.log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		t.Fatal(err)
@@ -561,7 +561,7 @@ func (s *soak) unanswered() int {
 // pending counts the stored debounce buffers and journaled runs.
 func (s *soak) pending() int {
 	return s.count(`SELECT (SELECT count(*) FROM key_value_store WHERE key LIKE '` + bufferPrefix + `%') +
-		(SELECT count(*) FROM dost_inflight_runs)`)
+		(SELECT count(*) FROM melinda_inflight_runs)`)
 }
 
 func (s *soak) count(query string) int {

@@ -17,7 +17,7 @@ type column struct {
 	types []string // accepted pg_type names
 }
 
-// table is an existing table that dost shares: created as ddl when missing, otherwise only verified.
+// table is an existing table that melinda shares: created as ddl when missing, otherwise only verified.
 type table struct {
 	name    string
 	ddl     string
@@ -96,7 +96,7 @@ CREATE INDEX ix_vector_hnsw ON langchain_pg_embedding USING hnsw (embedding vect
 // prepare creates what is missing, verifies the shared tables, and applies migrations. It holds an advisory
 // lock so that processes starting together run it one at a time; closing conn releases the lock.
 func prepare(ctx context.Context, conn *pgx.Conn) error {
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext('dost_schema_migrations'))"); err != nil {
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext('melinda_schema_migrations'))"); err != nil {
 		return fmt.Errorf("lock schema: %w", err)
 	}
 	if err := bootstrap(ctx, conn); err != nil {
@@ -131,7 +131,7 @@ func bootstrap(ctx context.Context, conn *pgx.Conn) error {
 	})
 }
 
-// verify reports every way the shared tables differ from what dost reads and writes.
+// verify reports every way the shared tables differ from what melinda reads and writes.
 func verify(ctx context.Context, conn *pgx.Conn) error {
 	var problems []string
 	for _, t := range sharedTables {

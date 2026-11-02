@@ -1,6 +1,6 @@
 //go:build e2e && linux
 
-// Package e2e runs the dost binary named by MELINDA_E2E_BINARY against the chat and model fakes and a fresh
+// Package e2e runs the melinda binary named by MELINDA_E2E_BINARY against the chat and model fakes and a fresh
 // database per test, and checks what only a real process shows: real-time debounce, restarts, reconnects,
 // signals, and settings edits.
 package e2e
@@ -93,7 +93,7 @@ func (e *env) writeSettings(extra map[string]any) {
 	}
 }
 
-// agent is one dost run process.
+// agent is one melinda run process.
 type agent struct {
 	t    *testing.T
 	cmd  *exec.Cmd
@@ -102,7 +102,7 @@ type agent struct {
 	err  error // the Wait result, set when done closes
 }
 
-// start runs dost and waits until its first recovery has finished, which follows connecting.
+// start runs melinda and waits until its first recovery has finished, which follows connecting.
 func (e *env) start() *agent {
 	e.t.Helper()
 	a := e.launch()
@@ -110,7 +110,7 @@ func (e *env) start() *agent {
 	return a
 }
 
-// launch runs dost without waiting for it to start.
+// launch runs melinda without waiting for it to start.
 func (e *env) launch() *agent {
 	e.t.Helper()
 	a := &agent{t: e.t, logs: &logs{}, done: make(chan struct{}), cmd: e.command()}
@@ -129,7 +129,7 @@ func (e *env) launch() *agent {
 	return a
 }
 
-// command returns an unstarted dost run against e.
+// command returns an unstarted melinda run against e.
 func (e *env) command() *exec.Cmd {
 	cmd := exec.Command(os.Getenv("MELINDA_E2E_BINARY"), "run")
 	cmd.Env = []string{
@@ -262,10 +262,10 @@ func (e *env) count(query string) int {
 }
 
 func (e *env) buffers() int {
-	return e.count(`SELECT count(*) FROM key_value_store WHERE key LIKE 'dost:buffer:%'`)
+	return e.count(`SELECT count(*) FROM key_value_store WHERE key LIKE 'melinda:buffer:%'`)
 }
 
-func (e *env) inflight() int { return e.count(`SELECT count(*) FROM dost_inflight_runs`) }
+func (e *env) inflight() int { return e.count(`SELECT count(*) FROM melinda_inflight_runs`) }
 
 // assertSettled fails unless no buffered message or unfinished run is left in the database.
 func (e *env) assertSettled() {

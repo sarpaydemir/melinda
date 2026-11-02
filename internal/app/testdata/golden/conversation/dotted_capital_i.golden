@@ -1,6 +1,6 @@
 {
   "chat_sessions": {
-    "dost:thread:p2000000000000000000000000": [
+    "melinda:thread:p2000000000000000000000000": [
       {
         "assistant": "Answered.",
         "context_id": "p2000000000000000000000000",
@@ -12,7 +12,7 @@
         "user_id": "u1000000000000000000000000"
       }
     ],
-    "dost:u1000000000000000000000000": [
+    "melinda:u1000000000000000000000000": [
       {
         "assistant": "Answered.",
         "context_id": "p2000000000000000000000000",
@@ -35,12 +35,12 @@
     {
       "after": "p1",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "İlke"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -48,12 +48,12 @@
     {
       "after": "p2",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "İlke"
         },
-        "dost:buffer:thread:p2000000000000000000000000:u1000000000000000000000000": {
+        "melinda:buffer:thread:p2000000000000000000000000:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:03+00:00",
           "generation": "<generation>",
           "messages": [
@@ -76,7 +76,7 @@
             "seq": 2
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448001000
         }
       }
@@ -84,22 +84,22 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "İlke"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448001000
         },
-        "dost:public_kb_batch": {
+        "melinda:public_kb_batch": {
           "messages": [
             {
               "channel_id": "ch100000000000000000000000",
               "context_id": "p2000000000000000000000000",
               "create_at": 1793448001000,
               "is_thread": false,
-              "message": "u1000000000000000000000000: @İlke capital\ndost: Answered.",
+              "message": "u1000000000000000000000000: @İlke capital\nmelinda: Answered.",
               "post_id": "p2000000000000000000000000",
               "root_id": "",
               "status": "pending",

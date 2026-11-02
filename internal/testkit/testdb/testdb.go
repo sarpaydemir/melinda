@@ -48,7 +48,7 @@ func dbName(testName string) string {
 	}
 	suffix := make([]byte, 4)
 	_, _ = rand.Read(suffix)
-	return "dost_test_" + b.String()[:min(b.Len(), 44)] + "_" + hex.EncodeToString(suffix)
+	return "melinda_test_" + b.String()[:min(b.Len(), 41)] + "_" + hex.EncodeToString(suffix)
 }
 
 func exec(t testing.TB, dsn, sql string) {

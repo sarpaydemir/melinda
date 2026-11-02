@@ -7,7 +7,7 @@ import (
 )
 
 func TestDBNameIsUniqueSafeAndShort(t *testing.T) {
-	valid := regexp.MustCompile(`^dost_test_[a-z0-9_]*_[0-9a-f]{8}$`)
+	valid := regexp.MustCompile(`^melinda_test_[a-z0-9_]*_[0-9a-f]{8}$`)
 	long := "TestİstanbulŞehri/" + strings.Repeat("sub test ", 20)
 	a, b := dbName(long), dbName(long)
 	if a == b {

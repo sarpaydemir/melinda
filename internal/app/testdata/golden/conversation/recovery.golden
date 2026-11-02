@@ -1,6 +1,6 @@
 {
   "chat_sessions": {
-    "dost:thread:p3000000000000000000000000": [
+    "melinda:thread:p3000000000000000000000000": [
       {
         "assistant": "Answer to u2000000000000000000000000: @agent missed mention",
         "context_id": "p3000000000000000000000000",
@@ -12,7 +12,7 @@
         "user_id": "u2000000000000000000000000"
       }
     ],
-    "dost:u1000000000000000000000000": [
+    "melinda:u1000000000000000000000000": [
       {
         "assistant": "Answer to u1000000000000000000000000: live",
         "context_id": "p1000000000000000000000000",
@@ -34,7 +34,7 @@
         "user_id": "u1000000000000000000000000"
       }
     ],
-    "dost:u2000000000000000000000000": [
+    "melinda:u2000000000000000000000000": [
       {
         "assistant": "Answer to u2000000000000000000000000: @agent missed mention",
         "context_id": "p3000000000000000000000000",
@@ -61,12 +61,12 @@
     {
       "after": "p1",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:dm:u1000000000000000000000000": {
+        "melinda:buffer:dm:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:03+00:00",
           "generation": "<generation>",
           "messages": [
@@ -89,7 +89,7 @@
             "seq": 1
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -97,12 +97,12 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -110,12 +110,12 @@
     {
       "after": "recovered",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:dm:u1000000000000000000000000": {
+        "melinda:buffer:dm:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:14+00:00",
           "generation": "<generation>",
           "messages": [
@@ -139,7 +139,7 @@
             }
           }
         },
-        "dost:buffer:thread:p3000000000000000000000000:u2000000000000000000000000": {
+        "melinda:buffer:thread:p3000000000000000000000000:u2000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:14+00:00",
           "generation": "<generation>",
           "messages": [
@@ -157,7 +157,7 @@
             }
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448013000
         }
       }
@@ -165,22 +165,22 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448013000
         },
-        "dost:public_kb_batch": {
+        "melinda:public_kb_batch": {
           "messages": [
             {
               "channel_id": "ch100000000000000000000000",
               "context_id": "p3000000000000000000000000",
               "create_at": 1793448012000,
               "is_thread": false,
-              "message": "u2000000000000000000000000: @agent missed mention\ndost: Answer to u2000000000000000000000000: @agent missed mention",
+              "message": "u2000000000000000000000000: @agent missed mention\nmelinda: Answer to u2000000000000000000000000: @agent missed mention",
               "post_id": "p3000000000000000000000000",
               "root_id": "",
               "status": "pending",

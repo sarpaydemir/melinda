@@ -82,7 +82,7 @@ type row struct {
 func (f *fixture) rows() []row {
 	f.t.Helper()
 	rows, _ := f.conn.Query(f.t.Context(), `SELECT agent_id, generation, conversation_key, taken_at, resubmissions
-		FROM dost_inflight_runs ORDER BY agent_id, generation`)
+		FROM melinda_inflight_runs ORDER BY agent_id, generation`)
 	out, err := pgx.CollectRows(rows, pgx.RowToStructByPos[row])
 	if err != nil {
 		f.t.Fatal(err)
@@ -132,7 +132,7 @@ func TestTakeMovesTheBufferIntoTheJournalOnlyForItsGeneration(t *testing.T) {
 		t.Errorf("buffer after the take = %s, %v; want it deleted", got, err)
 	}
 	var stored json.RawMessage
-	if err := f.conn.QueryRow(t.Context(), "SELECT buffer FROM dost_inflight_runs").Scan(&stored); err != nil {
+	if err := f.conn.QueryRow(t.Context(), "SELECT buffer FROM melinda_inflight_runs").Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	assertJSON(t, "journaled buffer", stored, buffer("g1", "p1"))
@@ -211,7 +211,7 @@ func TestAppendsRacingTakesTakeEveryMessageExactlyOnce(t *testing.T) {
 		t.Errorf("taken messages = %q, want each of the %d appended once, in order", taken, rounds)
 	}
 	var journaled int
-	if err := f.conn.QueryRow(ctx, "SELECT coalesce(sum(jsonb_array_length(buffer->'messages')), 0) FROM dost_inflight_runs").
+	if err := f.conn.QueryRow(ctx, "SELECT coalesce(sum(jsonb_array_length(buffer->'messages')), 0) FROM melinda_inflight_runs").
 		Scan(&journaled); err != nil || journaled != rounds {
 		t.Errorf("journal holds %d messages (%v), want %d", journaled, err, rounds)
 	}

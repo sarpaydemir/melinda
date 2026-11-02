@@ -95,7 +95,7 @@ func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) 
 		t.Errorf("first requests %q, want the account check first", calls)
 	}
 	for _, want := range []string{
-		`msg=starting version=1.2.3 agent=dost settings=MELINDA_SETTINGS_JSON components="[kb-learner pipeline flusher dispatcher recovery gateway]"`,
+		`msg=starting version=1.2.3 agent=melinda settings=MELINDA_SETTINGS_JSON components="[kb-learner pipeline flusher dispatcher recovery gateway]"`,
 	} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("logs do not contain %s:\n%s", want, logs)

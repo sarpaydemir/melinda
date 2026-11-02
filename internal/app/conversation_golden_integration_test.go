@@ -205,7 +205,7 @@ var scenarios = []scenario{
 	}},
 	{name: "restart", replies: texts("Back again."), seed: func(h *harness) {
 		h.exec(`INSERT INTO key_value_store (type, key, value, created_at, updated_at) VALUES ('none', $1, $2, now(), now())`,
-			h.setting("buffer_prefix", "dost:buffer:")+"dm:"+id("u1"), restartBuffer)
+			h.setting("buffer_prefix", "melinda:buffer:")+"dm:"+id("u1"), restartBuffer)
 		h.snapshot("start")
 	}, play: func(h *harness) {
 		h.flush(3*time.Second, 1)
@@ -427,7 +427,7 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 	if err := <-done; err != nil {
 		t.Errorf("Run = %v, want nil; logs:\n%s", err, h.logs)
 	}
-	if n := h.count(`SELECT count(*) FROM dost_inflight_runs`); n != 0 {
+	if n := h.count(`SELECT count(*) FROM melinda_inflight_runs`); n != 0 {
 		t.Errorf("in-flight records left = %d, want 0", n)
 	}
 

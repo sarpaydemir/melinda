@@ -120,7 +120,7 @@ func (a *agent) answers() []routing.Job {
 // left reports what the store holds: "buffer", "record", "none", or "unexpected".
 func (a *agent) left() string {
 	var buffers, records int
-	if err := a.conn.QueryRow(a.t.Context(), `SELECT (SELECT count(*) FROM key_value_store), (SELECT count(*) FROM dost_inflight_runs)`).
+	if err := a.conn.QueryRow(a.t.Context(), `SELECT (SELECT count(*) FROM key_value_store), (SELECT count(*) FROM melinda_inflight_runs)`).
 		Scan(&buffers, &records); err != nil {
 		a.t.Fatal(err)
 	}

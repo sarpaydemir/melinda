@@ -1,6 +1,6 @@
 {
   "chat_sessions": {
-    "dost:thread:p2000000000000000000000000": [
+    "melinda:thread:p2000000000000000000000000": [
       {
         "assistant": "Quite a bit.",
         "context_id": "p2000000000000000000000000",
@@ -12,7 +12,7 @@
         "user_id": "u1000000000000000000000000"
       }
     ],
-    "dost:u1000000000000000000000000": [
+    "melinda:u1000000000000000000000000": [
       {
         "assistant": "Brand overview done.",
         "context_id": "",
@@ -66,12 +66,12 @@
     {
       "after": "p1",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:dm:u1000000000000000000000000": {
+        "melinda:buffer:dm:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:03+00:00",
           "generation": "<generation>",
           "messages": [
@@ -94,7 +94,7 @@
             "seq": 1
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -102,12 +102,12 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448000000
         }
       }
@@ -115,12 +115,12 @@
     {
       "after": "p2",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:buffer:thread:p2000000000000000000000000:u1000000000000000000000000": {
+        "melinda:buffer:thread:p2000000000000000000000000:u1000000000000000000000000": {
           "flush_after": "2026-10-31T12:00:13+00:00",
           "generation": "<generation>",
           "messages": [
@@ -143,7 +143,7 @@
             "seq": 2
           }
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448010000
         }
       }
@@ -151,22 +151,22 @@
     {
       "after": "flushed",
       "store": {
-        "dost:bot_identity": {
+        "melinda:bot_identity": {
           "bot_id": "bot00000000000000000000000",
           "expires_at": "2026-11-01T12:00:00+00:00",
           "username": "agent"
         },
-        "dost:last_seen": {
+        "melinda:last_seen": {
           "create_at": 1793448010000
         },
-        "dost:public_kb_batch": {
+        "melinda:public_kb_batch": {
           "messages": [
             {
               "channel_id": "ch100000000000000000000000",
               "context_id": "p2000000000000000000000000",
               "create_at": 1793448010000,
               "is_thread": false,
-              "message": "u1000000000000000000000000: @agent what do you know?\ndost: Quite a bit.",
+              "message": "u1000000000000000000000000: @agent what do you know?\nmelinda: Quite a bit.",
               "post_id": "p2000000000000000000000000",
               "root_id": "",
               "status": "pending",
@@ -180,32 +180,32 @@
   "vectors": [
     {
       "cmetadata": {
-        "key": "dost:u1000000000000000000000000",
+        "key": "melinda:u1000000000000000000000000",
         "scope": "private",
         "type": "user_fact"
       },
-      "collection": "dost_memory",
+      "collection": "melinda_memory",
       "document": "Ada prefers tea"
     },
     {
       "cmetadata": {
         "context_id": "c0000000000000000000000000",
         "is_dm": false,
-        "key": "dost:u1000000000000000000000000",
+        "key": "melinda:u1000000000000000000000000",
         "scope": "public",
         "type": "user_fact",
         "user_id": "u1000000000000000000000000"
       },
-      "collection": "dost_memory",
+      "collection": "melinda_memory",
       "document": "Ada works on the compiler"
     },
     {
       "cmetadata": {
-        "key": "dost:u2000000000000000000000000",
+        "key": "melinda:u2000000000000000000000000",
         "scope": "public",
         "type": "user_fact"
       },
-      "collection": "dost_memory",
+      "collection": "melinda_memory",
       "document": "Grace likes coffee"
     },
     {
@@ -231,7 +231,7 @@
         "topic": "deploys",
         "type": "public_kb"
       },
-      "collection": "dost_public_kb",
+      "collection": "melinda_public_kb",
       "document": "Deploys need two approvals"
     },
     {
@@ -241,7 +241,7 @@
         "type": "public_kb",
         "verified": false
       },
-      "collection": "dost_public_kb",
+      "collection": "melinda_public_kb",
       "document": "Office closes at six"
     },
     {
@@ -264,14 +264,14 @@
         "type": "public_kb",
         "verified": true
       },
-      "collection": "dost_public_kb",
+      "collection": "melinda_public_kb",
       "document": "The release train leaves on Fridays"
     },
     {
       "cmetadata": {
         "type": "other"
       },
-      "collection": "dost_public_kb",
+      "collection": "melinda_public_kb",
       "document": "Unrelated note"
     }
   ]

@@ -39,7 +39,7 @@ var memoryScenarios = []scenario{
 				`"assistant": "reply %d", "ts": "2026-10-30T09:00:0%d+00:00", "message_count": %d}`, scope, id("c0"), id("u1"), i == 2, id("u1"), i, i, i, i))
 		}
 		h.history(h.memoryKey("u1"), turns...)
-		h.vector(h.setting("facts_collection", "dost_memory"), "Ada prefers tea", []float32{1, 0.1}, `{"key": "%s", "scope": "public", `+
+		h.vector(h.setting("facts_collection", "melinda_memory"), "Ada prefers tea", []float32{1, 0.1}, `{"key": "%s", "scope": "public", `+
 			`"type": "user_fact", "user_id": "%s", "is_dm": false, "context_id": "%s"}`, h.memoryKey("u1"), id("u1"), id("c0"))
 	}, replies: texts("NULL", "Noted.", `[{"fact": "Ada moved to Izmir"}, {"fact": "Ada prefers tea"}]`), play: func(h *harness) {
 		h.chat.AddPost(post("r1", "u2", "ch1", "", "kickoff", -60000))
@@ -61,7 +61,7 @@ var memoryScenarios = []scenario{
 			`"channel_id": "brand_analysis", "create_at": 1793447500.5, "status": "processing", "processing_started_at": %d}`, baseMS-60000),
 			note(23, "standup is at 10", 7*60000))
 		h.exec(`INSERT INTO key_value_store (type, key, value, created_at, updated_at) VALUES ('none', $1, $2, now(), now())`,
-			h.setting("kb_batch_key", "dost:public_kb_batch"), `{"messages": [`+strings.Join(items, ", ")+`]}`)
+			h.setting("kb_batch_key", "melinda:public_kb_batch"), `{"messages": [`+strings.Join(items, ", ")+`]}`)
 		h.deployRule()
 	}, replies: texts(`{"query": "deploy approvals"}`, "Two approvals.", learningAnswer), play: func(h *harness) {
 		h.post(post("p1", "u1", "ch1", "", "@agent who approves deploys?", 0))
@@ -87,12 +87,12 @@ func memoryRecall(name, settings string) scenario {
 		h.history(h.memoryKey("u1"),
 			`{"user": "acme", "assistant": "Brand overview done.", "ts": "2026-03-01T10:00:00.123456+00:00", "scope": "public", "context_id": "", "step": 1}`,
 			`{"ts": "2026-02-01T00:00:00", "user": "old user msg", "scope": "private", "assistant": "old assistant msg"}`)
-		facts := h.setting("facts_collection", "dost_memory")
+		facts := h.setting("facts_collection", "melinda_memory")
 		h.vector(facts, "Ada prefers tea", []float32{1, 0.1}, `{"key": "%s", "type": "user_fact", "scope": "private"}`, h.memoryKey("u1"))
 		h.vector(facts, "Ada works on the compiler", []float32{1, 0.5}, `{"key": "%s", "scope": "public", "type": "user_fact", `+
 			`"user_id": "%s", "is_dm": false, "context_id": "%s"}`, h.memoryKey("u1"), id("u1"), id("c0"))
 		h.vector(facts, "Grace likes coffee", []float32{1, 0.2}, `{"key": "%s", "type": "user_fact", "scope": "public"}`, h.memoryKey("u2"))
-		kb := h.setting("kb_collection", "dost_public_kb")
+		kb := h.setting("kb_collection", "melinda_public_kb")
 		h.vector(kb, "The release train leaves on Fridays", []float32{0, 1, 0.3}, `{"type": "public_kb", "topic": "releases", `+
 			`"tags": ["release"], "timestamp": "2026-06-17T12:00:00+00:00", "source_ids": ["pid_1"], "source_channel_ids": ["cid_1"], `+
 			`"source_create_at_min": 1781697600000, "source_create_at_max": 1781697600000, "evidence": "website", "confidence": 0.8, "verified": true}`)
@@ -156,7 +156,7 @@ func dims(lead []float32) []float32 {
 }
 
 func (h *harness) memoryKey(user string) string {
-	return h.setting("memory_key_prefix", "dost") + ":" + id(user)
+	return h.setting("memory_key_prefix", "melinda") + ":" + id(user)
 }
 
 // history stores items as the history under key.
@@ -176,7 +176,7 @@ func (h *harness) vector(collection, document string, lead []float32, metadata s
 
 // deployRule stores a knowledge entry learned a day ago.
 func (h *harness) deployRule() {
-	h.vector(h.setting("kb_collection", "dost_public_kb"), "Deploys need two approvals", []float32{0, 1, 0.35},
+	h.vector(h.setting("kb_collection", "melinda_public_kb"), "Deploys need two approvals", []float32{0, 1, 0.35},
 		`{"type": "public_kb", "timestamp": "2026-10-30T12:00:00+00:00", "topic": "deploys", "tags": ["deploy"], `+
 			`"memory_type": "process", "confidence": 0.9, "source_ids": ["%s"], "source_channel_ids": ["%s"], `+
 			`"source_context_ids": ["%s"], "source_root_ids": [], "source_create_at_min": %d, "source_create_at_max": %d}`,

@@ -456,7 +456,7 @@ func TestChangingAFixedKeyIsLoggedOnce(t *testing.T) {
 	path := settingsFile(t, `{"model": "m1"}`)
 	p, h := mustOpen(t, load(t, "MELINDA_SETTINGS_FILE="+path))
 	writeFile(t, path, `{"model": "m2", "chat_platform": "other", "kb_collection": "kb2"}`)
-	if got := h.tick(p); got.Model != "m2" || got.ChatPlatform != "mattermost" || got.KBCollection != "dost_public_kb" {
+	if got := h.tick(p); got.Model != "m2" || got.ChatPlatform != "mattermost" || got.KBCollection != "melinda_public_kb" {
 		t.Errorf("got model %q, chat_platform %q, kb_collection %q", got.Model, got.ChatPlatform, got.KBCollection)
 	}
 	h.tick(p)
