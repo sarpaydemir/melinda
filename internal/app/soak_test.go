@@ -60,8 +60,8 @@ const (
 
 var token = regexp.MustCompile(`\[m(\d+)\]`)
 
-// TestSoak runs the agent for DOST_SOAK_DURATION (default 3m), writing its log, and heap and goroutine profiles at the
-// baseline and the end, to the DOST_SOAK_OUT directory when set, against the chat, model, search and web fakes with
+// TestSoak runs the agent for MELINDA_SOAK_DURATION (default 3m), writing its log, and heap and goroutine profiles at the
+// baseline and the end, to the MELINDA_SOAK_OUT directory when set, against the chat, model, search and web fakes with
 // realistic latency and a fresh database: about 60 addressed turns a minute over 52 conversations (direct messages,
 // channel threads, debounced bursts, attachments, web tool calls) plus 120 unaddressed chatter posts a minute, a
 // websocket drop every 45s with a message posted while disconnected, and a settings reload every 20s. Halfway and at
@@ -72,14 +72,14 @@ var token = regexp.MustCompile(`\[m(\d+)\]`)
 // 2h or more is the one that tells a leak from that.
 func TestSoak(t *testing.T) {
 	duration := 3 * time.Minute
-	if v := os.Getenv("DOST_SOAK_DURATION"); v != "" {
+	if v := os.Getenv("MELINDA_SOAK_DURATION"); v != "" {
 		var err error
 		if duration, err = time.ParseDuration(v); err != nil {
-			t.Fatalf("DOST_SOAK_DURATION: %v", err)
+			t.Fatalf("MELINDA_SOAK_DURATION: %v", err)
 		}
 	}
 	s := newSoak(t)
-	out := os.Getenv("DOST_SOAK_OUT")
+	out := os.Getenv("MELINDA_SOAK_OUT")
 	if out == "" {
 		out = t.TempDir()
 	} else {
@@ -91,8 +91,8 @@ func TestSoak(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer logFile.Close()
-	env, err := config.LoadEnv([]string{"DOST_DATABASE_URL=" + s.dsn, "DOST_HTTP_ADDR=", "DOST_SETTINGS_FILE=" + s.settingsPath,
-		"DOST_SETTINGS_TTL=1s", "DOST_SEARXNG_URL=" + s.search.URL()})
+	env, err := config.LoadEnv([]string{"MELINDA_DATABASE_URL=" + s.dsn, "MELINDA_HTTP_ADDR=", "MELINDA_SETTINGS_FILE=" + s.settingsPath,
+		"MELINDA_SETTINGS_TTL=1s", "MELINDA_SEARXNG_URL=" + s.search.URL()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -684,9 +684,9 @@ func logErrors(t *testing.T, path string) {
 	}
 }
 
-// profile writes heap and goroutine profiles named after point to DOST_SOAK_OUT, when it is set.
+// profile writes heap and goroutine profiles named after point to MELINDA_SOAK_OUT, when it is set.
 func profile(t *testing.T, point string) {
-	dir := os.Getenv("DOST_SOAK_OUT")
+	dir := os.Getenv("MELINDA_SOAK_OUT")
 	if dir == "" {
 		return
 	}

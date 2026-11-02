@@ -11,7 +11,7 @@ import (
 
 // Component is a long-running part of the process.
 type Component interface {
-	// Name identifies the component in DOST_COMPONENTS, logs, and readiness reports.
+	// Name identifies the component in MELINDA_COMPONENTS, logs, and readiness reports.
 	Name() string
 	// Run works until ctx is cancelled, then finishes or persists its in-flight work and returns nil
 	// (context.Canceled is accepted as nil). Returning earlier, or with another error, is a failure.
@@ -32,7 +32,7 @@ type Readier interface {
 	Ready() error
 }
 
-// ComponentNames returns the names accepted in DOST_COMPONENTS in start order, consumers before producers.
+// ComponentNames returns the names accepted in MELINDA_COMPONENTS in start order, consumers before producers.
 func ComponentNames() []string {
 	return []string{"kb-learner", "pipeline", "flusher", "dispatcher", "recovery", "gateway"}
 }
@@ -51,7 +51,7 @@ func consumer(name string) string {
 	return ""
 }
 
-// enable returns the components named in DOST_COMPONENTS in start order, or all of them when names is empty. It
+// enable returns the components named in MELINDA_COMPONENTS in start order, or all of them when names is empty. It
 // reports every unknown name and every producer whose consumer is missing, following the chain to its end.
 func enable(names []string) ([]string, error) {
 	all := ComponentNames()
@@ -61,7 +61,7 @@ func enable(names []string) ([]string, error) {
 	var errs []error
 	for _, n := range names {
 		if !slices.Contains(all, n) {
-			errs = append(errs, fmt.Errorf("DOST_COMPONENTS: unknown component %q (available: %s)", n, strings.Join(all, ", ")))
+			errs = append(errs, fmt.Errorf("MELINDA_COMPONENTS: unknown component %q (available: %s)", n, strings.Join(all, ", ")))
 		}
 	}
 	needed := map[string]bool{}
@@ -69,7 +69,7 @@ func enable(names []string) ([]string, error) {
 		if c := consumer(n); c != "" && (needed[n] || slices.Contains(names, n)) {
 			needed[c] = true
 			if !slices.Contains(names, c) {
-				errs = append(errs, fmt.Errorf("DOST_COMPONENTS: %s needs %s", n, c))
+				errs = append(errs, fmt.Errorf("MELINDA_COMPONENTS: %s needs %s", n, c))
 			}
 		}
 	}

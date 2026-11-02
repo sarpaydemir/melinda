@@ -26,10 +26,10 @@ func (p *Provider) read() (map[string]json.RawMessage, error) {
 	var err error
 	switch source {
 	case "":
-		return nil, errors.New("no settings source: set DOST_SETTINGS_FILE or DOST_SETTINGS_JSON")
-	case "DOST_SETTINGS_FILE":
+		return nil, errors.New("no settings source: set MELINDA_SETTINGS_FILE or MELINDA_SETTINGS_JSON")
+	case "MELINDA_SETTINGS_FILE":
 		raw, err = os.ReadFile(p.env.SettingsFile)
-	case "DOST_SETTINGS_JSON":
+	case "MELINDA_SETTINGS_JSON":
 		raw = []byte(p.env.SettingsJSON)
 	}
 	var doc map[string]json.RawMessage

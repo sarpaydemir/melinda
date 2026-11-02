@@ -10,7 +10,7 @@ import (
 	"github.com/sarpaydemir/melinda/internal/logging"
 )
 
-// Provider serves the current settings snapshot. The first read after the snapshot is DOST_SETTINGS_TTL old
+// Provider serves the current settings snapshot. The first read after the snapshot is MELINDA_SETTINGS_TTL old
 // reloads the document from its source and resolves its secret references again; a reload that fails keeps the
 // last good snapshot.
 type Provider struct {

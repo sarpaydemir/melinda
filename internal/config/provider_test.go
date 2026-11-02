@@ -101,8 +101,8 @@ func TestFirstConfiguredSourceWins(t *testing.T) {
 		environ []string
 		want    string
 	}{
-		{[]string{"DOST_SETTINGS_FILE=" + file, `DOST_SETTINGS_JSON={"model": "inline"}`}, "from-file"},
-		{[]string{"DOST_SETTINGS_FILE=", `DOST_SETTINGS_JSON={"model": "inline"}`}, "inline"},
+		{[]string{"MELINDA_SETTINGS_FILE=" + file, `MELINDA_SETTINGS_JSON={"model": "inline"}`}, "from-file"},
+		{[]string{"MELINDA_SETTINGS_FILE=", `MELINDA_SETTINGS_JSON={"model": "inline"}`}, "inline"},
 	} {
 		p, _ := mustOpen(t, load(t, tc.environ...))
 		if got := p.Current(context.Background()).Model; got != tc.want {
@@ -112,8 +112,8 @@ func TestFirstConfiguredSourceWins(t *testing.T) {
 }
 
 func TestStartingWithoutASettingsSourceFails(t *testing.T) {
-	got := openErr(t, load(t, "DOST_SETTINGS_FILE=", "DOST_SETTINGS_JSON="))
-	if want := "no settings source: set DOST_SETTINGS_FILE or DOST_SETTINGS_JSON"; got != want {
+	got := openErr(t, load(t, "MELINDA_SETTINGS_FILE=", "MELINDA_SETTINGS_JSON="))
+	if want := "no settings source: set MELINDA_SETTINGS_FILE or MELINDA_SETTINGS_JSON"; got != want {
 		t.Errorf("error = %q, want %q", got, want)
 	}
 }
@@ -121,8 +121,8 @@ func TestStartingWithoutASettingsSourceFails(t *testing.T) {
 // sources returns an environment per kind of settings source serving doc, keyed by the name its errors use.
 func sources(t *testing.T, doc string) map[string]config.Env {
 	return map[string]config.Env{
-		"DOST_SETTINGS_FILE": load(t, "DOST_SETTINGS_FILE="+settingsFile(t, doc)),
-		"DOST_SETTINGS_JSON": load(t, "DOST_SETTINGS_JSON="+doc),
+		"MELINDA_SETTINGS_FILE": load(t, "MELINDA_SETTINGS_FILE="+settingsFile(t, doc)),
+		"MELINDA_SETTINGS_JSON": load(t, "MELINDA_SETTINGS_JSON="+doc),
 	}
 }
 
@@ -158,36 +158,36 @@ func TestDocumentsThatAreNotObjectsNameTheirSource(t *testing.T) {
 			}
 		}
 	}
-	if got := openErr(t, load(t, "DOST_SETTINGS_FILE=/nonexistent/settings.json")); !strings.HasPrefix(got, "DOST_SETTINGS_FILE: ") {
+	if got := openErr(t, load(t, "MELINDA_SETTINGS_FILE=/nonexistent/settings.json")); !strings.HasPrefix(got, "MELINDA_SETTINGS_FILE: ") {
 		t.Errorf("unreadable file: error %q does not name the source", got)
 	}
 }
 
 func TestSecretReferencesFillOnlyEmptyKeys(t *testing.T) {
-	t.Setenv("DOST_TEST_MODEL_KEY", "sk-ref")
-	t.Setenv("DOST_TEST_CHAT_TOKEN", "tok-ref")
-	t.Setenv("DOST_TEST_PLANE_KEY", "pk-ref")
+	t.Setenv("MELINDA_TEST_MODEL_KEY", "sk-ref")
+	t.Setenv("MELINDA_TEST_CHAT_TOKEN", "tok-ref")
+	t.Setenv("MELINDA_TEST_PLANE_KEY", "pk-ref")
 	for _, tc := range []struct {
 		doc  string
 		want secretValues
 	}{
 		{
-			doc:  `{"key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token_secret": "env:DOST_TEST_CHAT_TOKEN"}`,
+			doc:  `{"key_secret": "env:MELINDA_TEST_MODEL_KEY", "mattermost_token_secret": "env:MELINDA_TEST_CHAT_TOKEN"}`,
 			want: secretValues{Key: "sk-ref", MattermostToken: "tok-ref"},
 		},
 		{
-			doc:  `{"key": "", "key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token": null, "mattermost_token_secret": "env:DOST_TEST_CHAT_TOKEN"}`,
+			doc:  `{"key": "", "key_secret": "env:MELINDA_TEST_MODEL_KEY", "mattermost_token": null, "mattermost_token_secret": "env:MELINDA_TEST_CHAT_TOKEN"}`,
 			want: secretValues{Key: "sk-ref", MattermostToken: "tok-ref"},
 		},
 		{
-			doc:  `{"key": "sk-inline", "key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token": "tok-inline", "mattermost_token_secret": "env:DOST_TEST_CHAT_TOKEN"}`,
+			doc:  `{"key": "sk-inline", "key_secret": "env:MELINDA_TEST_MODEL_KEY", "mattermost_token": "tok-inline", "mattermost_token_secret": "env:MELINDA_TEST_CHAT_TOKEN"}`,
 			want: secretValues{Key: "sk-inline", MattermostToken: "tok-inline"},
 		},
 		{
 			doc: `{"key_secret": "", "mattermost_token_secret": null, "plane_api_secret": null}`,
 		},
 		{
-			doc:  `{"plane_api_key": "pk-inline", "plane_api_secret": "env:DOST_TEST_PLANE_KEY"}`,
+			doc:  `{"plane_api_key": "pk-inline", "plane_api_secret": "env:MELINDA_TEST_PLANE_KEY"}`,
 			want: secretValues{PlaneAPIKey: "pk-ref"},
 		},
 		{
@@ -196,7 +196,7 @@ func TestSecretReferencesFillOnlyEmptyKeys(t *testing.T) {
 		},
 	} {
 		doc := `{"model": "m", ` + tc.doc[1:]
-		p, _ := mustOpen(t, load(t, "DOST_SETTINGS_JSON="+doc))
+		p, _ := mustOpen(t, load(t, "MELINDA_SETTINGS_JSON="+doc))
 		if got := secretsOf(t, p.Current(context.Background())); got != tc.want {
 			t.Errorf("%s: got %+v, want %+v", tc.doc, got, tc.want)
 		}
@@ -204,10 +204,10 @@ func TestSecretReferencesFillOnlyEmptyKeys(t *testing.T) {
 }
 
 func TestAdapterDeclaredSecretKeysResolveAndAreMasked(t *testing.T) {
-	t.Setenv("DOST_TEST_CHAT_TOKEN", "chat-token-value")
-	doc := `{"model": "m", "chat_token_secret": "env:DOST_TEST_CHAT_TOKEN", "key": "sk-inline-value"}`
+	t.Setenv("MELINDA_TEST_CHAT_TOKEN", "chat-token-value")
+	doc := `{"model": "m", "chat_token_secret": "env:MELINDA_TEST_CHAT_TOKEN", "key": "sk-inline-value"}`
 	keys := append([]config.SecretKey{{Key: "chat_token"}}, secretKeys...)
-	p, h, err := openWith(t, load(t, "DOST_SETTINGS_JSON="+doc), keys, noAdapters)
+	p, h, err := openWith(t, load(t, "MELINDA_SETTINGS_JSON="+doc), keys, noAdapters)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,8 +225,8 @@ func TestAdapterDeclaredSecretKeysResolveAndAreMasked(t *testing.T) {
 }
 
 func TestUnknownKeysEndingInSecretAreLeftAsGiven(t *testing.T) {
-	doc := `{"model": "m", "client_secret": "inline-value", "webhook_secret": "env:UNSET_FOR_DOST_TEST", "client": ""}`
-	p, _ := mustOpen(t, load(t, "DOST_SETTINGS_JSON="+doc))
+	doc := `{"model": "m", "client_secret": "inline-value", "webhook_secret": "env:UNSET_FOR_MELINDA_TEST", "client": ""}`
+	p, _ := mustOpen(t, load(t, "MELINDA_SETTINGS_JSON="+doc))
 	var got struct {
 		ClientSecret  string `json:"client_secret"`
 		WebhookSecret string `json:"webhook_secret"`
@@ -235,17 +235,17 @@ func TestUnknownKeysEndingInSecretAreLeftAsGiven(t *testing.T) {
 	if err := p.Current(context.Background()).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if got.ClientSecret != "inline-value" || got.WebhookSecret != "env:UNSET_FOR_DOST_TEST" || got.Client != "" {
+	if got.ClientSecret != "inline-value" || got.WebhookSecret != "env:UNSET_FOR_MELINDA_TEST" || got.Client != "" {
 		t.Errorf("got %+v", got)
 	}
 }
 
 func TestEnvironmentAndFileReferences(t *testing.T) {
-	t.Setenv("DOST_TEST_MODEL_KEY", " sk-env ")
+	t.Setenv("MELINDA_TEST_MODEL_KEY", " sk-env ")
 	token := settingsFile(t, " tok-file \r\n\n")
 	plane := settingsFile(t, "pk-file")
-	doc := fmt.Sprintf(`{"model": "m", "key_secret": "env:DOST_TEST_MODEL_KEY", "mattermost_token_secret": "file:%s", "plane_api_secret": "file:%s"}`, token, plane)
-	p, _ := mustOpen(t, load(t, "DOST_SETTINGS_FILE="+settingsFile(t, doc)))
+	doc := fmt.Sprintf(`{"model": "m", "key_secret": "env:MELINDA_TEST_MODEL_KEY", "mattermost_token_secret": "file:%s", "plane_api_secret": "file:%s"}`, token, plane)
+	p, _ := mustOpen(t, load(t, "MELINDA_SETTINGS_FILE="+settingsFile(t, doc)))
 	want := secretValues{Key: " sk-env ", MattermostToken: " tok-file ", PlaneAPIKey: "pk-file"}
 	if got := secretsOf(t, p.Current(context.Background())); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
@@ -253,17 +253,17 @@ func TestEnvironmentAndFileReferences(t *testing.T) {
 }
 
 func TestUnresolvableReferencesNameTheKey(t *testing.T) {
-	t.Setenv("DOST_TEST_EMPTY", "")
+	t.Setenv("MELINDA_TEST_EMPTY", "")
 	for _, tc := range []struct {
 		ref  string
 		want []string
 	}{
-		{ref: `"key_secret": "env:DOST_TEST_UNSET"`, want: []string{"key_secret", "DOST_TEST_UNSET"}},
-		{ref: `"key_secret": "env:DOST_TEST_EMPTY"`, want: []string{"key_secret", "DOST_TEST_EMPTY"}},
+		{ref: `"key_secret": "env:MELINDA_TEST_UNSET"`, want: []string{"key_secret", "MELINDA_TEST_UNSET"}},
+		{ref: `"key_secret": "env:MELINDA_TEST_EMPTY"`, want: []string{"key_secret", "MELINDA_TEST_EMPTY"}},
 		{ref: `"mattermost_token_secret": "file:/nonexistent/token"`, want: []string{"mattermost_token_secret", "/nonexistent/token"}},
 	} {
 		doc := `{"model": "m", ` + tc.ref + `}`
-		got := openErr(t, load(t, "DOST_SETTINGS_JSON="+doc))
+		got := openErr(t, load(t, "MELINDA_SETTINGS_JSON="+doc))
 		for _, w := range tc.want {
 			if !strings.Contains(got, w) {
 				t.Errorf("%s: error %q does not mention %s", tc.ref, got, w)
@@ -275,7 +275,7 @@ func TestUnresolvableReferencesNameTheKey(t *testing.T) {
 func TestReferencesOtherThanEnvAndFileAreRejectedWithoutEchoingThem(t *testing.T) {
 	for _, ref := range []string{`"sk-pasted-here"`, `"secret/plane-key"`, `7`} {
 		doc := `{"model": "m", "plane_api_secret": ` + ref + `}`
-		got := openErr(t, load(t, "DOST_SETTINGS_JSON="+doc))
+		got := openErr(t, load(t, "MELINDA_SETTINGS_JSON="+doc))
 		if want := "plane_api_secret: not an env:NAME or file:/path reference"; got != want {
 			t.Errorf("%s: error %q, want %q", ref, got, want)
 		}
@@ -286,7 +286,7 @@ func TestReloadsAfterTheTTLWithSecretsResolvedAgain(t *testing.T) {
 	ctx := context.Background()
 	key := settingsFile(t, "sk-one")
 	path := settingsFile(t, `{"model": "m1", "key_secret": "file:`+key+`"}`)
-	p, h := mustOpen(t, load(t, "DOST_SETTINGS_FILE="+path, "DOST_SETTINGS_TTL=10s"))
+	p, h := mustOpen(t, load(t, "MELINDA_SETTINGS_FILE="+path, "MELINDA_SETTINGS_TTL=10s"))
 	first := p.Current(ctx)
 	writeFile(t, path, `{"model": "m2", "key_secret": "file:`+key+`"}`)
 	writeFile(t, key, "sk-two")
@@ -312,7 +312,7 @@ func TestReloadsAfterTheTTLWithSecretsResolvedAgain(t *testing.T) {
 
 func TestZeroTTLReloadsOnEveryRead(t *testing.T) {
 	path := settingsFile(t, `{"model": "m1"}`)
-	p, _ := mustOpen(t, load(t, "DOST_SETTINGS_FILE="+path, "DOST_SETTINGS_TTL=0"))
+	p, _ := mustOpen(t, load(t, "MELINDA_SETTINGS_FILE="+path, "MELINDA_SETTINGS_TTL=0"))
 	writeFile(t, path, `{"model": "m2"}`)
 	if got := p.Current(context.Background()).Model; got != "m2" {
 		t.Errorf("model = %q, want m2", got)
@@ -331,7 +331,7 @@ func TestOneReloadAtATimeWhileOtherReadersKeepThePreviousSnapshot(t *testing.T) 
 		}
 		return nil
 	}
-	p, h, err := open(t, load(t, "DOST_SETTINGS_FILE="+path), validate)
+	p, h, err := open(t, load(t, "MELINDA_SETTINGS_FILE="+path), validate)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func TestAPanickingReloadDoesNotStopLaterReloads(t *testing.T) {
 		}
 		return nil
 	}
-	p, h, err := open(t, load(t, "DOST_SETTINGS_FILE="+path), validate)
+	p, h, err := open(t, load(t, "MELINDA_SETTINGS_FILE="+path), validate)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestAPanickingReloadDoesNotStopLaterReloads(t *testing.T) {
 func TestBadEditsKeepTheLastGoodSettingsAndLogEachFailureOnce(t *testing.T) {
 	ctx := context.Background()
 	path := settingsFile(t, `{"model": "m1"}`)
-	p, h := mustOpen(t, load(t, "DOST_SETTINGS_FILE="+path))
+	p, h := mustOpen(t, load(t, "MELINDA_SETTINGS_FILE="+path))
 	good := p.Current(ctx)
 	for _, bad := range []string{`{"model": `, `{"model": ""}`, `{"model": ""}`, `{"model": 1}`} {
 		writeFile(t, path, bad)
@@ -430,7 +430,7 @@ func TestAdapterValidationGuardsStartupAndReload(t *testing.T) {
 	}
 	key := settingsFile(t, "sk-1")
 	path := settingsFile(t, `{"model": "m"}`)
-	env := load(t, "DOST_SETTINGS_FILE="+path)
+	env := load(t, "MELINDA_SETTINGS_FILE="+path)
 	if _, _, err := open(t, env, validate); err == nil || !strings.Contains(err.Error(), "mattermost_endpoint is required") {
 		t.Fatalf("startup without an adapter setting: error %v", err)
 	}
@@ -454,7 +454,7 @@ func TestAdapterValidationGuardsStartupAndReload(t *testing.T) {
 
 func TestChangingAFixedKeyIsLoggedOnce(t *testing.T) {
 	path := settingsFile(t, `{"model": "m1"}`)
-	p, h := mustOpen(t, load(t, "DOST_SETTINGS_FILE="+path))
+	p, h := mustOpen(t, load(t, "MELINDA_SETTINGS_FILE="+path))
 	writeFile(t, path, `{"model": "m2", "chat_platform": "other", "kb_collection": "kb2"}`)
 	if got := h.tick(p); got.Model != "m2" || got.ChatPlatform != "mattermost" || got.KBCollection != "dost_public_kb" {
 		t.Errorf("got model %q, chat_platform %q, kb_collection %q", got.Model, got.ChatPlatform, got.KBCollection)

@@ -66,8 +66,8 @@ func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) 
 		},
 	}}
 	addr := freeAddr(t)
-	env := environment(t, "DOST_DATABASE_URL="+testdb.New(t), "DOST_HTTP_ADDR="+addr,
-		`DOST_SETTINGS_JSON={"model":"m","model_provider":"compatible","web_search":"meta","web_fetch":"direct",`+
+	env := environment(t, "MELINDA_DATABASE_URL="+testdb.New(t), "MELINDA_HTTP_ADDR="+addr,
+		`MELINDA_SETTINGS_JSON={"model":"m","model_provider":"compatible","web_search":"meta","web_fetch":"direct",`+
 			`"mattermost_endpoint":"`+chatServer.URL()+`","mattermost_token":"chat-token","mattermost_bot_id":"agent-id"}`)
 	logs := &logWatch{match: `msg=connected component=gateway`, seen: make(chan struct{})}
 	secrets := new(logging.Secrets)
@@ -95,7 +95,7 @@ func TestRunPreparesTheDatabaseVerifiesTheAgentAndServesReadiness(t *testing.T) 
 		t.Errorf("first requests %q, want the account check first", calls)
 	}
 	for _, want := range []string{
-		`msg=starting version=1.2.3 agent=dost settings=DOST_SETTINGS_JSON components="[kb-learner pipeline flusher dispatcher recovery gateway]"`,
+		`msg=starting version=1.2.3 agent=dost settings=MELINDA_SETTINGS_JSON components="[kb-learner pipeline flusher dispatcher recovery gateway]"`,
 	} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("logs do not contain %s:\n%s", want, logs)
@@ -122,7 +122,7 @@ func TestCheckWithTheDatabaseVerifiesTheSchemaWithoutChangingIt(t *testing.T) {
 		{prepared, "\ndatabase: schema verified\n"},
 		{testdb.New(t), "database schema does not match: chat_sessions is missing; "},
 	} {
-		env := environment(t, "DOST_DATABASE_URL="+tc.dsn, `DOST_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`}`)
+		env := environment(t, "MELINDA_DATABASE_URL="+tc.dsn, `MELINDA_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`}`)
 		summary, err := check(t.Context(), env, true, workingTable(), clock.Real(), secrets, log)
 		if got := fmt.Sprint(summary, err); !strings.Contains(got, tc.want) {
 			t.Errorf("check = %q, want it to contain %q", got, tc.want)

@@ -1,4 +1,4 @@
-// Package testdb gives each test its own PostgreSQL database on the server named by DOST_TEST_DATABASE_URL.
+// Package testdb gives each test its own PostgreSQL database on the server named by MELINDA_TEST_DATABASE_URL.
 package testdb
 
 import (
@@ -15,7 +15,7 @@ import (
 )
 
 // EnvURL names the variable holding a postgres:// URL of a server where tests may create databases.
-const EnvURL = "DOST_TEST_DATABASE_URL"
+const EnvURL = "MELINDA_TEST_DATABASE_URL"
 
 // New creates an empty, uniquely named database, drops it when the test ends, and returns its URL. It skips
 // the test when EnvURL is unset.

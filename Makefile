@@ -31,7 +31,7 @@ staticcheck: ## staticcheck (pinned in go.mod)
 test: ## Unit tests with the race detector
 	$(GO) test -race -count=1 ./...
 
-# with-test-db runs $(1) with DOST_TEST_DATABASE_URL naming a throwaway pgvector container.
+# with-test-db runs $(1) with MELINDA_TEST_DATABASE_URL naming a throwaway pgvector container.
 define with-test-db
 	@set -e; name="dost-test-$$$$-$$(date +%s)"; \
 	trap 'docker rm -f "$$name" >/dev/null 2>&1 || true' EXIT; \
@@ -43,7 +43,7 @@ define with-test-db
 	ready=; for i in $$(seq 1 60); do \
 		docker exec "$$name" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && ready=1 && break; sleep 1; done; \
 	[ -n "$$ready" ] || { echo "test database did not become ready" >&2; exit 1; }; \
-	DOST_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$$port/postgres?sslmode=disable" $(1)
+	MELINDA_TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$$port/postgres?sslmode=disable" $(1)
 endef
 
 test-integration: ## Integration tests against a throwaway pgvector container (needs Docker)
@@ -51,13 +51,13 @@ test-integration: ## Integration tests against a throwaway pgvector container (n
 
 test-e2e: ## End-to-end scenarios: the race-enabled binary against fakes and a throwaway pgvector container (needs Docker)
 	@mkdir -p bin && $(GO) build -race -o bin/melinda-e2e ./cmd/melinda
-	$(call with-test-db,DOST_E2E_BINARY=$(CURDIR)/bin/melinda-e2e $(GO) test -count=1 -timeout=5m -tags=e2e $(E2E_FLAGS) ./test/e2e/)
+	$(call with-test-db,MELINDA_E2E_BINARY=$(CURDIR)/bin/melinda-e2e $(GO) test -count=1 -timeout=5m -tags=e2e $(E2E_FLAGS) ./test/e2e/)
 
 test-load: ## Memory load test: worst-case concurrent replies under the default container memory limit
 	$(GO) test -count=1 -tags=load -run ContainerLimit -v ./internal/app/
 
 test-soak: ## Soak test (needs Docker): make test-soak DURATION=2h OUT=<dir for log and profiles>
-	$(call with-test-db,DOST_SOAK_DURATION=$(DURATION) DOST_SOAK_OUT=$(OUT) $(GO) test -count=1 -tags=soak -run Soak -timeout 0 -v ./internal/app/)
+	$(call with-test-db,MELINDA_SOAK_DURATION=$(DURATION) MELINDA_SOAK_OUT=$(OUT) $(GO) test -count=1 -tags=soak -run Soak -timeout 0 -v ./internal/app/)
 
 vuln: ## Known-vulnerability scan (pinned in go.mod)
 	$(GO) tool govulncheck ./...

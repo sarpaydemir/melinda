@@ -27,11 +27,11 @@ func TestEnableReportsUnknownNamesAndEveryMissingConsumer(t *testing.T) {
 		names []string
 		want  string
 	}{
-		{[]string{"http", "pipeline", "websocket"}, `DOST_COMPONENTS: unknown component "http" (available: kb-learner, pipeline, flusher, dispatcher, recovery, gateway)` + "\n" +
-			`DOST_COMPONENTS: unknown component "websocket" (available: kb-learner, pipeline, flusher, dispatcher, recovery, gateway)`},
-		{[]string{"gateway"}, "DOST_COMPONENTS: gateway needs dispatcher\nDOST_COMPONENTS: dispatcher needs flusher\nDOST_COMPONENTS: flusher needs pipeline"},
-		{[]string{"recovery", "gateway", "flusher", "pipeline"}, "DOST_COMPONENTS: gateway needs dispatcher\nDOST_COMPONENTS: recovery needs dispatcher"},
-		{[]string{"dispatcher", "pipeline"}, "DOST_COMPONENTS: dispatcher needs flusher"},
+		{[]string{"http", "pipeline", "websocket"}, `MELINDA_COMPONENTS: unknown component "http" (available: kb-learner, pipeline, flusher, dispatcher, recovery, gateway)` + "\n" +
+			`MELINDA_COMPONENTS: unknown component "websocket" (available: kb-learner, pipeline, flusher, dispatcher, recovery, gateway)`},
+		{[]string{"gateway"}, "MELINDA_COMPONENTS: gateway needs dispatcher\nMELINDA_COMPONENTS: dispatcher needs flusher\nMELINDA_COMPONENTS: flusher needs pipeline"},
+		{[]string{"recovery", "gateway", "flusher", "pipeline"}, "MELINDA_COMPONENTS: gateway needs dispatcher\nMELINDA_COMPONENTS: recovery needs dispatcher"},
+		{[]string{"dispatcher", "pipeline"}, "MELINDA_COMPONENTS: dispatcher needs flusher"},
 	} {
 		got, err := enable(tc.names)
 		if err == nil || err.Error() != tc.want {

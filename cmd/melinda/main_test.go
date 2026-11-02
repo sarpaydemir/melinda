@@ -30,12 +30,12 @@ func TestCommandLine(t *testing.T) {
 		{name: "unknown flag", args: []string{"config", "check", "--verbose"}, wantCode: 2, wantErr: "usage:"},
 		{name: "export without a directory", args: []string{"prompts", "export", "--force"}, wantCode: 2, wantErr: "usage:"},
 		{name: "unknown export flag", args: []string{"prompts", "export", "out", "--overwrite"}, wantCode: 2, wantErr: "usage:"},
-		{name: "invalid environment", args: []string{"run"}, environ: []string{"DOST_SHUTDOWN_TIMEOUT=soon"}, wantCode: 1,
-			wantErr: `invalid environment: DOST_SHUTDOWN_TIMEOUT: "soon" is not a duration`},
-		{name: "invalid configuration", args: []string{"config", "check", "--db"}, environ: []string{"DOST_COMPONENTS=gateway"}, wantCode: 1,
-			wantErr: "DOST_COMPONENTS: gateway needs dispatcher\n"},
-		{name: "startup failure", args: []string{"run"}, environ: []string{"DOST_COMPONENTS=gateway"}, wantCode: 1,
-			wantErr: `msg="melinda stopped" err="DOST_COMPONENTS: gateway needs dispatcher\n`},
+		{name: "invalid environment", args: []string{"run"}, environ: []string{"MELINDA_SHUTDOWN_TIMEOUT=soon"}, wantCode: 1,
+			wantErr: `invalid environment: MELINDA_SHUTDOWN_TIMEOUT: "soon" is not a duration`},
+		{name: "invalid configuration", args: []string{"config", "check", "--db"}, environ: []string{"MELINDA_COMPONENTS=gateway"}, wantCode: 1,
+			wantErr: "MELINDA_COMPONENTS: gateway needs dispatcher\n"},
+		{name: "startup failure", args: []string{"run"}, environ: []string{"MELINDA_COMPONENTS=gateway"}, wantCode: 1,
+			wantErr: `msg="melinda stopped" err="MELINDA_COMPONENTS: gateway needs dispatcher\n`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

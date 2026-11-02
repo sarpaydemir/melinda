@@ -36,7 +36,7 @@ import (
 // Conversation goldens: each scenario runs every component against the chat and model fakes, a fake clock, and a
 // fresh database, and records every model request body, every reply post body, the stored key-value rows after
 // each step (generations normalized), and at the end the chat_sessions rows (new turns' ts normalized) and the
-// vector rows. With DOST_COMPAT_PROFILE set, each scenario also runs with the profile's prompts and settings and
+// vector rows. With MELINDA_COMPAT_PROFILE set, each scenario also runs with the profile's prompts and settings and
 // must produce the profile's goldens/<area>/<scenario>.json exactly. Scenarios that reach the web, Plane, or file
 // uploads also record those requests, with the page server's address written as webHost.
 
@@ -75,9 +75,9 @@ func assertGoldens(t *testing.T, area string, scs []scenario) {
 }
 
 func assertCompatGoldens(t *testing.T, area string, scs []scenario) {
-	dir := os.Getenv("DOST_COMPAT_PROFILE")
+	dir := os.Getenv("MELINDA_COMPAT_PROFILE")
 	if dir == "" {
-		t.Skip("DOST_COMPAT_PROFILE is not set")
+		t.Skip("MELINDA_COMPAT_PROFILE is not set")
 	}
 	goldens := filepath.Join(dir, "goldens", area)
 	var settings map[string]json.RawMessage
@@ -400,10 +400,10 @@ func play(t *testing.T, sc scenario, settings map[string]json.RawMessage, prompt
 		environ = sc.setup(h, doc, &table)
 	}
 	settingsJSON, _ := json.Marshal(doc)
-	environ = append(environ, "DOST_DATABASE_URL="+dsn, "DOST_HTTP_ADDR=", "DOST_TIMEZONE=+03:00",
-		"DOST_SETTINGS_JSON="+string(settingsJSON))
+	environ = append(environ, "MELINDA_DATABASE_URL="+dsn, "MELINDA_HTTP_ADDR=", "MELINDA_TIMEZONE=+03:00",
+		"MELINDA_SETTINGS_JSON="+string(settingsJSON))
 	if prompts != "" {
-		environ = append(environ, "DOST_PROMPTS_DIR="+prompts)
+		environ = append(environ, "MELINDA_PROMPTS_DIR="+prompts)
 	}
 	env := environment(t, environ...)
 

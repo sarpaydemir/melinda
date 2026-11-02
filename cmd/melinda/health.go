@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-// checkReady requests /readyz on the local listener at addr, which is DOST_HTTP_ADDR.
+// checkReady requests /readyz on the local listener at addr, which is MELINDA_HTTP_ADDR.
 func checkReady(ctx context.Context, addr string) error {
 	if addr == "" {
-		return errors.New("DOST_HTTP_ADDR is empty: the HTTP server is disabled")
+		return errors.New("MELINDA_HTTP_ADDR is empty: the HTTP server is disabled")
 	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {

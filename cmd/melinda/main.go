@@ -32,7 +32,7 @@ commands:
   run                             run the agent until SIGINT or SIGTERM
   config check [--db]             validate the environment and settings; --db also verifies the database schema
   prompts export <dir> [--force]  write the effective prompt catalog to dir, one file per ID; --force overwrites
-  health                          exit 0 when /readyz on DOST_HTTP_ADDR answers 200, otherwise 1
+  health                          exit 0 when /readyz on MELINDA_HTTP_ADDR answers 200, otherwise 1
   version                         print the version
 `
 

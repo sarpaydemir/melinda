@@ -20,9 +20,9 @@ import (
 // profile's prompts and compares it byte for byte with expected, or with accepted where the fixture records an
 // accepted difference.
 func TestCompatProfileAssemblesItsSystemPrompts(t *testing.T) {
-	dir := os.Getenv("DOST_COMPAT_PROFILE")
+	dir := os.Getenv("MELINDA_COMPAT_PROFILE")
 	if dir == "" {
-		t.Skip("DOST_COMPAT_PROFILE is not set")
+		t.Skip("MELINDA_COMPAT_PROFILE is not set")
 	}
 	cat, err := prompt.Load(builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).prompts(), filepath.Join(dir, "prompts"))
 	if err != nil {

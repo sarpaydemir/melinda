@@ -79,19 +79,19 @@ func checkWith(t *testing.T, table adapters, environ ...string) (string, string,
 
 func TestCheckSummarizesTheConfigurationWithSecretsMasked(t *testing.T) {
 	summary, logs, err := checkWith(t, workingTable(),
-		"DOST_AGENT_ID=agent",
-		`DOST_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`,"chatty_token":"token-value"}`,
-		"DOST_DATABASE_URL=postgres://dost:db-password@db/dost",
-		"DOST_COMPONENTS=pipeline,kb-learner",
-		"DOST_LOG_LEVL=debug",
-		"DOST_DRYRUN=true",
+		"MELINDA_AGENT_ID=agent",
+		`MELINDA_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`,"chatty_token":"token-value"}`,
+		"MELINDA_DATABASE_URL=postgres://dost:db-password@db/dost",
+		"MELINDA_COMPONENTS=pipeline,kb-learner",
+		"MELINDA_LOG_LEVL=debug",
+		"MELINDA_DRYRUN=true",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := `agent: agent
 components: kb-learner, pipeline
-settings (DOST_SETTINGS_JSON):
+settings (MELINDA_SETTINGS_JSON):
 {
   "chat_platform": "chatty",
   "chatty_token": "***",
@@ -104,7 +104,7 @@ settings (DOST_SETTINGS_JSON):
 	if summary != want {
 		t.Errorf("summary:\n%s\nwant:\n%s", summary, want)
 	}
-	for _, name := range []string{"DOST_DRYRUN", "DOST_LOG_LEVL"} {
+	for _, name := range []string{"MELINDA_DRYRUN", "MELINDA_LOG_LEVL"} {
 		if n := strings.Count(logs, `msg="unknown environment variable" name=`+name); n != 1 {
 			t.Errorf("%d warnings for %s, want 1; logs:\n%s", n, name, logs)
 		}
@@ -114,14 +114,14 @@ settings (DOST_SETTINGS_JSON):
 func TestCheckReportsEveryProblemAtOnce(t *testing.T) {
 	prompts := profile(t, map[string]string{"notes.saved.txt": "Saved\n {titel}."})
 	_, _, err := checkWith(t, workingTable(),
-		"DOST_COMPONENTS=gateway",
-		"DOST_PROMPTS_DIR="+prompts,
-		`DOST_SETTINGS_JSON={"chat_platform":"pigeon","prompts":{"zzz":"x"}}`,
+		"MELINDA_COMPONENTS=gateway",
+		"MELINDA_PROMPTS_DIR="+prompts,
+		`MELINDA_SETTINGS_JSON={"chat_platform":"pigeon","prompts":{"zzz":"x"}}`,
 	)
-	want := `DOST_COMPONENTS: gateway needs dispatcher
-DOST_COMPONENTS: dispatcher needs flusher
-DOST_COMPONENTS: flusher needs pipeline
-DOST_DB_USER and DOST_DB_NAME required when DOST_DATABASE_URL is not set
+	want := `MELINDA_COMPONENTS: gateway needs dispatcher
+MELINDA_COMPONENTS: dispatcher needs flusher
+MELINDA_COMPONENTS: flusher needs pipeline
+MELINDA_DB_USER and MELINDA_DB_NAME required when MELINDA_DATABASE_URL is not set
 invalid prompts:
 ` + prompts + `/notes.saved.txt: prompt: line 2, column 2 (offset 7): unknown placeholder "{titel}"; write {{ and }} for literal braces
 invalid settings:
@@ -139,8 +139,8 @@ prompts["zzz"]: unknown ID`
 
 func TestCheckReportsInvalidPromptOverrides(t *testing.T) {
 	_, _, err := checkWith(t, workingTable(),
-		"DOST_DATABASE_URL=postgres://dost@db/dost",
-		`DOST_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`,"prompts":{"notes.saved":"Saved\n{title","nope":"text"}}`,
+		"MELINDA_DATABASE_URL=postgres://dost@db/dost",
+		`MELINDA_SETTINGS_JSON={"model":"m",`+selectsWorkingTable+`,"prompts":{"notes.saved":"Saved\n{title","nope":"text"}}`,
 	)
 	want := `invalid settings:
 invalid prompts:
@@ -178,14 +178,14 @@ func TestExportWritesTheEffectiveCatalog(t *testing.T) {
 		},
 		{
 			name:     "with settings",
-			settings: `DOST_SETTINGS_JSON={"model":"m",` + selectsWorkingTable + `,"prompts":{"quiet.hello":"Hi.","error.generic":"Sorry."}}`,
+			settings: `MELINDA_SETTINGS_JSON={"model":"m",` + selectsWorkingTable + `,"prompts":{"quiet.hello":"Hi.","error.generic":"Sorry."}}`,
 			want:     map[string]string{"notes.saved": "Profile {title}.", "quiet.hello": "Hi.", "error.generic": "Sorry."},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "agent")
 			secrets, log, _ := testLogger()
-			env := environment(t, "DOST_PROMPTS_DIR="+prompts, tc.settings)
+			env := environment(t, "MELINDA_PROMPTS_DIR="+prompts, tc.settings)
 			if err := exportPrompts(context.Background(), env, out, false, table, clock.Real(), secrets, log); err != nil {
 				t.Fatal(err)
 			}
@@ -209,12 +209,12 @@ func TestExportWritesTheEffectiveCatalog(t *testing.T) {
 	}
 }
 
-// TestCompatProfileRendersItsFixtures loads the private profile in DOST_COMPAT_PROFILE with the built-in and
+// TestCompatProfileRendersItsFixtures loads the private profile in MELINDA_COMPAT_PROFILE with the built-in and
 // adapter entries and renders each fixture in its renders/*.json ({"id", "values", "expected"}) byte for byte.
 func TestCompatProfileRendersItsFixtures(t *testing.T) {
-	dir := os.Getenv("DOST_COMPAT_PROFILE")
+	dir := os.Getenv("MELINDA_COMPAT_PROFILE")
 	if dir == "" {
-		t.Skip("DOST_COMPAT_PROFILE is not set")
+		t.Skip("MELINDA_COMPAT_PROFILE is not set")
 	}
 	c, err := prompt.Load(builtin(http.DefaultTransport, clock.Real(), "melinda/test", "", slog.New(slog.DiscardHandler)).prompts(), filepath.Join(dir, "prompts"))
 	if err != nil {

@@ -1,6 +1,6 @@
 //go:build e2e && linux
 
-// Package e2e runs the dost binary named by DOST_E2E_BINARY against the chat and model fakes and a fresh
+// Package e2e runs the dost binary named by MELINDA_E2E_BINARY against the chat and model fakes and a fresh
 // database per test, and checks what only a real process shows: real-time debounce, restarts, reconnects,
 // signals, and settings edits.
 package e2e
@@ -38,16 +38,16 @@ type env struct {
 	db       *pgx.Conn
 	dsn      string
 	settings string // settings file path
-	// settingsTTL is DOST_SETTINGS_TTL.
+	// settingsTTL is MELINDA_SETTINGS_TTL.
 	settingsTTL string
 }
 
 // newEnv starts the fakes and creates the database. extra holds settings members merged into the document.
 func newEnv(t *testing.T, extra map[string]any) *env {
 	t.Helper()
-	binary := os.Getenv("DOST_E2E_BINARY")
+	binary := os.Getenv("MELINDA_E2E_BINARY")
 	if binary == "" {
-		t.Skip("DOST_E2E_BINARY is not set")
+		t.Skip("MELINDA_E2E_BINARY is not set")
 	}
 	e := &env{t: t, dsn: testdb.New(t), settings: filepath.Join(t.TempDir(), "settings.json"), settingsTTL: "1s"}
 	e.chat = mattermostfake.New(t, "chat-token", mattermostfake.User{ID: id("bot"), Username: "agent"})
@@ -131,10 +131,10 @@ func (e *env) launch() *agent {
 
 // command returns an unstarted dost run against e.
 func (e *env) command() *exec.Cmd {
-	cmd := exec.Command(os.Getenv("DOST_E2E_BINARY"), "run")
+	cmd := exec.Command(os.Getenv("MELINDA_E2E_BINARY"), "run")
 	cmd.Env = []string{
-		"DOST_DATABASE_URL=" + e.dsn, "DOST_SETTINGS_FILE=" + e.settings, "DOST_HTTP_ADDR=",
-		"DOST_SETTINGS_TTL=" + e.settingsTTL, "DOST_SHUTDOWN_TIMEOUT=" + shutdownTimeout.String(),
+		"MELINDA_DATABASE_URL=" + e.dsn, "MELINDA_SETTINGS_FILE=" + e.settings, "MELINDA_HTTP_ADDR=",
+		"MELINDA_SETTINGS_TTL=" + e.settingsTTL, "MELINDA_SHUTDOWN_TIMEOUT=" + shutdownTimeout.String(),
 	}
 	// The agent dies with the test binary, even when go test kills it at its timeout.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}

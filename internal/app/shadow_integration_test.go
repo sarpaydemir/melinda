@@ -97,7 +97,7 @@ func TestShadowModeRecordsEveryWriteAndPerformsNone(t *testing.T) {
 				_, err := r.Chat.Send(ctx, chat.Outgoing{ConversationID: r.Message.ConversationID, Text: "Noted: " + r.Args["text"]})
 				return "Noted.", err
 			}}
-			return []string{"DOST_DRY_RUN=true", "DOST_DRY_RUN_LOG=" + records}
+			return []string{"MELINDA_DRY_RUN=true", "MELINDA_DRY_RUN_LOG=" + records}
 		},
 		play: func(h *harness) {
 			h.post(post("p1", "u1", "dm1", "", "please file a login issue", 0))

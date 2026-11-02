@@ -69,7 +69,7 @@ type recorded struct {
 	IDs        []string          `json:"ids"`
 }
 
-// TestSnapshotSearchesReturnTheRecordedIDs runs each search recorded in the file named by DOST_COMPAT_SEARCHES on
+// TestSnapshotSearchesReturnTheRecordedIDs runs each search recorded in the file named by MELINDA_COMPAT_SEARCHES on
 // the database copy and expects the recorded ids in the recorded order, where rows at an equal distance may trade
 // places.
 func TestSnapshotSearchesReturnTheRecordedIDs(t *testing.T) {

@@ -11,12 +11,12 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      DOST_SETTINGS_FILE: /etc/dost/settings.json
-      DOST_PROMPTS_DIR: /etc/dost/prompts
-      DOST_DB_HOST: postgres
-      DOST_DB_USER: dost
-      DOST_DB_NAME: dost
-      DOST_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      MELINDA_SETTINGS_FILE: /etc/dost/settings.json
+      MELINDA_PROMPTS_DIR: /etc/dost/prompts
+      MELINDA_DB_HOST: postgres
+      MELINDA_DB_USER: dost
+      MELINDA_DB_NAME: dost
+      MELINDA_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - ${SETTINGS_PATH:-./settings.json}:/etc/dost/settings.json:ro
       - ${PROMPTS_PATH:-./prompts}:/etc/dost/prompts:ro

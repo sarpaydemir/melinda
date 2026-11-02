@@ -14,7 +14,7 @@ import (
 	_ "time/tzdata" // IANA zone names resolve without zone files on the host
 )
 
-// Env is the process configuration read once at startup from DOST_* environment variables.
+// Env is the process configuration read once at startup from MELINDA_* environment variables.
 type Env struct {
 	AgentID            string
 	SettingsFile       string
@@ -29,7 +29,7 @@ type Env struct {
 	DBName             string
 	Timezone           *time.Location
 	LogLevel           slog.Level
-	LogJSON            bool // DOST_LOG_FORMAT=json
+	LogJSON            bool // MELINDA_LOG_FORMAT=json
 	SearXNGURL         string
 	HTTPAddr           string   // empty disables the HTTP server
 	Components         []string // empty means all
@@ -38,43 +38,43 @@ type Env struct {
 	PipelineRunTimeout time.Duration
 	DryRun             bool
 	DryRunLog          string   // file the shadow-mode records are appended to; empty means the log output
-	Unknown            []string // set DOST_* variables that are not recognized
+	Unknown            []string // set MELINDA_* variables that are not recognized
 }
 
-// LoadEnv reads the DOST_* variables from environ ("NAME=value" entries). A variable that is set is used as
+// LoadEnv reads the MELINDA_* variables from environ ("NAME=value" entries). A variable that is set is used as
 // given, even when empty; an unset one takes its default. Every invalid value is reported in one error.
 func LoadEnv(environ []string) (Env, error) {
 	r := envReader{vars: map[string]string{}, read: map[string]bool{}}
 	for _, entry := range environ {
 		name, value, ok := strings.Cut(entry, "=")
-		if _, dup := r.vars[name]; ok && !dup && strings.HasPrefix(name, "DOST_") {
+		if _, dup := r.vars[name]; ok && !dup && strings.HasPrefix(name, "MELINDA_") {
 			r.vars[name] = value
 		}
 	}
 
 	env := Env{
-		AgentID:            parse(&r, "DOST_AGENT_ID", "dost", agentID),
-		SettingsFile:       r.get("DOST_SETTINGS_FILE", ""),
-		SettingsJSON:       r.get("DOST_SETTINGS_JSON", ""),
-		SettingsTTL:        parse(&r, "DOST_SETTINGS_TTL", "5s", duration),
-		PromptsDir:         r.get("DOST_PROMPTS_DIR", ""),
-		DatabaseURL:        r.get("DOST_DATABASE_URL", ""),
-		DBHost:             r.get("DOST_DB_HOST", "localhost"),
-		DBPort:             parse(&r, "DOST_DB_PORT", "5432", port),
-		DBUser:             r.get("DOST_DB_USER", ""),
-		DBPassword:         r.get("DOST_DB_PASSWORD", ""),
-		DBName:             r.get("DOST_DB_NAME", ""),
-		Timezone:           parse(&r, "DOST_TIMEZONE", "UTC", location),
-		LogLevel:           parse(&r, "DOST_LOG_LEVEL", "INFO", logLevel),
-		LogJSON:            parse(&r, "DOST_LOG_FORMAT", "text", logJSON),
-		SearXNGURL:         parse(&r, "DOST_SEARXNG_URL", "http://searxng:8080", httpURL),
-		HTTPAddr:           parse(&r, "DOST_HTTP_ADDR", ":8080", listenAddr),
-		Components:         parse(&r, "DOST_COMPONENTS", "", list),
-		ShutdownTimeout:    parse(&r, "DOST_SHUTDOWN_TIMEOUT", "30s", positiveDuration),
-		PipelineWorkers:    parse(&r, "DOST_PIPELINE_WORKERS", "8", positiveInt),
-		PipelineRunTimeout: parse(&r, "DOST_PIPELINE_RUN_TIMEOUT", "30m", positiveDuration),
-		DryRun:             parse(&r, "DOST_DRY_RUN", "false", boolean),
-		DryRunLog:          r.get("DOST_DRY_RUN_LOG", ""),
+		AgentID:            parse(&r, "MELINDA_AGENT_ID", "dost", agentID),
+		SettingsFile:       r.get("MELINDA_SETTINGS_FILE", ""),
+		SettingsJSON:       r.get("MELINDA_SETTINGS_JSON", ""),
+		SettingsTTL:        parse(&r, "MELINDA_SETTINGS_TTL", "5s", duration),
+		PromptsDir:         r.get("MELINDA_PROMPTS_DIR", ""),
+		DatabaseURL:        r.get("MELINDA_DATABASE_URL", ""),
+		DBHost:             r.get("MELINDA_DB_HOST", "localhost"),
+		DBPort:             parse(&r, "MELINDA_DB_PORT", "5432", port),
+		DBUser:             r.get("MELINDA_DB_USER", ""),
+		DBPassword:         r.get("MELINDA_DB_PASSWORD", ""),
+		DBName:             r.get("MELINDA_DB_NAME", ""),
+		Timezone:           parse(&r, "MELINDA_TIMEZONE", "UTC", location),
+		LogLevel:           parse(&r, "MELINDA_LOG_LEVEL", "INFO", logLevel),
+		LogJSON:            parse(&r, "MELINDA_LOG_FORMAT", "text", logJSON),
+		SearXNGURL:         parse(&r, "MELINDA_SEARXNG_URL", "http://searxng:8080", httpURL),
+		HTTPAddr:           parse(&r, "MELINDA_HTTP_ADDR", ":8080", listenAddr),
+		Components:         parse(&r, "MELINDA_COMPONENTS", "", list),
+		ShutdownTimeout:    parse(&r, "MELINDA_SHUTDOWN_TIMEOUT", "30s", positiveDuration),
+		PipelineWorkers:    parse(&r, "MELINDA_PIPELINE_WORKERS", "8", positiveInt),
+		PipelineRunTimeout: parse(&r, "MELINDA_PIPELINE_RUN_TIMEOUT", "30m", positiveDuration),
+		DryRun:             parse(&r, "MELINDA_DRY_RUN", "false", boolean),
+		DryRunLog:          r.get("MELINDA_DRY_RUN_LOG", ""),
 	}
 	if len(r.errs) > 0 {
 		return Env{}, errors.New("invalid environment: " + strings.Join(r.errs, "; "))
@@ -88,14 +88,14 @@ func LoadEnv(environ []string) (Env, error) {
 	return env, nil
 }
 
-// SettingsSource names the source the settings document is read from: the first of DOST_SETTINGS_FILE and
-// DOST_SETTINGS_JSON that is set. It is empty when neither is.
+// SettingsSource names the source the settings document is read from: the first of MELINDA_SETTINGS_FILE and
+// MELINDA_SETTINGS_JSON that is set. It is empty when neither is.
 func (e Env) SettingsSource() string {
 	switch {
 	case e.SettingsFile != "":
-		return "DOST_SETTINGS_FILE"
+		return "MELINDA_SETTINGS_FILE"
 	case e.SettingsJSON != "":
-		return "DOST_SETTINGS_JSON"
+		return "MELINDA_SETTINGS_JSON"
 	}
 	return ""
 }

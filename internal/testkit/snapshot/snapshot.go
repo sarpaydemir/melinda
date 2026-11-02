@@ -1,4 +1,4 @@
-// Package snapshot opens a read-only connection to a copy of a deployment's database named by DOST_COMPAT_DSN,
+// Package snapshot opens a read-only connection to a copy of a deployment's database named by MELINDA_COMPAT_DSN,
 // for tests that check dost reads the data already stored there.
 package snapshot
 
@@ -14,13 +14,13 @@ import (
 
 const (
 	// EnvDSN names the variable holding the postgres:// URL of the database copy.
-	EnvDSN = "DOST_COMPAT_DSN"
+	EnvDSN = "MELINDA_COMPAT_DSN"
 	// EnvSearches names the variable holding the path of the recorded searches, one JSON object per line.
-	EnvSearches = "DOST_COMPAT_SEARCHES"
+	EnvSearches = "MELINDA_COMPAT_SEARCHES"
 )
 
 // Open returns a connection to the copy on which every transaction is read-only, and the settings the copy is
-// read with: those in DOST_SETTINGS_FILE, if set, for the agent DOST_AGENT_ID (default dost). It skips the test
+// read with: those in MELINDA_SETTINGS_FILE, if set, for the agent MELINDA_AGENT_ID (default dost). It skips the test
 // when EnvDSN is unset.
 func Open(t testing.TB) (*pgx.Conn, *config.Settings) {
 	t.Helper()
@@ -43,19 +43,19 @@ func Open(t testing.TB) (*pgx.Conn, *config.Settings) {
 
 func settings(t testing.TB) *config.Settings {
 	doc := map[string]json.RawMessage{}
-	if path := os.Getenv("DOST_SETTINGS_FILE"); path != "" {
+	if path := os.Getenv("MELINDA_SETTINGS_FILE"); path != "" {
 		b, err := os.ReadFile(path)
 		if err == nil {
 			err = json.Unmarshal(b, &doc)
 		}
 		if err != nil {
-			t.Fatalf("DOST_SETTINGS_FILE: %v", err)
+			t.Fatalf("MELINDA_SETTINGS_FILE: %v", err)
 		}
 	}
 	if _, ok := doc["model"]; !ok {
 		doc["model"] = json.RawMessage(`"unused"`)
 	}
-	agent := os.Getenv("DOST_AGENT_ID")
+	agent := os.Getenv("MELINDA_AGENT_ID")
 	if agent == "" {
 		agent = "dost"
 	}

@@ -30,20 +30,20 @@ type DB struct {
 	pool *pgxpool.Pool
 }
 
-// DSN returns DOST_DATABASE_URL when set, and otherwise a URL built from the DOST_DB_* components.
+// DSN returns MELINDA_DATABASE_URL when set, and otherwise a URL built from the MELINDA_DB_* components.
 func DSN(env config.Env) (string, error) {
 	if env.DatabaseURL != "" {
 		return env.DatabaseURL, nil
 	}
 	var missing []string
 	if env.DBUser == "" {
-		missing = append(missing, "DOST_DB_USER")
+		missing = append(missing, "MELINDA_DB_USER")
 	}
 	if env.DBName == "" {
-		missing = append(missing, "DOST_DB_NAME")
+		missing = append(missing, "MELINDA_DB_NAME")
 	}
 	if len(missing) > 0 {
-		return "", fmt.Errorf("%s required when DOST_DATABASE_URL is not set", strings.Join(missing, " and "))
+		return "", fmt.Errorf("%s required when MELINDA_DATABASE_URL is not set", strings.Join(missing, " and "))
 	}
 	u := url.URL{
 		Scheme: "postgres",

@@ -57,9 +57,9 @@ func TestDSNRequiresUserAndDatabaseName(t *testing.T) {
 		missing []string
 		present []string
 	}{
-		{config.Env{DBHost: "db", DBPort: 5432}, []string{"DOST_DB_USER", "DOST_DB_NAME"}, nil},
-		{config.Env{DBHost: "db", DBPort: 5432, DBUser: "app"}, []string{"DOST_DB_NAME"}, []string{"DOST_DB_USER"}},
-		{config.Env{DBHost: "db", DBPort: 5432, DBName: "data"}, []string{"DOST_DB_USER"}, []string{"DOST_DB_NAME"}},
+		{config.Env{DBHost: "db", DBPort: 5432}, []string{"MELINDA_DB_USER", "MELINDA_DB_NAME"}, nil},
+		{config.Env{DBHost: "db", DBPort: 5432, DBUser: "app"}, []string{"MELINDA_DB_NAME"}, []string{"MELINDA_DB_USER"}},
+		{config.Env{DBHost: "db", DBPort: 5432, DBName: "data"}, []string{"MELINDA_DB_USER"}, []string{"MELINDA_DB_NAME"}},
 	}
 	for _, c := range cases {
 		_, err := DSN(c.env)
